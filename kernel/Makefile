@@ -23,6 +23,7 @@ driver/pit.o
 
 MM_OBJS=\
 mm/pmm_core.o \
+mm/vmm.o
 
 # 3. 合并所有零件
 # 所有的 .o 文件 = 架构相关的 + 内核核心的

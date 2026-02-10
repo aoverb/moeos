@@ -1,6 +1,12 @@
 #include <kernel/mm.h>
 #include <kernel/panic.h>
 
+page_frame* all_pages;
+
+page_frame* free_area[MAX_ORDER];
+
+uint32_t page_limit;
+
 void pmm_probe() {
     uint32_t i = 0;
     for(;i < MAX_ORDER; i++) {

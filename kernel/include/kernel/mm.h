@@ -34,12 +34,6 @@ struct page_frame {
     uint8_t allocated;
 };
 
-page_frame* all_pages;
-
-page_frame* free_area[MAX_ORDER];
-
-uint32_t page_limit;
-
 void pmm_init(pm_list* pms);
 
 void* pmm_alloc(uint32_t size);
@@ -47,5 +41,9 @@ void* pmm_alloc(uint32_t size);
 void pmm_free(void* addr);
 
 void pmm_probe();
+
+void vmm_init();
+
+void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag);
 
 #endif
