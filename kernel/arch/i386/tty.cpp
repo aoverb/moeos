@@ -1,6 +1,7 @@
 /* kernel/arch/i386/tty.cpp */
 #include <kernel/tty.h>
 #include <kernel/font.h>
+#include <kernel/mm.h>
 #include <string.h>
 #include <boot/multiboot.h>
 #include <stddef.h>
@@ -21,32 +22,13 @@ static uint32_t terminal_col = 0;
 
 static uint32_t terminal_color = 0x00FFFFFF;
 
-/* framebuffer helpers (unchanged) */
-
-// 丑陋的stub，以后有了kmalloc和正确的分页机制要去掉
-void map_lfb_hardcore(uint32_t phys_addr, uint32_t size) {
-    // 强制开启 PSE
-    asm volatile(
-        "mov %%cr4, %%eax\n"
-        "or $0x10, %%eax\n"
-        "mov %%eax, %%cr4"
-        : : : "eax"
-    );
-
-    uint32_t pde_index = 832; // 0xD0000000
-    uint32_t num_pages = (size + 0x3FFFFF) / 0x400000;
+void map_lfb(uint32_t phys_addr, uint32_t size) {
+    phys_addr &= ~((1 << 12) - 1);
+    uintptr_t vram_addr_begin = 0xD0000000;
+    uintptr_t num_pages = (size + 0xFFF) / 0x1000;
     
-    // 我们直接用汇编往内存里写，不经过 C 数组索引，防止指针寻址出错
-    // 这里的 0xC0106000 必须是你 page_directory 的准确虚拟地址
-    uint32_t* pd_ptr = &page_directory; 
-
-    for (uint32_t i = 0; i < num_pages; i++) {
-        uint32_t entry_val = (phys_addr + (i * 0x400000)) | 0x83;
-        pd_ptr[pde_index + i] = entry_val;
-    }
-
-    // 刷新 TLB
-    asm volatile("mov %%cr3, %%eax\n mov %%eax, %%cr3" : : : "eax");
+    for (uintptr_t i = 0; i < num_pages; ++i)
+        vmm_map_page(phys_addr + i * (1 << 12), vram_addr_begin + i * (1 << 12), 0x3);
 }
 
 void terminal_initialize(multiboot_info_t* mbi) {
@@ -64,9 +46,9 @@ void terminal_initialize(multiboot_info_t* mbi) {
 
 
     uint32_t lfb_physical_addr = mbi->framebuffer_addr;
-    uint32_t lfb_size = mbi->framebuffer_width * mbi->framebuffer_height * (mbi->framebuffer_bpp / 8);
-    map_lfb_hardcore(lfb_physical_addr, lfb_size);
-    fb_addr = (uint32_t*)(uintptr_t)0xD0000000; // ...
+    uint32_t lfb_size = mbi->framebuffer_pitch * mbi->framebuffer_height;
+    map_lfb(lfb_physical_addr, lfb_size);
+    fb_addr = (uint32_t*)(uintptr_t)0xD0000000;
 }
 
 void terminal_setcolor(uint32_t color) {
@@ -106,7 +88,7 @@ void terminal_scroll() {
         uint8_t* dst = (uint8_t*)fb_addr + (row - 1) * FONT_HEIGHT * line_size;
         
         for (int i = 0; i < FONT_HEIGHT; i++) {
-            memcpy(dst + i * line_size, src + i * line_size, FONT_HEIGHT * line_size);
+            memcpy(dst + i * line_size, src + i * line_size, line_size);
         }
     }
     

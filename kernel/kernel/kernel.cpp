@@ -60,64 +60,71 @@ void pmm_prepare(multiboot_info_t* mbi) {
     uint64_t kernel_end = (uint64_t)(&_kernel_end);
 
     uint32_t lfb_begin = mbi->framebuffer_addr;
-    uint32_t lfb_end = lfb_begin + mbi->framebuffer_width * mbi->framebuffer_height * (mbi->framebuffer_bpp / 8) - 1;
-    
+    uint32_t lfb_end = lfb_begin + mbi->framebuffer_pitch * mbi->framebuffer_height - 1;
+
+    struct { uint64_t begin; uint64_t end; } reserved[] = {
+        { kernel_begin, kernel_end },
+        { lfb_begin, lfb_end },
+        // multiboot_info 结构体本身
+        { (uint32_t)(uintptr_t)mbi, (uint32_t)(uintptr_t)mbi + sizeof(multiboot_info_t) - 1 },
+        // multiboot 内存映射表
+        { mbi->mmap_addr, mbi->mmap_addr + mbi->mmap_length - 1 },
+    };
+    constexpr int num_reserved = sizeof(reserved) / sizeof(reserved[0]);
+
+    for (int i = 0; i < num_reserved - 1; i++)
+        for (int j = i + 1; j < num_reserved; j++)
+            if (reserved[i].begin > reserved[j].begin) {
+                auto tmp = reserved[i];
+                reserved[i] = reserved[j];
+                reserved[j] = tmp;
+            }
+
     pm_list pms;
-    auto pm_add_list = [&] (uint64_t begin, uint64_t end) {
+    pms.count = 0;
+
+    auto pm_add_list = [&](uint64_t begin, uint64_t end) {
         constexpr uint64_t mask = (1 << 12) - 1;
-        
-        if (mask & begin) {
-            begin &= ~mask;
-            begin += mask + 1;
-        }
-        if (mask & end) {
-            end &= ~mask;
-            end -= mask + 1;
-        }
-        
+
+        if (begin & mask)
+            begin = (begin + mask) & ~mask;
+        end = (end + 1) & ~mask;
+        if (end == 0) return;
+        end -= 1;
+
         if (end > 0xFFFFFFFF) end = 0xFFFFFFFF;
-        if (end - begin <= 0) return;
-        printf("free mem: [%lu, %lu]\n", begin, end);
+        if (begin >= end + 1) return;
+
         pms.entries[pms.count].begin = static_cast<uint32_t>(begin);
         pms.entries[pms.count++].end = static_cast<uint32_t>(end);
     };
 
     multiboot_memory_map_t* mmap = (multiboot_memory_map_t*)mbi->mmap_addr;
 
-    pms.count = 0;
-    
-    while((uint32_t)mmap < mbi->mmap_addr + mbi->mmap_length) {
+    while ((uint32_t)mmap < mbi->mmap_addr + mbi->mmap_length) {
         if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
             uint64_t cur_begin = mmap->addr;
             uint64_t cur_end = mmap->addr + mmap->len - 1;
-            if ((kernel_begin <= cur_begin && cur_begin <= kernel_end) || (kernel_begin <= cur_end && cur_end <= kernel_end)) {
-                if ((kernel_begin <= cur_begin && cur_begin <= kernel_end) && (kernel_begin <= cur_end && cur_end <= kernel_end)) {
-                    continue;
-                } else if (kernel_begin <= cur_begin && cur_begin <= kernel_end) {
-                    pm_add_list(kernel_end + 1, cur_end);
-                } else {
-                    pm_add_list(cur_begin, kernel_begin - 1);
+
+            uint64_t scan = cur_begin;
+            for (int i = 0; i < num_reserved && scan <= cur_end; i++) {
+                uint64_t r_begin = reserved[i].begin;
+                uint64_t r_end = reserved[i].end;
+
+                if (r_end < scan) continue;
+                if (r_begin > cur_end) break;
+
+                if (r_begin > scan) {
+                    pm_add_list(scan, r_begin - 1);
                 }
-            } else if ((cur_begin <= kernel_begin && kernel_end >= cur_begin) && (kernel_begin <= cur_end && cur_end >= kernel_end)) {
-                pm_add_list(cur_begin, kernel_begin - 1);
-                pm_add_list(kernel_end + 1, cur_end);
-            } else if ((lfb_begin <= cur_begin && cur_begin <= lfb_end) || (lfb_begin <= cur_end && cur_end <= lfb_end)) {
-                if ((lfb_begin <= cur_begin && cur_begin <= lfb_end) && (lfb_begin <= cur_end && cur_end <= lfb_end)) {
-                    continue;
-                } else if (lfb_begin <= cur_begin && cur_begin <= lfb_end) {
-                    pm_add_list(lfb_end + 1, cur_end);
-                } else {
-                    pm_add_list(cur_begin, lfb_begin - 1);
-                }
-            } else if ((cur_begin <= lfb_begin && lfb_end >= cur_begin) && (lfb_begin <= cur_end && cur_end >= lfb_end)) {
-                pm_add_list(cur_begin, lfb_begin - 1);
-                pm_add_list(lfb_end + 1, cur_end);
-            } else {
-                pm_add_list(cur_begin, cur_end);
+                scan = r_end + 1;
+            }
+
+            if (scan <= cur_end) {
+                pm_add_list(scan, cur_end);
             }
         }
-        // mmap->size: 根据规范，这个字段存储的是“除了 size 字段本身以外，该条目剩余部分的大小”。
-        // 把size加上就是整个结构体的大小了。Multiboot考虑到未来会在这个结构体的末尾增加新的字段，因此规定要用这种方式去遍历。
+
         mmap = (multiboot_memory_map_t*)((uintptr_t)mmap + mmap->size + sizeof(mmap->size));
     }
 
@@ -125,10 +132,11 @@ void pmm_prepare(multiboot_info_t* mbi) {
 }
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
-    terminal_initialize(mbi);
-    print_rumia();
     pmm_prepare(mbi);
     vmm_init();
+    terminal_initialize(mbi);
+    print_rumia();
+
     
     printf("HAL initializing...");
     hal_init();
@@ -141,17 +149,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     char input[256];
 
 
-    void* m = pmm_alloc(4096);
-    vmm_map_page(reinterpret_cast<uintptr_t>(m), 0xBEEF0000, 0x3);
-    uint32_t* test_array = reinterpret_cast<uint32_t*>(0xBEEF0000);
-    
-    for (uint32_t i = 0; i < 1024; i++) {
-        test_array[i] = i;
-    }
 
-    for (uint32_t i = 0; i < 1024; i++) {
-        printf("%d ", test_array[i]);
-    }
     while (1) {
         print_lolios();
         
@@ -175,10 +173,17 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
             printf(": Goodbye, aoverb!\n");
             break;
         } else if (strcmp(input, "test") == 0) {
-            uint32_t x = 0;
             void* m = pmm_alloc(4096);
-            pmm_free(m);
-            printf("%x", m);
+            vmm_map_page(reinterpret_cast<uintptr_t>(m), 0xBEEF0000, 0x3);
+            uint32_t* test_array = reinterpret_cast<uint32_t*>(0xBEEF0000);
+            
+            for (uint32_t i = 0; i < 1024; i++) {
+                test_array[i] = i;
+            }
+
+            for (uint32_t i = 0; i < 1024; i++) {
+                printf("%d ", test_array[i]);
+            }
         } else if (strcmp(input, "probe") == 0) {
             pmm_probe();
         }else if (strcmp(input, "halt") == 0) {
