@@ -46,4 +46,8 @@ void vmm_init();
 
 void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag);
 
+void vmm_unmap_page(uintptr_t v_addr);
+
+uintptr_t vmm_get_mapping(uintptr_t v_addr);
+
 #endif

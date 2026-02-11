@@ -125,11 +125,10 @@ void pmm_prepare(multiboot_info_t* mbi) {
 }
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
-    
     terminal_initialize(mbi);
-    
     print_rumia();
-
+    pmm_prepare(mbi);
+    vmm_init();
     
     printf("HAL initializing...");
     hal_init();
@@ -140,7 +139,19 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     char input[256];
-        pmm_prepare(mbi);
+
+
+    void* m = pmm_alloc(4096);
+    vmm_map_page(reinterpret_cast<uintptr_t>(m), 0xBEEF0000, 0x3);
+    uint32_t* test_array = reinterpret_cast<uint32_t*>(0xBEEF0000);
+    
+    for (uint32_t i = 0; i < 1024; i++) {
+        test_array[i] = i;
+    }
+
+    for (uint32_t i = 0; i < 1024; i++) {
+        printf("%d ", test_array[i]);
+    }
     while (1) {
         print_lolios();
         

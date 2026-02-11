@@ -93,3 +93,33 @@ void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
 
     invlpg(v_addr);
 }
+
+void vmm_unmap_page(uintptr_t v_addr) {
+    if (v_addr & 0xFFF) panic("v_addr not aligned!");
+
+    uintptr_t pde = v_addr >> 22;
+    uintptr_t pte = v_addr >> 12 & 0x3FF;
+    PDE* pde_list = reinterpret_cast<PDE*>(pd_vaddr);
+    if (!pde_list[pde].present) {
+        return;
+    }
+    PTE* cur_pte = reinterpret_cast<PTE*>(0xFFC00000 | pde << 12 | pte << 2);
+    if (!cur_pte->present) panic("v_addr mapping already exist!");
+    *cur_pte = {0};
+
+    invlpg(v_addr);
+}
+
+uintptr_t vmm_get_mapping(uintptr_t v_addr) {
+    if (v_addr & 0xFFF) panic("v_addr not aligned!");
+
+    uintptr_t pde = v_addr >> 22;
+    uintptr_t pte = v_addr >> 12 & 0x3FF;
+    PDE* pde_list = reinterpret_cast<PDE*>(pd_vaddr);
+    if (!pde_list[pde].present) {
+        return 0;
+    }
+    PTE* cur_pte = reinterpret_cast<PTE*>(0xFFC00000 | pde << 12 | pte << 2);
+    if (!cur_pte->present) return 0;
+    return (cur_pte->frame << 12);
+}
