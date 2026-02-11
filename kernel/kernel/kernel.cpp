@@ -135,9 +135,10 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
     terminal_initialize(mbi);
+    vmm_cleanup_low_identity_mapping(); // 到这里清除了低地址的恒等映射，mbi就失效了
+    mbi = NULL;
     print_rumia();
 
-    
     printf("HAL initializing...");
     hal_init();
     keyboard_init();
@@ -147,8 +148,6 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     char input[256];
-
-
 
     while (1) {
         print_lolios();

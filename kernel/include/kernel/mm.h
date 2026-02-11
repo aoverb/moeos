@@ -50,4 +50,6 @@ void vmm_unmap_page(uintptr_t v_addr);
 
 uintptr_t vmm_get_mapping(uintptr_t v_addr);
 
+void vmm_cleanup_low_identity_mapping();
+
 #endif

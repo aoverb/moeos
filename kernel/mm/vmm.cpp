@@ -52,6 +52,16 @@ static inline void invlpg(uintptr_t addr) {
     asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
 }
 
+void vmm_cleanup_low_identity_mapping() {
+    PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
+    for (int i = 0; i < 2; i++) {
+        if (pde_list[i].present) {
+            pde_list[i] = {0};
+        }
+    }
+    flush_tlb();
+}
+
 void vmm_init() {
     PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
     pde_list[1023] = {0};
