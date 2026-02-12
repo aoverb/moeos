@@ -6,6 +6,7 @@
 extern uint8_t page_directory[];
 uintptr_t pd_addr = (uintptr_t)page_directory - 0xC0000000;
 constexpr uintptr_t pd_vaddr = 0xFFFFF000;
+uintptr_t continuous_addr_begin;
 
 // Page Table Entry (4KB page)
 typedef struct PTE {
@@ -68,7 +69,7 @@ void vmm_init() {
     pde_list[1023].frame = pd_addr >> 12;
     pde_list[1023].read_write = 1;
     pde_list[1023].present = 1;
-
+    continuous_addr_begin = 0xC0800000;
     flush_tlb();
 }
 
@@ -118,6 +119,17 @@ void vmm_unmap_page(uintptr_t v_addr) {
     *cur_pte = {0};
 
     invlpg(v_addr);
+}
+
+uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag) {
+    uintptr_t ret = continuous_addr_begin;
+    for (uint32_t i = 0; i < size; i++) {
+        if (vmm_get_mapping(continuous_addr_begin) != 0) panic("oom when vmm_alloc_pages!");
+        uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
+        vmm_map_page(p_addr, continuous_addr_begin, flag);
+        continuous_addr_begin += (1 << 12);
+    }
+    return ret;
 }
 
 uintptr_t vmm_get_mapping(uintptr_t v_addr) {

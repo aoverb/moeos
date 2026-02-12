@@ -52,4 +52,6 @@ uintptr_t vmm_get_mapping(uintptr_t v_addr);
 
 void vmm_cleanup_low_identity_mapping();
 
+uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag);
+
 #endif
