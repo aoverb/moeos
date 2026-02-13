@@ -56,4 +56,8 @@ uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag);
 
 void kheap_init();
 
+void* kmalloc(uint32_t size);
+
+void kfree(void* addr);
+
 #endif

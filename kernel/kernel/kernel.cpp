@@ -173,17 +173,17 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
             printf(": Goodbye, aoverb!\n");
             break;
         } else if (strcmp(input, "test") == 0) {
-            void* m = pmm_alloc(4096);
-            vmm_map_page(reinterpret_cast<uintptr_t>(m), 0xBEEF0000, 0x3);
-            uint32_t* test_array = reinterpret_cast<uint32_t*>(0xBEEF0000);
+            uint32_t* test_array = reinterpret_cast<uint32_t*>(kmalloc(8));
             
-            for (uint32_t i = 0; i < 1024; i++) {
+            for (uint32_t i = 0; i < 8; i++) {
                 test_array[i] = i;
             }
 
-            for (uint32_t i = 0; i < 1024; i++) {
+            for (uint32_t i = 0; i < 8; i++) {
                 printf("%d ", test_array[i]);
             }
+
+            kfree(test_array);
         } else if (strcmp(input, "probe") == 0) {
             pmm_probe();
         }else if (strcmp(input, "halt") == 0) {
