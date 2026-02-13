@@ -54,4 +54,6 @@ void vmm_cleanup_low_identity_mapping();
 
 uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag);
 
+void kheap_init();
+
 #endif

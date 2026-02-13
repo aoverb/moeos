@@ -135,6 +135,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
     terminal_initialize(mbi);
+    kheap_init();
     // vmm_cleanup_low_identity_mapping(); // 到这里清除了低地址的恒等映射，mbi就失效了
     // todo: pmm部分数据需重新映射，才能安全清除恒等映射
     // mbi = NULL;
