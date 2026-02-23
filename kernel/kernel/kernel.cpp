@@ -8,6 +8,8 @@
 #include <kernel/tty.h>
 #include <kernel/hal.h>
 #include <kernel/mm.h>
+#include <kernel/schedule.h>
+#include <kernel/process.h>
 
 #include <driver/keyboard.h>
 #include <driver/pit.h>
@@ -131,6 +133,20 @@ void pmm_prepare(multiboot_info_t* mbi) {
     pmm_init(&pms);
 }
 
+void proc1() {
+    for (uint32_t i = 0; i < 99; i++) {
+        printf("proc1:%d/99\n", i);
+        yield();
+    }
+}
+
+void proc2() {
+    for (uint32_t i = 0; i < 99; i++) {
+        printf("proc2:%d/99\n", i);
+        yield();
+    }
+}
+
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
@@ -144,11 +160,15 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     hal_init();
     keyboard_init();
     pit_init();
+    process_init();
     asm volatile ("sti");
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     char input[256];
+    
+    create_process(reinterpret_cast<void*>(&proc1));
+    create_process(reinterpret_cast<void*>(&proc2));
 
     while (1) {
         print_lolios();

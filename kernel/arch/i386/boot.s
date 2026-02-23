@@ -2,6 +2,7 @@
 .section .multiboot, "a"
 
 .global page_directory
+.global stack_bottom
 
 .set ALIGN,    1<<0
 .set MEMINFO,  1<<1
