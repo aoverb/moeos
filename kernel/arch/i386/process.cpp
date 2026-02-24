@@ -21,7 +21,7 @@ void process_init() {
     insert_into_scheduling_queue(0);
 }
 
-uint32_t create_process(void* entry) {
+uint32_t create_process(void* entry, void* args) {
     for (auto nid = 0; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             PCB*& new_process = process_list[nid];
@@ -29,17 +29,17 @@ uint32_t create_process(void* entry) {
             memset(new_process, 0, sizeof(PCB));
             new_process->kernel_stack_bottom = kmalloc(4096);
             new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + 4096;
-            *((uintptr_t*)(new_process->esp - 4)) = reinterpret_cast<uintptr_t>(&exit_process_wrapper);
-            *((uintptr_t*)(new_process->esp - 8)) = reinterpret_cast<uintptr_t>(entry);
-            *((uintptr_t*)(new_process->esp - 12)) = 0x200;  // EFLAGS (popfl)
-            *((uintptr_t*)(new_process->esp - 16)) = 0;      // ebx
-            *((uintptr_t*)(new_process->esp - 20)) = 0;      // esi
-            *((uintptr_t*)(new_process->esp - 24)) = 0;      // edi
-            *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebp  ← 栈顶，最先被 pop
-            new_process->esp -= 28;
+            *((uintptr_t*)(new_process->esp - 4)) = reinterpret_cast<uintptr_t>(args);
+            *((uintptr_t*)(new_process->esp - 8)) = reinterpret_cast<uintptr_t>(&exit_process_wrapper);
+            *((uintptr_t*)(new_process->esp - 12)) = reinterpret_cast<uintptr_t>(entry);
+            *((uintptr_t*)(new_process->esp - 16)) = 0x200;  // EFLAGS (popfl)
+            *((uintptr_t*)(new_process->esp - 20)) = 0;      // ebx
+            *((uintptr_t*)(new_process->esp - 24)) = 0;      // esi
+            *((uintptr_t*)(new_process->esp - 28)) = 0;      // edi
+            *((uintptr_t*)(new_process->esp - 32)) = 0;      // ebp  ← 栈顶，最先被 pop
+            new_process->esp -= 32;
             new_process->pid = nid;
             insert_into_scheduling_queue(nid);
-            process_switch_to(nid);
             return nid;
         }
     }

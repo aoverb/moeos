@@ -24,7 +24,7 @@ extern uint8_t cur_process_id;
 
 void process_init();
 
-uint32_t create_process(void* entry);
+uint32_t create_process(void* entry, void* args);
 uint32_t exit_process(uint8_t pid);
 
 void process_switch_to(uint8_t pid);

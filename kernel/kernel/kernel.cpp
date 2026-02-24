@@ -133,24 +133,10 @@ void pmm_prepare(multiboot_info_t* mbi) {
     pmm_init(&pms);
 }
 
-void proc1() {
+void proc1(void* args) {
+    char* s = reinterpret_cast<char*>(args);
     for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
-    }
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
-    }
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
-    }
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
-    }
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
-    }
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
+        if (i % 10000000 == 0) printf("%s %d:%d/99999999\n", s, cur_process_id, i);
     }
 }
 
@@ -231,10 +217,13 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
-    create_process(reinterpret_cast<void*>(&proc1));
-    create_process(reinterpret_cast<void*>(&proc1));
-    create_process(reinterpret_cast<void*>(&proc1));
-    create_process(reinterpret_cast<void*>(&shell));
+    const char* c1 = "test1";
+    const char* c2 = "test2";
+    const char* c3 = "test3";
+    create_process(reinterpret_cast<void*>(&proc1), (void*)c1);
+    create_process(reinterpret_cast<void*>(&proc1), (void*)c2);
+    create_process(reinterpret_cast<void*>(&proc1), (void*)c3);
+    create_process(reinterpret_cast<void*>(&shell), nullptr);
 
     while (1) {
         yield();

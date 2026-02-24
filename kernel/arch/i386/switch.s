@@ -27,6 +27,6 @@ process_switch_to:
     popl %esi
     popl %ebx
     popfl
-    
+
     ret
     
