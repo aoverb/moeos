@@ -12,9 +12,7 @@ extern "C" {
 struct multiboot_info_t;
 
 void terminal_initialize(struct multiboot_info_t* mbi);
-void terminal_putpixel(int x, int y, uint32_t color);
 void terminal_setcolor(uint32_t color);
-void terminal_draw_char(int x, int y, const char* font_char, uint32_t color);
 void terminal_write(const char* data, size_t size);
 #ifdef __cplusplus
 }
