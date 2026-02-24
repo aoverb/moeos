@@ -140,6 +140,14 @@ void proc1(void* args) {
     }
 }
 
+void print_tick() {
+    uint8_t ticks = 0;
+    while (++ticks) {
+        printf("%d ", ticks);
+        pit_sleep(1000);
+    }
+}
+
 void shell() {
     char input[256];
     while (1) {
@@ -178,18 +186,18 @@ void shell() {
             kfree(test_array);
         } else if (strcmp(input, "probe") == 0) {
             pmm_probe();
+        } else if (strcmp(input, "ps") == 0) {
+            print_process();
         }else if (strcmp(input, "halt") == 0) {
             printf("HALT!");
             asm volatile("hlt");
         } else if (strcmp(input, "time") == 0) {
             printf("%d", pit_get_ticks());
         } else if (strcmp(input, "tick") == 0) {
-            uint8_t ticks = 0;
-            while (++ticks) {
-                printf("%d ", ticks);
-                pit_sleep(1000);
-            }
-        } else {
+            create_process(reinterpret_cast<void*>(&print_tick), nullptr);
+        } else if (strcmp(input, "kill2") == 0) {
+            exit_process(2);
+        }  else {
             print_rumia_text();
             printf(": Unknown command '%s'!\n", input);
         }
@@ -217,14 +225,8 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
-    const char* c1 = "test1";
-    const char* c2 = "test2";
-    const char* c3 = "test3";
-    create_process(reinterpret_cast<void*>(&proc1), (void*)c1);
-    create_process(reinterpret_cast<void*>(&proc1), (void*)c2);
-    create_process(reinterpret_cast<void*>(&proc1), (void*)c3);
     create_process(reinterpret_cast<void*>(&shell), nullptr);
-
+    
     while (1) {
         yield();
     }

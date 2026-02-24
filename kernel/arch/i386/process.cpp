@@ -2,6 +2,7 @@
 #include <kernel/mm.h>
 #include <kernel/panic.h>
 #include <kernel/schedule.h>
+#include <driver/pit.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -11,12 +12,23 @@ uint8_t cur_process_id = 0;
 extern uintptr_t stack_bottom;
 void exit_process_wrapper();
 
+void print_process() {
+    uint32_t cur_tick = pit_get_ticks();
+    printf("id  priority  time(s)\n");
+    for (auto pid = 0; pid < MAX_PROCESSES_NUM; ++pid) {
+        if (process_list[pid] != nullptr) {
+            printf("%d   %d         %d\n", pid, process_list[pid]->priority, (cur_tick - process_list[pid]->create_time) / 100);
+        }
+    }
+}
+
 void process_init() {
     init_scheduler();
     process_list[0] = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
     process_list[0]->prev = process_list[0]->next = nullptr;
     process_list[0]->pid = 0;
+    process_list[0]->create_time = 0;
     cur_process_id = 0;
     insert_into_scheduling_queue(0);
 }
@@ -39,6 +51,7 @@ uint32_t create_process(void* entry, void* args) {
             *((uintptr_t*)(new_process->esp - 32)) = 0;      // ebp  ← 栈顶，最先被 pop
             new_process->esp -= 32;
             new_process->pid = nid;
+            new_process->create_time = pit_get_ticks();
             insert_into_scheduling_queue(nid);
             return nid;
         }

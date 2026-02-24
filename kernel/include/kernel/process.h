@@ -15,6 +15,7 @@ typedef struct PCB {
 
     uint16_t priority;
     uint16_t quota;
+    uint32_t create_time;
     PCB* prev;
     PCB* next;
 } PCB;
@@ -24,6 +25,7 @@ extern uint8_t cur_process_id;
 
 void process_init();
 
+void print_process();
 uint32_t create_process(void* entry, void* args);
 uint32_t exit_process(uint8_t pid);
 
