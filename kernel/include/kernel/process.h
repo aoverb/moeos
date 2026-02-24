@@ -12,6 +12,11 @@ typedef struct PCB {
     uintptr_t esp;
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
+
+    uint16_t priority;
+    uint16_t quota;
+    PCB* prev;
+    PCB* next;
 } PCB;
 
 extern PCB* process_list[MAX_PROCESSES_NUM];

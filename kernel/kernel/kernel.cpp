@@ -134,16 +134,23 @@ void pmm_prepare(multiboot_info_t* mbi) {
 }
 
 void proc1() {
-    for (uint32_t i = 0; i < 99; i++) {
-        printf("proc1:%d/99\n", i);
-        yield();
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
     }
-}
-
-void proc2() {
-    for (uint32_t i = 0; i < 99; i++) {
-        printf("proc2:%d/99\n", i);
-        yield();
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
+    }
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
+    }
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
+    }
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
+    }
+    for (uint32_t i = 0; i < 99999999; i++) {
+        if (i % 10000000 == 0) printf("proc%d:%d/99999999\n", cur_process_id, i);
     }
 }
 
@@ -220,11 +227,15 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     pit_init();
     process_init();
     asm volatile ("sti");
+    
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
-    
+    create_process(reinterpret_cast<void*>(&proc1));
+    create_process(reinterpret_cast<void*>(&proc1));
+    create_process(reinterpret_cast<void*>(&proc1));
     create_process(reinterpret_cast<void*>(&shell));
+
     while (1) {
         yield();
     }

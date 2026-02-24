@@ -1,6 +1,7 @@
 #include <driver/pit.h>
 #include <kernel/hal.h>
 #include <kernel/isr.h>
+#include <kernel/schedule.h>
 
 #include <stdio.h>
 
@@ -9,6 +10,7 @@ static volatile uint32_t ticks;
 void timer_interrupt_handler(registers* /* regs */) {
     ++ticks;
     hal_outb(0x20, 0x20); // EOI
+    schedule();
     return;
 }
 
