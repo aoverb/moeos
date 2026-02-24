@@ -9,8 +9,8 @@ constexpr uint8_t MAX_PRIORITY = NUM_PRIORITY - 1;
 constexpr uint8_t MAP_PRIORITY_TO_QUOTA[NUM_PRIORITY] = {32, 16, 8, 4, 2};
 PCB* sche_queue_head[NUM_PRIORITY];
 
-constexpr uint8_t RESETCNT_INITIAL = 500;
-uint8_t resetcnt = RESETCNT_INITIAL;
+constexpr uint16_t RESETCNT_INITIAL = 500;
+uint16_t resetcnt = RESETCNT_INITIAL;
 
 void init_scheduler() {
     memset(sche_queue_head, 0, sizeof(sche_queue_head));
