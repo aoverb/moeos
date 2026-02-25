@@ -43,6 +43,9 @@ uint32_t exit_process(uint8_t pid);
 
 void process_switch_to(uint8_t pid);
 
+void insert_into_process_recycle_queue(PCB* process);
+void do_process_recycle();
+
 #ifdef __cplusplus
 }
 #endif

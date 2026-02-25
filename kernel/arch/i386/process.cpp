@@ -60,14 +60,22 @@ uint32_t create_process(void* entry, void* args) {
     return 0;
 }
 
+void free_pcb(PCB*& process) {
+    kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
+    kfree(reinterpret_cast<void*>(process));
+    process = nullptr;
+}
+
 uint32_t exit_process(uint8_t pid) {
     if (pid == 0 || process_list[pid] == nullptr) return 1;
     remove_from_scheduling_queue(pid);
     PCB*& cur_process = process_list[pid];
+    if (pid != cur_process_id) {
+        free_pcb(cur_process);
+        return 0;
+    } 
     cur_process->state = process_state::ZOMBIE;
-    // kfree(reinterpret_cast<void*>(cur_process->kernel_stack_bottom));
-    // kfree(reinterpret_cast<void*>(cur_process));
-    // cur_process = nullptr;
+    insert_into_process_recycle_queue(cur_process);
     yield();
     // 不应该执行到这里
     return 0;
@@ -115,4 +123,18 @@ void remove_from_process_queue(process_queue& queue, uint8_t pid) {
     }
 
     cur_pcb->prev = cur_pcb->next = nullptr;
+}
+
+process_queue process_recycle_queue;
+
+void insert_into_process_recycle_queue(PCB* process) {
+    insert_into_process_queue(process_recycle_queue, process);
+}
+
+void do_process_recycle() {
+    while (process_recycle_queue) {
+        uint8_t pid = process_recycle_queue->pid;
+        remove_from_process_queue(process_recycle_queue, process_recycle_queue->pid);
+        free_pcb(process_list[pid]);
+    }
 }
