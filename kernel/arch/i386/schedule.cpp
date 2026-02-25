@@ -4,10 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
-constexpr uint8_t NUM_PRIORITY = 5;
-constexpr uint8_t MAX_PRIORITY = NUM_PRIORITY - 1;
 constexpr uint8_t MAP_PRIORITY_TO_QUOTA[NUM_PRIORITY] = {32, 16, 8, 4, 2};
-PCB* sche_queue_head[NUM_PRIORITY];
+process_queue sche_queue_head[NUM_PRIORITY];
 
 constexpr uint16_t RESETCNT_INITIAL = 500;
 uint16_t resetcnt = RESETCNT_INITIAL;
@@ -16,48 +14,16 @@ void init_scheduler() {
     memset(sche_queue_head, 0, sizeof(sche_queue_head));
 }
 
-void insert_into_queue(PCB* process, uint8_t priority) {
-    if (process->prev != nullptr || process->next != nullptr) {
-        // 重复插入直接忽略
-        return;
+void insert_into_scheduling_queue(uint8_t pid, uint8_t priority) {
+    if (insert_into_process_queue(sche_queue_head[priority], process_list[pid])) {
+        process_list[pid]->priority = priority;
+        process_list[pid]->quota = MAP_PRIORITY_TO_QUOTA[priority];
     }
-    process->priority = priority;
-    process->quota = MAP_PRIORITY_TO_QUOTA[priority];
-    if (sche_queue_head[priority]) {
-        process->next = sche_queue_head[priority];
-        process->prev = sche_queue_head[priority]->prev;
-        sche_queue_head[priority]->prev->next = process;
-        sche_queue_head[priority]->prev = process;
-    } else {
-        process->next = process;
-        process->prev = process;
-    }
-
-    sche_queue_head[priority] = process;
-}
-
-void insert_into_scheduling_queue(uint8_t pid) {
-    insert_into_queue(process_list[pid], MAX_PRIORITY);
 }
 
 void remove_from_scheduling_queue(uint8_t pid) {
     PCB* cur_pcb = process_list[pid];
-    PCB* prev_pcb = cur_pcb->prev;
-    PCB* next_pcb = cur_pcb->next;
-    if (cur_pcb == prev_pcb) {
-        sche_queue_head[cur_pcb->priority] = nullptr;
-        cur_pcb->prev = cur_pcb->next = nullptr;
-        return;
-    }
-    
-    if (prev_pcb) prev_pcb->next = next_pcb;
-    if (next_pcb) next_pcb->prev = prev_pcb;
-
-    if (sche_queue_head[cur_pcb->priority] == cur_pcb) {
-        sche_queue_head[cur_pcb->priority] = cur_pcb->next;
-    }
-
-    cur_pcb->prev = cur_pcb->next = nullptr;
+    remove_from_process_queue(sche_queue_head[cur_pcb->priority], pid);
 }
 
 void move_all_to_top_priority() {
@@ -87,7 +53,7 @@ void schedule() {
     if (--(cur_pcb->quota) == 0) {
         if (cur_pcb->priority > 0) {
             remove_from_scheduling_queue(cur_process_id);
-            insert_into_queue(cur_pcb, cur_pcb->priority - 1);
+            insert_into_scheduling_queue(cur_process_id, cur_pcb->priority - 1);
         }
         cur_pcb->quota = MAP_PRIORITY_TO_QUOTA[cur_pcb->priority];
     }
@@ -106,6 +72,9 @@ void schedule() {
     if (!chosen_process) {
         chosen_process = process_list[0];
     }
+    insert_into_scheduling_queue(cur_process_id, cur_pcb->priority);
+    cur_pcb->state = process_state::READY;
+    chosen_process->state = process_state::RUNNING;
     process_switch_to(chosen_process->pid);
 }
 

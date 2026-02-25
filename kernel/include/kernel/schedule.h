@@ -6,9 +6,12 @@
 extern "C" {
 #endif
 
+constexpr uint8_t NUM_PRIORITY = 5;
+constexpr uint8_t MAX_PRIORITY = NUM_PRIORITY - 1;
+
 void init_scheduler();
 
-void insert_into_scheduling_queue(uint8_t pid);
+void insert_into_scheduling_queue(uint8_t pid, uint8_t priority = MAX_PRIORITY);
 void remove_from_scheduling_queue(uint8_t pid);
 
 void schedule();
