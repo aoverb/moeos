@@ -2,6 +2,25 @@
 #define _ARCH_I386_GDT_H
 #include <stdint.h>
 
+typedef struct __attribute__((packed)) {
+    uint32_t prev_tss;
+    uint32_t esp0;      // 内核栈顶 ← 这是你唯一真正需要用的字段
+    uint32_t ss0;       // 内核栈段 ← 这个也是
+    uint32_t esp1;
+    uint32_t ss1;
+    uint32_t esp2;
+    uint32_t ss2;
+    uint32_t cr3;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax, ecx, edx, ebx;
+    uint32_t esp, ebp, esi, edi;
+    uint32_t es, cs, ss, ds, fs, gs;
+    uint32_t ldt;
+    uint16_t trap;
+    uint16_t iomap_base;
+} tss_entry;
+
 struct gdt_entry_struct {
     uint16_t limit_low;           // 段限长 (0-15位)
     uint16_t base_low;            // 段基址 (0-15位)
@@ -30,6 +49,8 @@ struct gdtr_descriptor {
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed));
+
+void tss_set_kernel_stack(uint32_t esp);
 
 #ifdef __cplusplus
 extern "C" {

@@ -226,8 +226,8 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     create_process(reinterpret_cast<void*>(&shell), nullptr);
-    const char* s = "test";
-    create_process(reinterpret_cast<void*>(&proc1), (void*)s);
+
+    print_process();
     while (1) {
         do_process_recycle();
         yield();

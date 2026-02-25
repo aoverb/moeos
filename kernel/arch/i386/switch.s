@@ -1,6 +1,7 @@
 .extern process_list
 .extern cur_process_id
 .global process_switch_to
+.global ret_to_user_mode
 
 process_switch_to:
     pushfl
@@ -29,4 +30,10 @@ process_switch_to:
     popfl
 
     ret
+
+ret_to_user_mode:
+    mov $0x23, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    iret
     

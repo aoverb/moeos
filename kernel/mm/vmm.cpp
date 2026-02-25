@@ -73,6 +73,10 @@ void vmm_init() {
     flush_tlb();
 }
 
+uintptr_t vmm_create_page_directory() {
+    return 0;
+}
+
 void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
     if (p_addr & 0xFFF) panic("p_addr not aligned!");
     if (v_addr & 0xFFF) panic("v_addr not aligned!");

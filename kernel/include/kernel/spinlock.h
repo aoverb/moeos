@@ -10,7 +10,7 @@ typedef struct spinlock {
     volatile uint32_t locked = 0;
 } spinlock;
 
-void spinlock_acquire(spinlock* lock) {
+static void spinlock_acquire(spinlock* lock) {
     while(1) {
         uint32_t old = 1;
         asm volatile ("xchgl %0, %1"
@@ -23,7 +23,7 @@ void spinlock_acquire(spinlock* lock) {
     }
 }
 
-void spinlock_release(spinlock* lock) {
+static void spinlock_release(spinlock* lock) {
     lock->locked = 0;
 }
 

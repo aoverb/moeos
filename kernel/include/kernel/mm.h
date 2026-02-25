@@ -54,6 +54,18 @@ void vmm_cleanup_low_identity_mapping();
 
 uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag);
 
+static inline uint32_t vmm_get_cr3() {
+    uint32_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    return cr3;
+}
+
+static inline void vmm_switch(uint32_t cr3) {
+    asm volatile("mov %0, %%cr3" :: "r"(cr3) : "memory");
+}
+
+uintptr_t vmm_create_page_directory();
+
 void kheap_init();
 
 void* kmalloc(uint32_t size);

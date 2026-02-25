@@ -27,3 +27,7 @@ void hal_disable_irq(uint8_t irq) {
     asm volatile ("cli");
     pic_disable_irq(irq);
 }
+
+void update_kernel_stack(uint32_t esp) {
+    tss_set_kernel_stack(esp);
+}

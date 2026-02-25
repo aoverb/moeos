@@ -15,6 +15,8 @@ void hal_outb(uint16_t port, uint8_t val);
 void hal_enable_irq(uint8_t irq);
 void hal_disable_irq(uint8_t irq);
 
+void update_kernel_stack(uint32_t esp);
+
 #ifdef __cplusplus
 }
 #endif

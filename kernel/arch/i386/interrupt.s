@@ -1,7 +1,9 @@
 .section .text
 
 .extern inner_interrupt_handler
+.extern inner_syscall_handler
 .global common_interrupt_handler
+.global system_call_handler
 
 .macro ISR_NOERR n
 .global isr\n
@@ -125,4 +127,35 @@ common_interrupt_handler:
     popl %ds
     popa
     addl $8, %esp
+    iret
+
+system_call_handler:
+    # SS, ESP, EFLAGS, CS, EIP已在特权级切换时被自动保存
+    pushl %es
+    pushl %ds
+    pushl %ebp
+    pushl %edi
+    pushl %esi
+    pushl %edx
+    pushl %ecx
+    pushl %ebx
+    pushl %eax
+
+    mov $0x10, %eax
+    mov %eax, %ds
+    mov %eax, %es
+
+    pushl %esp
+    call inner_syscall_handler
+    
+    addl $4, %esp
+    popl %eax
+    popl %ebx
+    popl %ecx
+    popl %edx
+    popl %esi
+    popl %edi
+    popl %ebp
+    popl %ds
+    popl %es
     iret

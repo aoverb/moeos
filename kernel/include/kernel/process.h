@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 constexpr uint8_t MAX_PROCESSES_NUM = 128;
+constexpr uint32_t KERNEL_STACK_SIZE = 4096;
 
 enum class process_state {
     READY = 0,
@@ -19,7 +20,8 @@ typedef struct PCB {
     uintptr_t esp;
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
-
+    uint32_t cr3;
+    
     uint16_t priority;
     uint16_t quota;
     uint32_t create_time;
@@ -40,6 +42,8 @@ void process_init();
 void print_process();
 uint32_t create_process(void* entry, void* args);
 uint32_t exit_process(uint8_t pid);
+
+uint32_t create_user_process(void* code, uint32_t code_size, void* args, uint8_t priority);
 
 void process_switch_to(uint8_t pid);
 

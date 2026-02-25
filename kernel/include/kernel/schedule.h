@@ -11,7 +11,7 @@ constexpr uint8_t MAX_PRIORITY = NUM_PRIORITY - 1;
 
 void init_scheduler();
 
-void insert_into_scheduling_queue(uint8_t pid, uint8_t priority = MAX_PRIORITY);
+void insert_into_scheduling_queue(uint8_t pid, uint8_t priority = MAX_PRIORITY, bool set_quota = true);
 void remove_from_scheduling_queue(uint8_t pid);
 
 void schedule();

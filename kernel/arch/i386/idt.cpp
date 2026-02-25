@@ -4,6 +4,7 @@
 #include <string.h>
 
 idt_entry_struct idt_entries[256];
+extern "C" void system_call_handler();
 
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t dpl) {
     idt_entries[num].offset_low  = base & 0xFFFF;
@@ -80,6 +81,8 @@ void idt_set_gates() {
     SET_ISR(45);
     SET_ISR(46);
     SET_ISR(47);
+
+    idt_set_gate(0x80, (uint32_t)(&system_call_handler), 0x08, 3);
 }
 
 void idt_init() {
