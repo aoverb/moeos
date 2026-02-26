@@ -10,6 +10,7 @@
 #include <kernel/mm.h>
 #include <kernel/schedule.h>
 #include <kernel/process.h>
+#include <kernel/syscall.h>
 #include <syscall_def.h>
 
 #include <driver/keyboard.h>
@@ -208,11 +209,11 @@ void shell() {
 }
 
 void user_program() {
-    asm volatile(
-        "movl $0, %%eax\n"
-        "int $0x80\n"
-        ::: "eax"
-    );
+    uint32_t ret;
+    uint32_t num = 0;
+    const char* s = "hello from user space!\n";
+    asm volatile("int $0x80" : "=a"(ret) : "a"(1), "b"(s));
+    asm volatile("int $0x80" : "=a"(ret) : "a"(0));
 }
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
@@ -228,6 +229,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     hal_init();
     keyboard_init();
     pit_init();
+    syscall_init();
     process_init();
     asm volatile ("sti");
     
@@ -236,7 +238,6 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     create_process(reinterpret_cast<void*>(&shell), nullptr);
     create_user_process(reinterpret_cast<void*>(&user_program), 4096, 1);
-    print_process();
     while (1) {
         do_process_recycle();
         yield();
