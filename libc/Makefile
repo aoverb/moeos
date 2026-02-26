@@ -57,3 +57,5 @@ install-libc:
 clean:
 	rm -f $(LIBK_OBJS)
 	rm -f $(LIBK_OBJS:.o=.d)
+	rm -f $(LIBC_OBJS)
+	rm -f $(LIBC_OBJS:.o=.d)
