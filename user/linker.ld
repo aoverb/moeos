@@ -1,3 +1,5 @@
+ENTRY(_start)
+
 SECTIONS
 {
     /* 我们的用户态加载程序的基址就是这个地方 */
@@ -5,7 +7,8 @@ SECTIONS
 
     .text :
     {
-        hello_world.o(.text) /* 把我们的hello_world放在最头部 */
+        
+        *(.text.entry) /* 入口的start放在最头部 */
         *(.text)
     }
 

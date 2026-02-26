@@ -13,6 +13,7 @@ USER_OBJS=\
 hello_world.o
 
 LIBC:=$(SYSROOT)/usr/lib/libc.a
+CRT0:=$(SYSROOT)/usr/lib/crt0.o
 
 all: hello_world.bin
 
@@ -20,8 +21,8 @@ all: hello_world.bin
 hello_world.bin: hello_world.elf
 	objcopy -O binary hello_world.elf hello_world.bin
 
-hello_world.elf: $(USER_OBJS) ./linker.ld $(LIBC)
-	$(CC) -T ./linker.ld -o $@ $(LDFLAGS) $(USER_OBJS) -L$(SYSROOT)/usr/lib -lc -lgcc
+hello_world.elf: $(USER_OBJS) ./linker.ld $(LIBC) $(CRT0)
+	$(CC) -T ./linker.ld -o $@ $(LDFLAGS) $(USER_OBJS) $(CRT0) -L$(SYSROOT)/usr/lib -lc -lgcc
 
 # 自动推导规则：如何从 .c 变成 .o
 %.o: %.c

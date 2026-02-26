@@ -31,13 +31,16 @@ libc.a
 
 .PHONY: all clean install-headers
 
-all: $(BINARIES)
+all: $(BINARIES) crt0.o
 
 libc.a: $(LIBC_OBJS)
 	$(AR) rcs $@ $(LIBC_OBJS)
 
 %.libc.o: %.c
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBC_CFLAGS) $(LIBC_CPPFLAGS)
+
+crt0.o: crt/crt0.s
+	$(AS) --32 -o $@ $<
 
 libk.a: $(LIBK_OBJS)
 	$(AR) rcs $@ $(LIBK_OBJS)
@@ -53,6 +56,7 @@ install-headers:
 
 install-libc:
 	cp -R --preserve=timestamps $(BINARIES) $(SYSROOT)/usr/lib/
+	cp -R --preserve=timestamps crt0.o $(SYSROOT)/usr/lib/
 
 clean:
 	rm -f $(LIBK_OBJS)
