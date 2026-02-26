@@ -21,8 +21,8 @@ CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
 CPPFLAGS:=$(CPPFLAGS) -D__is_libc --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
 LIBK_CFLAGS:=$(CFLAGS)
 LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
-LIBK_CFLAGS:=$(CFLAGS)
-LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
+LIBC_CFLAGS:=$(CFLAGS)
+LIBC_CPPFLAGS:=$(CPPFLAGS)
 
 LIBK_OBJS=$(LIBC_OBJS:.o=.libk.o)
 BINARIES=\
