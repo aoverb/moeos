@@ -1,8 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <syscall_def.h>
+#if defined(__is_libk)
 #include <driver/keyboard.h>
+#endif
+
 
 void getline(char* buf, uint32_t size) {
+#if defined(__is_libk)
     keyboard_flush();
     uint32_t i = 0;
 
@@ -33,4 +38,9 @@ void getline(char* buf, uint32_t size) {
     }
 
     buf[i] = '\0';
+#else
+	// TODO: Implement stdio and the write system call.
+	syscall2(3, reinterpret_cast<uint32_t>(buf), size);
+#endif
+
 }

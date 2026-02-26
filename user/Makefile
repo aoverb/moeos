@@ -10,18 +10,18 @@ CXXFLAGS:=$(CFLAGS) -fno-exceptions -fno-rtti # C++需要禁用异常和RTTI
 LDFLAGS:=-ffreestanding -O0 -nostdlib
 
 USER_OBJS=\
-hello_world.o
+shell.o
 
 LIBC:=$(SYSROOT)/usr/lib/libc.a
 CRT0:=$(SYSROOT)/usr/lib/crt0.o
 
-all: hello_world.bin
+all: shell.bin
 
 # 目标：我们的Hello world.bin
-hello_world.bin: hello_world.elf
-	objcopy -O binary hello_world.elf hello_world.bin
+shell.bin: shell.elf
+	objcopy -O binary shell.elf shell.bin
 
-hello_world.elf: $(USER_OBJS) ./linker.ld $(LIBC) $(CRT0)
+shell.elf: $(USER_OBJS) ./linker.ld $(LIBC) $(CRT0)
 	$(CC) -T ./linker.ld -o $@ $(LDFLAGS) $(USER_OBJS) $(CRT0) -L$(SYSROOT)/usr/lib -lc -lgcc
 
 # 自动推导规则：如何从 .c 变成 .o
@@ -33,11 +33,11 @@ hello_world.elf: $(USER_OBJS) ./linker.ld $(LIBC) $(CRT0)
 	$(CXX) -MD -c $< -o $@ -std=gnu++11 $(CXXFLAGS)
 
 install-bin:
-	cp -R --preserve=timestamps ./hello_world.bin $(SYSROOT)/usr/bin/.
+	cp -R --preserve=timestamps ./shell.bin $(SYSROOT)/usr/bin/.
 
 # 清理
 clean:
-	rm -f hello_world.bin
+	rm -f shell.bin
 	rm -f $(USER_OBJS)
 	rm -f $(USER_OBJS:.o=.d)
 

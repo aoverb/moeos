@@ -45,20 +45,6 @@ void print_rumia() {
 #pragma GCC diagnostic pop
 }
 
-void print_rumia_text() {
-    set_color(0xF0B526);
-    printf("Rumi");
-    set_color(0xEB392D);
-    printf("a");
-    set_color(0xFFFFFF);
-}
-
-void print_lolios() {
-    set_color(0xEB9D2F);
-    printf("LoliOS");
-    set_color(0xFFFFFF);
-}
-
 void pmm_prepare(multiboot_info_t* mbi) {
     uint64_t kernel_begin = 0x100000;
     uint64_t kernel_end = (uint64_t)(&_kernel_end);
@@ -135,13 +121,6 @@ void pmm_prepare(multiboot_info_t* mbi) {
     pmm_init(&pms);
 }
 
-void proc1(void* args) {
-    char* s = reinterpret_cast<char*>(args);
-    for (uint32_t i = 0; i < 99999999; i++) {
-        if (i % 10000000 == 0) printf("%s %d:%d/99999999\n", s, cur_process_id, i);
-    }
-}
-
 void print_tick() {
     uint8_t ticks = 0;
     while (++ticks) {
@@ -150,63 +129,6 @@ void print_tick() {
     }
 }
 
-void shell() {
-    char input[256];
-    while (1) {
-        print_lolios();
-        
-        printf(">");
-        getline(input, 256);
-        
-        if (strcmp(input, "help") == 0) {
-            printf("Hello user!");
-            printf("This is ");
-            print_lolios();
-            printf("!\n");
-            printf("The host here is ");
-            print_rumia_text();
-            printf("! Feel free!\n");
-        } else if (strcmp(input, "rumia") == 0) {
-            print_rumia();
-        } else if (strcmp(input, "") == 0) {
-            continue;
-        } else if (strcmp(input, "exit") == 0) {
-            print_rumia_text();
-            printf(": Goodbye, aoverb!\n");
-            break;
-        } else if (strcmp(input, "test") == 0) {
-            uint32_t* test_array = reinterpret_cast<uint32_t*>(kmalloc(8));
-            
-            for (uint32_t i = 0; i < 8; i++) {
-                test_array[i] = i;
-            }
-
-            for (uint32_t i = 0; i < 8; i++) {
-                printf("%d ", test_array[i]);
-            }
-
-            kfree(test_array);
-        } else if (strcmp(input, "probe") == 0) {
-            pmm_probe();
-        } else if (strcmp(input, "ps") == 0) {
-            print_process();
-        }else if (strcmp(input, "halt") == 0) {
-            printf("HALT!");
-            asm volatile("hlt");
-        } else if (strcmp(input, "time") == 0) {
-            printf("%d", pit_get_ticks());
-        } else if (strcmp(input, "tick") == 0) {
-            create_process(reinterpret_cast<void*>(&print_tick), nullptr);
-        } else if (strcmp(input, "kill2") == 0) {
-            exit_process(2);
-        }  else {
-            print_rumia_text();
-            printf(": Unknown command '%s'!\n", input);
-        }
-        
-        printf("\n");
-    }
-}
 
 typedef struct {
     uint32_t mod_start;   // 模块在内存中的起始物理地址
@@ -235,7 +157,6 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
-    create_process(reinterpret_cast<void*>(&shell), nullptr);
 
     if (mbi->flags & (1 << 3)) {  // 检查 mods 字段有效
         multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;

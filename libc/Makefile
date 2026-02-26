@@ -1,3 +1,4 @@
+CXX:=i686-elf-g++
 CC:=i686-elf-gcc
 AR:=i686-elf-ar
 
@@ -39,6 +40,9 @@ libc.a: $(LIBC_OBJS)
 %.libc.o: %.c
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBC_CFLAGS) $(LIBC_CPPFLAGS)
 
+%.libc.o: %.cpp
+	$(CXX) -MD -c $< -o $@ -std=c++17 $(LIBC_CFLAGS) $(LIBC_CPPFLAGS)
+
 crt0.o: crt/crt0.s
 	$(AS) --32 -o $@ $<
 
@@ -47,6 +51,9 @@ libk.a: $(LIBK_OBJS)
 
 %.libk.o: %.c
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
+
+%.libk.o: %.cpp
+	$(CXX) -MD -c $< -o $@ -std=c++17 $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
 -include $(LIBC_OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)
