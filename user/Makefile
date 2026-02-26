@@ -28,11 +28,11 @@ hello_world.bin: $(USER_OBJS) ./linker.ld $(LIBC)
 %.o: %.cpp
 	$(CXX) -MD -c $< -o $@ -std=gnu++11 $(CXXFLAGS)
 
-.PHONY install:
+install-bin:
 	cp -R --preserve=timestamps ./hello_world.bin $(SYSROOT)/usr/bin/.
 
 # 清理
-.PHONY clean:
+clean:
 	rm -f hello_world.bin
 	rm -f $(USER_OBJS)
 	rm -f $(USER_OBJS:.o=.d)

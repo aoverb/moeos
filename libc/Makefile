@@ -21,13 +21,23 @@ CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
 CPPFLAGS:=$(CPPFLAGS) -D__is_libc --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
 LIBK_CFLAGS:=$(CFLAGS)
 LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
+LIBK_CFLAGS:=$(CFLAGS)
+LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk
 
 LIBK_OBJS=$(LIBC_OBJS:.o=.libk.o)
-BINARIES=libk.a
+BINARIES=\
+libk.a \
+libc.a
 
 .PHONY: all clean install-headers
 
 all: $(BINARIES)
+
+libc.a: $(LIBC_OBJS)
+	$(AR) rcs $@ $(LIBC_OBJS)
+
+%.libc.o: %.c
+	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBC_CFLAGS) $(LIBC_CPPFLAGS)
 
 libk.a: $(LIBK_OBJS)
 	$(AR) rcs $@ $(LIBK_OBJS)
@@ -35,13 +45,14 @@ libk.a: $(LIBK_OBJS)
 %.libk.o: %.c
 	$(CC) -MD -c $< -o $@ -std=gnu11 $(LIBK_CFLAGS) $(LIBK_CPPFLAGS)
 
+-include $(LIBC_OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)
 
 install-headers:
 	cp -R --preserve=timestamps include/. $(SYSROOT)/usr/include/.
 
 install-libc:
-	cp -R --preserve=timestamps $(BINARIES) $(SYSROOT)/usr/lib/$(BINARIES)
+	cp -R --preserve=timestamps $(BINARIES) $(SYSROOT)/usr/lib/
 
 clean:
 	rm -f $(LIBK_OBJS)
