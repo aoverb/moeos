@@ -23,6 +23,8 @@ typedef struct {
     uint32_t ss;
 } interrupt_frame;
 
+void syscall_init();
+
 typedef uint32_t (*syscall_handler_t)(interrupt_frame*);
 void inner_syscall_handler(interrupt_frame* reg);
 void register_syscall(uint8_t n, syscall_handler_t handler);
