@@ -2,6 +2,7 @@
 #include "io.h"
 #include <stdio.h>
 #include <string.h>
+#include <kernel/process.h>
 
 idt_entry_struct idt_entries[256];
 extern "C" void system_call_handler();
@@ -28,6 +29,7 @@ void inner_interrupt_handler(registers* regs) {
     set_color(0x00FF0000);
     printf("int:  %d\n", regs->int_no);
     printf("An critical error has occurred: %d\n", regs->err_code);
+    exit_process(cur_process_id);
     set_color(0x00FFFFFF);
     return;
 }

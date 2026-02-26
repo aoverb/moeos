@@ -17,7 +17,10 @@ LIBC:=$(SYSROOT)/usr/lib/libc.a
 all: hello_world.bin
 
 # 目标：我们的Hello world.bin
-hello_world.bin: $(USER_OBJS) ./linker.ld $(LIBC)
+hello_world.bin: hello_world.elf
+	objcopy -O binary hello_world.elf hello_world.bin
+
+hello_world.elf: $(USER_OBJS) ./linker.ld $(LIBC)
 	$(CC) -T ./linker.ld -o $@ $(LDFLAGS) $(USER_OBJS) -L$(SYSROOT)/usr/lib -lc -lgcc
 
 # 自动推导规则：如何从 .c 变成 .o

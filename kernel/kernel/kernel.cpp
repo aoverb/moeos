@@ -208,13 +208,12 @@ void shell() {
     }
 }
 
-void user_program() {
-    uint32_t ret;
-    uint32_t num = 0;
-    const char* s = "hello from user space!\n";
-    asm volatile("int $0x80" : "=a"(ret) : "a"(1), "b"(s));
-    asm volatile("int $0x80" : "=a"(ret) : "a"(0));
-}
+typedef struct {
+    uint32_t mod_start;   // 模块在内存中的起始物理地址
+    uint32_t mod_end;     // 模块结束物理地址
+    uint32_t cmdline;     // 模块命令行字符串（就是 grub.cfg 里的路径）
+    uint32_t pad;         // 保留，为 0
+} multiboot_module_t;
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
@@ -237,7 +236,20 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     create_process(reinterpret_cast<void*>(&shell), nullptr);
-    create_user_process(reinterpret_cast<void*>(&user_program), 4096, 1);
+
+    if (mbi->flags & (1 << 3)) {  // 检查 mods 字段有效
+        multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
+        uint32_t mod_count = mbi->mods_count;
+
+        for (uint32_t i = 0; i < mod_count; i++) {
+            void* start = (void*)mods[i].mod_start;
+            size_t size = mods[i].mod_end - mods[i].mod_start;
+            const char* name = (const char*)mods[i].cmdline;
+
+            create_user_process(start, size, 1);
+        }
+    }
+
     while (1) {
         do_process_recycle();
         yield();

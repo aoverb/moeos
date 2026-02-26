@@ -6,6 +6,7 @@ make
 cd ..
 # 复制内核
 cp kernel/lolios.kernel isodir/boot/lolios.bin
+# 复制用户态程序
 cp user/hello_world.bin isodir/boot/hello_world.bin
 
 # 创建 GRUB 配置文件
