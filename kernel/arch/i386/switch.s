@@ -20,6 +20,8 @@ process_switch_to:
     movzbl 24(%esp), %eax
     movl process_list(, %eax, 4), %eax
     movl (%eax), %ebx
+    cmpb %bl, (cur_process_id)
+    je 1f
     movb %bl, cur_process_id
     movl 4(%eax), %esp
 

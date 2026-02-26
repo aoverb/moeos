@@ -77,6 +77,7 @@ void schedule() {
     cur_pcb->state = process_state::READY;
     chosen_process->state = process_state::RUNNING;
     remove_from_scheduling_queue(chosen_process->pid);
+    if (chosen_process->pid == cur_process_id) return;
     update_kernel_stack((uint32_t)chosen_process->kernel_stack_bottom + KERNEL_STACK_SIZE);
     process_switch_to(chosen_process->pid);
 }

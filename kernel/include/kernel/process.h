@@ -26,8 +26,8 @@ typedef struct PCB {
     uint16_t quota;
     uint32_t create_time;
     process_state state;
-    PCB* prev;
-    PCB* next;
+    PCB* prev = nullptr;
+    PCB* next = nullptr;
 } PCB;
 
 extern PCB* process_list[MAX_PROCESSES_NUM];

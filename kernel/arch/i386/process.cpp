@@ -27,6 +27,7 @@ void print_process() {
 
 void process_init() {
     init_scheduler();
+    memset(process_list[0], 0, sizeof(PCB)); 
     process_list[0] = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
     process_list[0]->prev = process_list[0]->next = nullptr;
@@ -137,6 +138,7 @@ void free_pcb(PCB*& process) {
 }
 
 uint32_t exit_process(uint8_t pid) {
+    printf("exiting: %d\n", pid);
     if (pid == 0 || process_list[pid] == nullptr) return 1;
     remove_from_scheduling_queue(pid);
     PCB*& cur_process = process_list[pid];

@@ -170,7 +170,6 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
             create_user_process(start, size, 1);
         }
     }
-
     while (1) {
         do_process_recycle();
         yield();
