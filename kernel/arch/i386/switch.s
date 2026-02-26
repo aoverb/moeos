@@ -23,6 +23,12 @@ process_switch_to:
     movb %bl, cur_process_id
     movl 4(%eax), %esp
 
+    movl 8(%eax), %eax
+    movl %cr3, %ebx
+    cmpl %ebx, %eax
+    je 1f
+    movl %eax, %cr3
+1:
     popl %ebp
     popl %edi
     popl %esi

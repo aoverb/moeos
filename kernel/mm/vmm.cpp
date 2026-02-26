@@ -74,7 +74,24 @@ void vmm_init() {
 }
 
 uintptr_t vmm_create_page_directory() {
-    return 0;
+    constexpr uint32_t TEMP_PD_ADDR = 0xCF000000;
+    uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1));
+
+    vmm_map_page(p_addr, TEMP_PD_ADDR, 3);
+
+    PDE* kernel_pde_list = reinterpret_cast<PDE*>(page_directory);
+    PDE* cur_pde_list = reinterpret_cast<PDE*>(TEMP_PD_ADDR);
+    memset(cur_pde_list, 0, sizeof(cur_pde_list));
+    for (uint16_t i = 0; i < 1023; ++i) {
+        cur_pde_list[i] = kernel_pde_list[i];
+    }
+    cur_pde_list[1023] = {0};
+    cur_pde_list[1023].frame = p_addr >> 12;
+    cur_pde_list[1023].read_write = 1;
+    cur_pde_list[1023].present = 1;
+
+    vmm_unmap_page(TEMP_PD_ADDR);
+    return p_addr;
 }
 
 void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {

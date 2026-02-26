@@ -32,6 +32,7 @@ void process_init() {
     process_list[0]->prev = process_list[0]->next = nullptr;
     process_list[0]->pid = 0;
     process_list[0]->create_time = 0;
+    process_list[0]->cr3 = vmm_get_cr3();
     process_list[0]->state = process_state::RUNNING;
     cur_process_id = 0;
 }
@@ -42,9 +43,10 @@ constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
 uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
     spinlock_acquire(&process_list_lock);
     uint8_t newpid = 0;
-    for (auto nid = 0; nid < MAX_PROCESSES_NUM; ++nid) {
+    for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             newpid = nid;
+            break;
         }
     }
     if (newpid == 0) {
@@ -99,7 +101,7 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
 
 uint32_t create_process(void* entry, void* args) {
     spinlock_acquire(&process_list_lock);
-    for (auto nid = 0; nid < MAX_PROCESSES_NUM; ++nid) {
+    for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             PCB*& new_process = process_list[nid];
             new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
@@ -116,6 +118,7 @@ uint32_t create_process(void* entry, void* args) {
             *((uintptr_t*)(new_process->esp - 32)) = 0;      // ebp  ← 栈顶，最先被 pop
             new_process->esp -= 32;
             new_process->pid = nid;
+            new_process->cr3 = vmm_get_cr3();
             new_process->create_time = pit_get_ticks();
             new_process->state = process_state::READY;
             insert_into_scheduling_queue(nid);

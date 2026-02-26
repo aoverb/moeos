@@ -18,9 +18,9 @@ enum class process_state {
 typedef struct PCB {
     uint8_t pid;
     uintptr_t esp;
+    uintptr_t cr3;
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
-    uint32_t cr3;
     
     uint16_t priority;
     uint16_t quota;
@@ -43,7 +43,7 @@ void print_process();
 uint32_t create_process(void* entry, void* args);
 uint32_t exit_process(uint8_t pid);
 
-uint32_t create_user_process(void* code, uint32_t code_size, void* args, uint8_t priority);
+uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority);
 
 void process_switch_to(uint8_t pid);
 

@@ -206,6 +206,10 @@ void shell() {
     }
 }
 
+void user_program() {
+    while(1) {}
+}
+
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
@@ -226,7 +230,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
     create_process(reinterpret_cast<void*>(&shell), nullptr);
-
+    create_user_process(reinterpret_cast<void*>(&user_program), 256, 1);
     print_process();
     while (1) {
         do_process_recycle();
