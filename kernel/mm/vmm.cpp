@@ -81,7 +81,7 @@ uintptr_t vmm_create_page_directory() {
 
     PDE* kernel_pde_list = reinterpret_cast<PDE*>(page_directory);
     PDE* cur_pde_list = reinterpret_cast<PDE*>(TEMP_PD_ADDR);
-    memset(cur_pde_list, 0, sizeof(cur_pde_list));
+    memset(cur_pde_list, 0, sizeof(PDE) * 1024);
     for (uint16_t i = 0; i < 1023; ++i) {
         cur_pde_list[i] = kernel_pde_list[i];
     }
