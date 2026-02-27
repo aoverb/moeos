@@ -42,6 +42,8 @@ void pmm_free(void* addr);
 
 void pmm_probe();
 
+void pmm_migrate_to_high();
+
 void vmm_init();
 
 void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag);

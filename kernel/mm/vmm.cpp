@@ -55,7 +55,7 @@ static inline void invlpg(uintptr_t addr) {
 
 void vmm_cleanup_low_identity_mapping() {
     PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 768; i++) {
         if (pde_list[i].present) {
             pde_list[i] = {0};
         }
@@ -82,7 +82,7 @@ uintptr_t vmm_create_page_directory() {
     PDE* kernel_pde_list = reinterpret_cast<PDE*>(page_directory);
     PDE* cur_pde_list = reinterpret_cast<PDE*>(TEMP_PD_ADDR);
     memset(cur_pde_list, 0, sizeof(PDE) * 1024);
-    for (uint16_t i = 0; i < 1023; ++i) {
+    for (uint16_t i = 768; i < 1023; ++i) {
         cur_pde_list[i] = kernel_pde_list[i];
     }
     cur_pde_list[1023] = {0};

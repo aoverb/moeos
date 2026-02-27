@@ -27,11 +27,12 @@ void print_process() {
 
 void process_init() {
     init_scheduler();
-    memset(process_list[0], 0, sizeof(PCB)); 
     process_list[0] = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
+    memset(process_list[0], 0, sizeof(PCB));
     process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
     process_list[0]->prev = process_list[0]->next = nullptr;
     process_list[0]->pid = 0;
+    process_list[0]->saved_eflags = 0x202;
     process_list[0]->create_time = 0;
     process_list[0]->cr3 = vmm_get_cr3();
     process_list[0]->state = process_state::RUNNING;
@@ -82,12 +83,12 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
     *((uintptr_t*)(new_process->esp - 16)) = 0x1B; // CS
     *((uintptr_t*)(new_process->esp - 20)) = CODE_SPACE_ADDR; // EIP
     *((uintptr_t*)(new_process->esp - 24)) = reinterpret_cast<uintptr_t>(&ret_to_user_mode);
-    *((uintptr_t*)(new_process->esp - 28)) = 0x200;  // EFLAGS (popfl)
-    *((uintptr_t*)(new_process->esp - 32)) = 0;      // ebx
-    *((uintptr_t*)(new_process->esp - 36)) = 0;      // esi
-    *((uintptr_t*)(new_process->esp - 40)) = 0;      // edi
-    *((uintptr_t*)(new_process->esp - 44)) = 0;      // ebp  ← 栈顶，最先被 pop
-    new_process->esp -= 44;
+    *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebx
+    *((uintptr_t*)(new_process->esp - 32)) = 0;      // esi
+    *((uintptr_t*)(new_process->esp - 36)) = 0;      // edi
+    *((uintptr_t*)(new_process->esp - 40)) = 0;      // ebp  ← 栈顶，最先被 pop
+    new_process->esp -= 40;
+    new_process->saved_eflags = 0x202;
     new_process->pid = newpid;
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
@@ -112,12 +113,12 @@ uint32_t create_process(void* entry, void* args) {
             *((uintptr_t*)(new_process->esp - 4)) = reinterpret_cast<uintptr_t>(args);
             *((uintptr_t*)(new_process->esp - 8)) = reinterpret_cast<uintptr_t>(&exit_process_wrapper);
             *((uintptr_t*)(new_process->esp - 12)) = reinterpret_cast<uintptr_t>(entry);
-            *((uintptr_t*)(new_process->esp - 16)) = 0x200;  // EFLAGS (popfl)
-            *((uintptr_t*)(new_process->esp - 20)) = 0;      // ebx
-            *((uintptr_t*)(new_process->esp - 24)) = 0;      // esi
-            *((uintptr_t*)(new_process->esp - 28)) = 0;      // edi
-            *((uintptr_t*)(new_process->esp - 32)) = 0;      // ebp  ← 栈顶，最先被 pop
-            new_process->esp -= 32;
+            *((uintptr_t*)(new_process->esp - 16)) = 0;      // ebx
+            *((uintptr_t*)(new_process->esp - 20)) = 0;      // esi
+            *((uintptr_t*)(new_process->esp - 24)) = 0;      // edi
+            *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebp  ← 栈顶，最先被 pop
+            new_process->esp -= 28;
+            new_process->saved_eflags = 0x202;
             new_process->pid = nid;
             new_process->cr3 = vmm_get_cr3();
             new_process->create_time = pit_get_ticks();

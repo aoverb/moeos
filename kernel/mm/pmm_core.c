@@ -1,5 +1,6 @@
 #include <kernel/mm.h>
 #include <kernel/panic.h>
+#include <string.h>
 
 page_frame* all_pages;
 
@@ -137,4 +138,35 @@ void pmm_free(void* addr) {
     pf->next = free_area[pf->order];
     if (free_area[pf->order]) free_area[pf->order]->prev = pf;
     free_area[pf->order] = pf;
+}
+
+void pmm_migrate_to_high() {
+    uint32_t total_size = page_limit * sizeof(page_frame);
+
+    // 1. 在高地址分配新空间
+    page_frame* new_all_pages = (page_frame*)kmalloc(total_size);
+
+    // 2. 拷贝数据
+    memcpy(new_all_pages, all_pages, total_size);
+
+    // 3. 计算偏移量，修正指针
+    intptr_t delta = (intptr_t)new_all_pages - (intptr_t)all_pages;
+
+    for (uint32_t i = 0; i < page_limit; i++) {
+        if (new_all_pages[i].next)
+            new_all_pages[i].next = (page_frame*)((uintptr_t)new_all_pages[i].next + delta);
+        if (new_all_pages[i].prev)
+            new_all_pages[i].prev = (page_frame*)((uintptr_t)new_all_pages[i].prev + delta);
+    }
+
+    for (uint32_t i = 0; i < MAX_ORDER; i++) {
+        if (free_area[i])
+            free_area[i] = (page_frame*)((uintptr_t)free_area[i] + delta);
+    }
+
+    // 4. 切换
+    page_frame* old_all_pages = all_pages;
+    all_pages = new_all_pages;
+
+    // 旧的物理页不回收了，直接忽略
 }

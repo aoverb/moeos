@@ -50,14 +50,21 @@ void move_all_to_top_priority() {
 }
 
 void schedule() {
+    uint32_t flags;
+    asm volatile ("pushfl; popl %0; cli" : "=r"(flags));
+
     PCB* cur_pcb = process_list[cur_process_id];
-    insert_into_scheduling_queue(cur_process_id, cur_pcb->priority, false);
-    if (--(cur_pcb->quota) == 0) {
-        if (cur_pcb->priority > 0) {
-            remove_from_scheduling_queue(cur_process_id);
-            insert_into_scheduling_queue(cur_process_id, cur_pcb->priority - 1);
+    cur_pcb->saved_eflags = flags;
+
+    if (cur_pcb->state != process_state::ZOMBIE) {
+        insert_into_scheduling_queue(cur_process_id, cur_pcb->priority, false);
+        if (--(cur_pcb->quota) == 0) {
+            if (cur_pcb->priority > 0) {
+                remove_from_scheduling_queue(cur_process_id);
+                insert_into_scheduling_queue(cur_process_id, cur_pcb->priority - 1);
+            }
+            cur_pcb->quota = MAP_PRIORITY_TO_QUOTA[cur_pcb->priority];
         }
-        cur_pcb->quota = MAP_PRIORITY_TO_QUOTA[cur_pcb->priority];
     }
     if (--resetcnt == 0) {
         resetcnt = RESETCNT_INITIAL;
@@ -77,9 +84,17 @@ void schedule() {
     cur_pcb->state = process_state::READY;
     chosen_process->state = process_state::RUNNING;
     remove_from_scheduling_queue(chosen_process->pid);
-    if (chosen_process->pid == cur_process_id) return;
+
+    if (chosen_process->pid == cur_process_id) {
+        asm volatile ("pushl %0; popfl" : : "r"(flags));
+        return;
+    }
+
     update_kernel_stack((uint32_t)chosen_process->kernel_stack_bottom + KERNEL_STACK_SIZE);
     process_switch_to(chosen_process->pid);
+
+    flags = process_list[cur_process_id]->saved_eflags;
+    asm volatile ("pushl %0; popfl" : : "r"(flags));
 }
 
 void yield() {

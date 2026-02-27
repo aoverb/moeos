@@ -19,6 +19,7 @@ typedef struct PCB {
     uint8_t pid;
     uintptr_t esp;
     uintptr_t cr3;
+    uint32_t saved_eflags;
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
     

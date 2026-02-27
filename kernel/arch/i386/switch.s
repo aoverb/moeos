@@ -4,7 +4,6 @@
 .global ret_to_user_mode
 
 process_switch_to:
-    pushfl
     cli
     pushl %ebx
     pushl %esi
@@ -17,7 +16,7 @@ process_switch_to:
     movl %esp, 4(%eax)
 
     #更新cur_process_id和esp寄存器...
-    movzbl 24(%esp), %eax
+    movzbl 20(%esp), %eax
     movl process_list(, %eax, 4), %eax
     movl (%eax), %ebx
     cmpb %bl, (cur_process_id)
@@ -35,8 +34,6 @@ process_switch_to:
     popl %edi
     popl %esi
     popl %ebx
-    popfl
-
     ret
 
 ret_to_user_mode:

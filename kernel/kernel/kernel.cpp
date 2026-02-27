@@ -45,6 +45,13 @@ void print_rumia() {
 #pragma GCC diagnostic pop
 }
 
+typedef struct {
+    uint32_t mod_start;   // 模块在内存中的起始物理地址
+    uint32_t mod_end;     // 模块结束物理地址
+    uint32_t cmdline;     // 模块命令行字符串（就是 grub.cfg 里的路径）
+    uint32_t pad;         // 保留，为 0
+} multiboot_module_t;
+
 void pmm_prepare(multiboot_info_t* mbi) {
     uint64_t kernel_begin = 0x100000;
     uint64_t kernel_end = (uint64_t)(&_kernel_end);
@@ -52,15 +59,25 @@ void pmm_prepare(multiboot_info_t* mbi) {
     uint32_t lfb_begin = mbi->framebuffer_addr;
     uint32_t lfb_end = lfb_begin + mbi->framebuffer_pitch * mbi->framebuffer_height - 1;
 
-    struct { uint64_t begin; uint64_t end; } reserved[] = {
-        { kernel_begin, kernel_end },
-        { lfb_begin, lfb_end },
-        // multiboot_info 结构体本身
-        { (uint32_t)(uintptr_t)mbi, (uint32_t)(uintptr_t)mbi + sizeof(multiboot_info_t) - 1 },
-        // multiboot 内存映射表
-        { mbi->mmap_addr, mbi->mmap_addr + mbi->mmap_length - 1 },
-    };
-    constexpr int num_reserved = sizeof(reserved) / sizeof(reserved[0]);
+    struct { uint64_t begin; uint64_t end; } reserved[128];
+    int num_reserved = 0;
+
+    reserved[num_reserved++] = { kernel_begin, kernel_end };
+    reserved[num_reserved++] = { lfb_begin, lfb_end };
+    reserved[num_reserved++] = { (uint32_t)(uintptr_t)mbi, (uint32_t)(uintptr_t)mbi + sizeof(multiboot_info_t) - 1 };
+    reserved[num_reserved++] = { mbi->mmap_addr, mbi->mmap_addr + mbi->mmap_length - 1 };
+
+    if (mbi->flags & (1 << 3)) {
+        multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
+        // reserve mods 数组本身
+        reserved[num_reserved++] = {
+            (uint64_t)(uintptr_t)mods,
+            (uint64_t)(uintptr_t)mods + sizeof(multiboot_module_t) * mbi->mods_count - 1
+        };
+        for (uint32_t i = 0; i < mbi->mods_count; i++) {
+            reserved[num_reserved++] = { mods[i].mod_start, mods[i].mod_end - 1 };
+        }
+    }
 
     for (int i = 0; i < num_reserved - 1; i++)
         for (int j = i + 1; j < num_reserved; j++)
@@ -129,28 +146,56 @@ void print_tick() {
     }
 }
 
-
 typedef struct {
-    uint32_t mod_start;   // 模块在内存中的起始物理地址
-    uint32_t mod_end;     // 模块结束物理地址
-    uint32_t cmdline;     // 模块命令行字符串（就是 grub.cfg 里的路径）
-    uint32_t pad;         // 保留，为 0
-} multiboot_module_t;
+    void*  data;
+    size_t size;
+} saved_module;
+
+void save_module(multiboot_info_t* mbi, saved_module*& saved, uint32_t& mod_count) {
+    mod_count = 0;
+    saved = nullptr;
+    if (mbi->flags & (1 << 3)) {
+        multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
+        mod_count = mbi->mods_count;
+        saved = (saved_module*)kmalloc(sizeof(saved_module) * mod_count);
+        for (uint32_t i = 0; i < mod_count; i++) {
+            saved[i].size = mods[i].mod_end - mods[i].mod_start;
+            saved[i].data = kmalloc(saved[i].size);
+            memcpy(saved[i].data, (void*)mods[i].mod_start, saved[i].size);
+        }
+    }
+}
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
     terminal_initialize(mbi);
     kheap_init();
-    // vmm_cleanup_low_identity_mapping(); // 到这里清除了低地址的恒等映射，mbi就失效了
-    // todo: pmm部分数据需重新映射，才能安全清除恒等映射
-    // mbi = NULL;
+    uint32_t mod_count = 0;
+    saved_module* saved;
+    save_module(mbi, saved, mod_count);
+    pmm_migrate_to_high();
+    vmm_cleanup_low_identity_mapping();
+    mbi = NULL;
     print_rumia();
+
     printf("HAL initializing...");
     hal_init();
+    printf("OK\n");
+
+    printf("Keyboard initializing...");
     keyboard_init();
+    printf("OK\n");
+
+    printf("pit initializing...");
     pit_init();
+    printf("OK\n");
+
+    printf("syscall initializing...");
     syscall_init();
+    printf("OK\n");
+
+    printf("process initializing...");
     process_init();
     asm volatile ("sti");
     
@@ -158,18 +203,12 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
 
-    if (mbi->flags & (1 << 3)) {  // 检查 mods 字段有效
-        multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
-        uint32_t mod_count = mbi->mods_count;
-
-        for (uint32_t i = 0; i < mod_count; i++) {
-            void* start = (void*)mods[i].mod_start;
-            size_t size = mods[i].mod_end - mods[i].mod_start;
-            const char* name = (const char*)mods[i].cmdline;
-
-            create_user_process(start, size, 1);
-        }
+    for (uint32_t i = 0; i < mod_count; i++) {
+        create_user_process(saved[i].data, saved[i].size, 1);
+        kfree(saved[i].data);
     }
+    kfree(saved);
+
     while (1) {
         do_process_recycle();
         yield();
