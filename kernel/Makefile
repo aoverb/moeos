@@ -40,9 +40,16 @@ kernel/panic.o
 
 LIBK:=$(SYSROOT)/usr/lib/libk.a
 
+CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
+CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
+
 # 目标：最终的内核文件
-lolios.kernel: $(KERNEL_OBJS) $(ARCHDIR)/linker.ld $(LIBK)
-	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(LDFLAGS) $(KERNEL_OBJS) -L$(SYSROOT)/usr/lib -lk -lgcc
+lolios.kernel: $(ARCHDIR)/crti.o $(ARCHDIR)/crtn.o $(KERNEL_OBJS) $(ARCHDIR)/linker.ld $(LIBK)
+	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(LDFLAGS) \
+		$(ARCHDIR)/crti.o $(CRTBEGIN_OBJ) \
+		$(KERNEL_OBJS) \
+		-L$(SYSROOT)/usr/lib -lk -lgcc \
+		$(CRTEND_OBJ) $(ARCHDIR)/crtn.o
 
 # 自动推导规则：如何从 .c 变成 .o
 %.o: %.c

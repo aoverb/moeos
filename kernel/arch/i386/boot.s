@@ -87,7 +87,7 @@ _tokernelmain:
     mov $stack_top, %esp
     /* 关键：将 Multiboot 信息结构的地址 (存在 ebx 中) 压入栈，传给 C++ */
     push %ebx
-    
+    call _init
     call kernel_main
 
     cli
