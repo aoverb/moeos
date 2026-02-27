@@ -135,15 +135,16 @@ uint32_t create_process(void* entry, void* args) {
 void free_pcb(PCB*& process) {
     kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
     kfree(reinterpret_cast<void*>(process));
+    // todo：如果是用户态进程，需要销毁用户空间（CR3）
     process = nullptr;
 }
 
 uint32_t exit_process(uint8_t pid) {
     printf("exiting: %d\n", pid);
     if (pid == 0 || process_list[pid] == nullptr) return 1;
-    remove_from_scheduling_queue(pid);
     PCB*& cur_process = process_list[pid];
     if (pid != cur_process_id) {
+		remove_from_scheduling_queue(pid);
         free_pcb(cur_process);
         return 0;
     } 
