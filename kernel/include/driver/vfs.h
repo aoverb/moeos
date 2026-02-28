@@ -55,6 +55,7 @@ int v_unmount(const char* mount_path);
 int v_open(PCB* proc, const char* path, uint8_t mode);
 int v_read(PCB* proc, int fd, char* buffer, uint32_t size);
 int v_write(PCB* proc, int fd, const char* buffer, uint32_t size);
+int v_close(PCB* proc, int fd);
 int v_opendir(PCB* proc, const char* path);
 int v_readdir(PCB* proc, int fd, dirent* out);
 int v_closedir(PCB* proc, int fd);

@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <syscall_def.h>
+#include <file.h>
+
+constexpr char* PATH[2] = {
+    "/usr/bin/",
+    "/"
+};
 
 void print_rumia_text() {
     set_color(0xF0B526);

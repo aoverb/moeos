@@ -1,0 +1,37 @@
+#ifndef _FILE_H
+#define _FILE_H 1
+#include <stdint.h>
+#define EOF (-1)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define O_RDONLY  0x01
+#define O_WRONLY  0x02
+#define O_RDWR    0x03
+#define O_CREATE  0x04
+
+int mount(uint32_t driver, const char* mount_path, void* device_data);
+int unmount(const char* mount_path);
+int open(const char* path, uint8_t mode);
+int read(int fd, char* buffer, uint32_t size);
+int write(int fd, const char* buffer, uint32_t size);
+int close(int fd);
+uint32_t exec(void* code, uint32_t code_size, uint8_t priority);
+
+typedef struct {
+    char     name[256];
+    uint32_t inode;
+    uint8_t  type;
+} dirent;
+
+int opendir(const char* path);
+int readdir(int fd, dirent* out);
+int closedir(int fd);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
