@@ -9,8 +9,10 @@ extern "C" {
 
 size_t strlen(const char*);
 int strcmp(const char*, const char*);
+int strncmp(const char* str1, const char* str2, size_t n);
 void* memcpy(void* __restrict, const void* __restrict, size_t);
 void* memset(void*, int, size_t);
+char* strcpy(char* dest, const char* src);
 
 #ifdef __cplusplus
 }

@@ -19,7 +19,9 @@ include $(ARCHDIR)/make.config
 
 DRIVER_OBJS=\
 driver/keyboard.o \
-driver/pit.o
+driver/pit.o \
+driver/vfs.o \
+driver/tarfs.o
 
 MM_OBJS=\
 mm/pmm_core.o \

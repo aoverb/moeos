@@ -50,13 +50,12 @@ struct gdtr_descriptor {
     uint32_t base;
 } __attribute__((packed));
 
-void tss_set_kernel_stack(uint32_t esp);
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void gdt_init();
+void tss_set_kernel_stack(uint32_t esp);
 
 #ifdef __cplusplus
 }

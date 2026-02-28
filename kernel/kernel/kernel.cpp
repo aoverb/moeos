@@ -11,10 +11,13 @@
 #include <kernel/schedule.h>
 #include <kernel/process.h>
 #include <kernel/syscall.h>
+#include <kernel/panic.h>
 #include <syscall_def.h>
 
 #include <driver/keyboard.h>
 #include <driver/pit.h>
+#include <driver/vfs.h>
+#include <driver/tarfs.h>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -198,10 +201,18 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("process initializing...");
     process_init();
     asm volatile ("sti");
-    
+
+    init_vfs();
+    init_tarfs();
+
     printf("OK\n");
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
+
+    int ret = v_mount(FS_DRIVER::TARFS, "/", nullptr); // 假设我这里准备好了一块tarfs_data传进去
+    if (ret < 0) {
+        panic("failed to mount root!");
+    }
 
     for (uint32_t i = 0; i < mod_count; i++) {
         create_user_process(saved[i].data, saved[i].size, 1);

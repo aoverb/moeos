@@ -10,6 +10,7 @@ string/strlen.o \
 string/memcpy.o \
 string/memset.o \
 string/strcmp.o \
+string/strcpy.o \
 stdio/setcolor.o \
 stdio/getline.o
 

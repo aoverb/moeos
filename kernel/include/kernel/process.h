@@ -7,12 +7,21 @@ extern "C" {
 #endif
 constexpr uint8_t MAX_PROCESSES_NUM = 128;
 constexpr uint32_t KERNEL_STACK_SIZE = 4096;
+constexpr uint32_t MAX_FD_NUM = 4096;
+
+struct mounting_point;
 
 enum class process_state {
     READY = 0,
     RUNNING = 1,
     BLOCKED = 2,
     ZOMBIE = 3
+};
+
+struct file_description {
+    mounting_point* mp;
+    char* path;
+    uint32_t handle_id; // 用于在mp对应的挂载点上找到对应的文件交互上下文，不用传PATH
 };
 
 typedef struct PCB {
@@ -23,6 +32,8 @@ typedef struct PCB {
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
     
+    file_description fd[MAX_FD_NUM];
+    uint32_t fd_num;
     uint16_t priority;
     uint16_t quota;
     uint32_t create_time;
