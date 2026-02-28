@@ -43,8 +43,10 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
     char s[256];
 
     uint32_t i = 0;
-    uint32_t prev_inode_id = MAX_INODE_NUM;
+    uint32_t prev_inode_id = 0;
     while (i < 155 && path[i] != '\0') {
+        if (path[i] == '/') { ++i; continue; }
+
         uint32_t s_len = 0;
         while(i < 155 && path[i] != '/' && path[i] != '\0' && s_len < 255) {
             s[s_len] = path[i];
@@ -55,14 +57,18 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
         if (s[0] == '\0') break;
 
         if (cur_node->child_inodes.find(s) == cur_node->child_inodes.end()) {
-            cur_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
-            // 当前节点没有被真正从tar_block读取进去，为了避免出现错误，需要简单初始化
-            cur_node->block = nullptr;
-            cur_node->child_inodes.clear();
-            cur_node->child_inodes[s] = tdata->inode_cnt;
-            cur_node->child_inodes["."] = tdata->inode_cnt;
-            cur_node->child_inodes[".."] = prev_inode_id;
-            tdata->inodes[tdata->inode_cnt++] = cur_node;
+            uint32_t new_id = tdata->inode_cnt++;
+            if (tdata->inode_cnt > MAX_INODE_NUM) {
+                return nullptr;
+            }
+            cur_node->child_inodes[s] = new_id;
+
+            tar_inode* new_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
+            new_node->block = nullptr;
+            new_node->child_inodes.clear();
+            new_node->child_inodes["."] = new_id;
+            new_node->child_inodes[".."] = prev_inode_id;
+            tdata->inodes[new_id] = new_node;
         }
         prev_inode_id = cur_node->child_inodes[s];
         cur_node = tdata->inodes[cur_node->child_inodes[s]];
@@ -70,7 +76,7 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
     return cur_node;
 }
 
-tar_inode* construct_index(tarfs_data* tdata) {
+int construct_index(tarfs_data* tdata) {
     // 构造根目录块
     tdata->inodes[0] = new (kmalloc(sizeof(tar_inode))) tar_inode();
     tar_inode* root = tdata->inodes[0];
@@ -83,18 +89,32 @@ tar_inode* construct_index(tarfs_data* tdata) {
     void* cur_addr = tdata->tar_addr;
     tar_block* cur_block;
 
-    while ((uint32_t)cur_addr - (uint32_t)tdata->tar_addr < tdata->tar_size) {
+    while ((uintptr_t)cur_addr - (uintptr_t)tdata->tar_addr < tdata->tar_size) {
         cur_block = reinterpret_cast<tar_block*>(cur_addr);
+
+        if (cur_block->name[0] == '\0' && cur_block->name_prefix[0] == '\0') {
+            break;
+        }
+
         if (checksum(cur_block) != parse_octal(cur_block->checksum, 8)) {
-            // corrupted
-            // todo: cleaning
-            return nullptr;
+            printf("corrupted block at offset %x\n",
+                (uint32_t)((uintptr_t)cur_addr - (uintptr_t)tdata->tar_addr));
+             // todo: cleaning
+            return -1;
         }
         tar_inode* dir = construct_inode_by_path(tdata, cur_block->name_prefix);
+        if (dir == nullptr) {
+            // todo: cleaning
+            return -1;
+        }
         if (dir->child_inodes.find(cur_block->name) == dir->child_inodes.end()) {
             tar_inode* new_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
             dir->child_inodes[cur_block->name] = tdata->inode_cnt;
             tdata->inodes[tdata->inode_cnt++] = new_node;
+            if (tdata->inode_cnt > MAX_INODE_NUM) {
+                // todo: cleaning
+                return -1;
+            }
         }
         tdata->inodes[dir->child_inodes[cur_block->name]]->block = cur_block;
 
@@ -109,8 +129,7 @@ tar_inode* construct_index(tarfs_data* tdata) {
         uint64_t file_size = parse_octal(cur_block->size, 12);
         cur_addr = (uint8_t*)cur_addr + 512 + ((file_size + 511) / 512) * 512;
     }
-
-    return root;
+    return 0;
 }
 
 int mount(mounting_point* mp) {
@@ -122,7 +141,10 @@ int mount(mounting_point* mp) {
     tdata->inode_cnt = 0;
     memset(tdata->inodes, 0, sizeof(tdata->inodes));
     memset(tdata->file_handles, 0, sizeof(tdata->file_handles));
-    construct_index(tdata);
+    if (construct_index(tdata) != 0) {
+        // todo: cleaning
+        return -1;
+    }
     mp->data = tdata;
     return 0;
 }
