@@ -34,6 +34,7 @@ typedef struct PCB {
     
     file_description fd[MAX_FD_NUM];
     uint32_t fd_num;
+    char cwd[256];
     uint16_t priority;
     uint16_t quota;
     uint32_t create_time;

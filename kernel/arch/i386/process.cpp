@@ -32,6 +32,7 @@ void process_init() {
     process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
     process_list[0]->prev = process_list[0]->next = nullptr;
     process_list[0]->pid = 0;
+    strcpy(process_list[0]->cwd, "/");
     process_list[0]->saved_eflags = 0x202;
     process_list[0]->create_time = 0;
     process_list[0]->cr3 = vmm_get_cr3();
@@ -140,6 +141,7 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
     new_process->state = process_state::READY;
+    strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
     insert_into_scheduling_queue(newpid, priority);
     vmm_switch(pd_addr_old);
     asm volatile ("sti");
@@ -169,6 +171,7 @@ uint32_t create_process(void* entry, void* args) {
             new_process->pid = nid;
             new_process->cr3 = vmm_get_cr3();
             new_process->create_time = pit_get_ticks();
+            strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
             new_process->state = process_state::READY;
             insert_into_scheduling_queue(nid);
             spinlock_release(&process_list_lock);
