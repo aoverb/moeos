@@ -2,6 +2,8 @@
 #define _DRIVER_TARFS_H
 
 #include <stdint.h>
+#include <string>
+#include <unordered_map>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,17 +25,47 @@ struct file_handle {
 };
 
 constexpr uint32_t READ = 1;
+constexpr uint32_t MAX_INODE_NUM = 32768;
 constexpr uint32_t MAX_HANDLE_NUM = 4096;
+
+typedef struct {
+    char name[100];
+    char filemode[8];
+    char owner_id[8];
+    char group_id[8];
+    char size[12];
+    char last_modified[12];
+    char checksum[8];
+    char type;
+    char name_of_link[100];
+    char ustar_indicator[6];
+    char ustar_ver[2];
+    char owner_name[32];
+    char group_name[32];
+    char dev_major_no[8];
+    char dev_minor_no[8];
+    char name_prefix[155];
+    char padding[12];
+} tar_block;
+static_assert(sizeof(tar_block) == 512, "tar_block must be 512 bytes!");
+
+using inode_id = uint32_t;
+struct tar_inode {
+    tar_block* block = nullptr;
+    std::unordered_map<std::string, inode_id> child_inodes;
+};
 
 struct tarfs_data {
     void* tar_addr;
-    void* tar_size;
+    uint32_t tar_size;
+    tar_inode* inodes[MAX_INODE_NUM]; 
+    uint32_t inode_cnt;
     file_handle file_handles[MAX_HANDLE_NUM];
 };
 
 struct tarfs_metadata {
     void* data;
-    uint32_t* size;
+    uint32_t size;
 };
 
 #ifdef __cplusplus

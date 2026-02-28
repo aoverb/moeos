@@ -224,15 +224,19 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
 
-    int ret = v_mount(FS_DRIVER::TARFS, "/", nullptr); // 假设我这里准备好了一块tarfs_data传进去
-    if (ret < 0) {
-        panic("failed to mount root!");
+    tarfs_metadata tarmeta;
+    for (uint32_t i = 0; i < mod_count; i++) {
+        tarmeta.data = saved[i].data;
+        tarmeta.size = saved[i].size;
+        int ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta); // 假设我这里准备好了一块tarfs_data传进去
+        if (ret < 0) {
+            panic("failed to mount root!");
+        } else {
+            printf("root mounted!\n\n");
+            while(1) asm volatile ("hlt");
+        }
     }
 
-    for (uint32_t i = 0; i < mod_count; i++) {
-        create_user_process(saved[i].data, saved[i].size, 1);
-        kfree(saved[i].data);
-    }
     kfree(saved);
 
     while (1) {
