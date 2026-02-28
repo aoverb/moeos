@@ -42,7 +42,7 @@ void process_init() {
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
 
-uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
+uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     spinlock_acquire(&process_list_lock);
     uint8_t newpid = 0;
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {

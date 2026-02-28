@@ -57,8 +57,9 @@ void main() {
                 int fd = open(strcat(fn, input), 1);
                 if (fd == -1) continue;
                 int size = read(fd, buffer, 32768);
+                if (size == -1) continue;
                 printf("Executing %s: %d bytes loaded\n", fn, size);
-                exec(buffer, size, 1);
+                exec(buffer, size, 1, 0, nullptr);
                 flag = true;
             }
             

@@ -249,7 +249,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     char* buffer = (char*)kmalloc(65536);
     int size = v_read(cur_pcb, fd, buffer, 65536);
     printf("Executing shell: %d bytes loaded\n", size);
-    create_user_process(buffer, size, 1);
+    create_user_process(buffer, size, 1, 0, nullptr);
 
     while (1) {
         do_process_recycle();

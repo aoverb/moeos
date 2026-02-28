@@ -55,7 +55,7 @@ void print_process();
 uint32_t create_process(void* entry, void* args);
 uint32_t exit_process(uint8_t pid);
 
-uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority);
+uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
 
 void process_switch_to(uint8_t pid);
 

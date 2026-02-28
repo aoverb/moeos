@@ -37,9 +37,11 @@ int closedir(int fd) {
     return syscall1((uint32_t)SYSCALL::CLOSEDIR, (uint32_t)fd);
 }
 
-uint32_t exec(void* code, uint32_t code_size, uint8_t priority) {
-    return (uint32_t)syscall3((uint32_t)SYSCALL::EXEC,
+uint32_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
+    return (uint32_t)syscall5((uint32_t)SYSCALL::EXEC,
                               (uint32_t)code,
                               code_size,
-                              (uint32_t)priority);
+                              (uint32_t)priority,
+                              (uint32_t)argc,
+                              (uint32_t)argv);
 }

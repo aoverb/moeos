@@ -95,12 +95,14 @@ int sys_closedir(interrupt_frame* reg) {
     return v_closedir(current_pcb(), fd);
 }
 
-// EXEC(ebx = code_ptr, ecx = code_size, edx = priority) → returns pid
+// EXEC(ebx = code, ecx = code_size, edx = priority, esi = argc, ebp = argv)
 int sys_exec(interrupt_frame* reg) {
     void*    code      = reinterpret_cast<void*>(reg->ebx);
     uint32_t code_size = reg->ecx;
     uint8_t  priority  = static_cast<uint8_t>(reg->edx);
-    return static_cast<int>(create_user_process(code, code_size, priority));
+    int      argc      = static_cast<int>(reg->esi);
+    char**   argv      = reinterpret_cast<char**>(reg->ebp);
+    return static_cast<int>(create_user_process(code, code_size, priority, argc, argv));
 }
 
 void syscall_init() {
