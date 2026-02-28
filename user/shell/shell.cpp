@@ -24,7 +24,7 @@ void print_lolios() {
     set_color(0xFFFFFF);
 }
 
-void main() {
+int main(int argc, char** argv) {
     char buffer[32768];
     char input[256];
     printf("Shell is running in user addr: %x\n", &main);
@@ -59,7 +59,8 @@ void main() {
                 int size = read(fd, buffer, 32768);
                 if (size == -1) continue;
                 printf("Executing %s: %d bytes loaded\n", fn, size);
-                exec(buffer, size, 1, 0, nullptr);
+                char* v[] = {"rumianomnomnom\n", "yay\n", "can you hear me?"};
+                exec(buffer, size, 1, 3, v);
                 flag = true;
             }
             
@@ -72,4 +73,5 @@ void main() {
         
         printf("\n");
     }
+    return 0;
 }

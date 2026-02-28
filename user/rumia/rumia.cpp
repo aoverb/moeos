@@ -29,6 +29,8 @@ void print_rumia() {
 #pragma GCC diagnostic pop
 }
 
-void main() {
+int main(int argc, char** argv) {
+    for (int i = 0; i < argc; ++i) printf("%s\n", argv[i]);
     print_rumia();
+    return 0;
 }

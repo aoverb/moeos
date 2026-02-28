@@ -61,6 +61,14 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
 
     void* code_buf = kmalloc(code_size);
     memcpy(code_buf, code, code_size);
+ 
+    uint32_t* arg_lens = (uint32_t*)kmalloc(argc * sizeof(uint32_t));
+    char** arg_bufs = (char**)kmalloc(argc * sizeof(char*));
+    for (int i = 0; i < argc; i++) {
+        arg_lens[i] = strlen(argv[i]) + 1;
+        arg_bufs[i] = (char*)kmalloc(arg_lens[i]);
+        memcpy(arg_bufs[i], argv[i], arg_lens[i]);
+    }
 
     asm volatile ("cli");
     vmm_switch(pd_addr);
@@ -77,6 +85,37 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
         vmm_map_page((uintptr_t)stack_space, CODE_STACK_TOP_ADDR - (16 - i) * 4096, 6);
     }
 
+    uintptr_t sp = CODE_STACK_TOP_ADDR;
+ 
+    uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
+    for (int i = argc - 1; i >= 0; i--) {
+        sp -= arg_lens[i];
+        memcpy((void*)sp, arg_bufs[i], arg_lens[i]);
+        user_argv_ptrs[i] = sp;
+        kfree(arg_bufs[i]);
+    }
+    kfree(arg_bufs);
+    kfree(arg_lens);
+ 
+    sp &= ~0x3; // 4 字节对齐
+ 
+    // argv[argc] = NULL
+    sp -= 4;
+    *((uintptr_t*)sp) = 0;
+ 
+    // argv[0] ~ argv[argc-1]
+    for (int i = argc - 1; i >= 0; i--) {
+        sp -= 4;
+        *((uintptr_t*)sp) = user_argv_ptrs[i];
+    }
+    uintptr_t argv_array_addr = sp;
+    kfree(user_argv_ptrs);
+ 
+    sp -= 4;
+    *((uintptr_t*)sp) = argv_array_addr;  // argv
+    sp -= 4;
+    *((uintptr_t*)sp) = (uintptr_t)argc;  // argc
+
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     memset(new_process, 0, sizeof(PCB));
@@ -86,6 +125,7 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
     // 内核栈
     *((uintptr_t*)(new_process->esp - 4)) = 0x23; // SS
     *((uintptr_t*)(new_process->esp - 8)) = CODE_STACK_TOP_ADDR; // ESP
+    *((uintptr_t*)(new_process->esp - 8)) = sp; // ESP
     *((uintptr_t*)(new_process->esp - 12)) = 0x202; // EFLAG
     *((uintptr_t*)(new_process->esp - 16)) = 0x1B; // CS
     *((uintptr_t*)(new_process->esp - 20)) = CODE_SPACE_ADDR; // EIP
@@ -93,7 +133,7 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
     *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebx
     *((uintptr_t*)(new_process->esp - 32)) = 0;      // esi
     *((uintptr_t*)(new_process->esp - 36)) = 0;      // edi
-    *((uintptr_t*)(new_process->esp - 40)) = 0;      // ebp  ← 栈顶，最先被 pop
+    *((uintptr_t*)(new_process->esp - 40)) = 0;      // ebp
     new_process->esp -= 40;
     new_process->saved_eflags = 0x202;
     new_process->pid = newpid;
