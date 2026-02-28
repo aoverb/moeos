@@ -1,0 +1,48 @@
+#pragma once
+// ===========================================================================
+// allocator.h - Memory allocation abstraction
+//
+// __is_libk defined   → kernel mode  (kmalloc / kfree)
+// __is_libk undefined → user mode    (malloc  / free)
+//
+// NOTE: extern "C" declarations live in allocator.cpp, NOT here.
+// This header only exposes C++ functions → no C linkage contamination.
+// ===========================================================================
+
+#include <stddef.h>
+
+// extern "C++" guarantees C++ linkage even if this header is
+// transitively included from inside an extern "C" { } block
+// (e.g. from <string.h>).
+extern "C++" {
+
+namespace std {
+
+// Implemented in allocator.cpp
+void* mem_alloc(size_t size);
+void  mem_free(void* ptr);
+
+template<class T>
+inline T* allocate(size_t n) {
+    return static_cast<T*>(mem_alloc(n * sizeof(T)));
+}
+
+template<class T>
+inline void deallocate(T* p) {
+    mem_free(static_cast<void*>(p));
+}
+
+} // namespace std
+
+// ---------------------------------------------------------------------------
+// Placement new / delete  (freestanding environments lack <new>)
+// ---------------------------------------------------------------------------
+#ifndef _std_PLACEMENT_NEW_DEFINED
+#define _std_PLACEMENT_NEW_DEFINED
+inline void* operator new(size_t, void* p)   noexcept { return p; }
+inline void* operator new[](size_t, void* p) noexcept { return p; }
+inline void  operator delete(void*, void*)   noexcept {}
+inline void  operator delete[](void*, void*) noexcept {}
+#endif
+
+} // extern "C++"

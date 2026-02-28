@@ -1,0 +1,66 @@
+#pragma once
+// ===========================================================================
+// std/string.h - Simple owning string (interface only)
+//
+// Implementation in string.cpp. Usable as unordered_map key.
+// Not to be confused with <string.h> (the C header).
+// ===========================================================================
+
+#include <stddef.h>
+#include "allocator"
+#include "utility"
+#include "hash"
+
+extern "C++" {
+
+namespace std {
+
+class string {
+    char*  data_ = nullptr;
+    size_t len_  = 0;
+
+    void copy_from(const char* s, size_t n);
+
+public:
+    // --- Constructors / Destructor ---
+    string();
+    string(const char* s);
+    string(const char* s, size_t n);
+    string(const string& o);
+    string(string&& o) noexcept;
+    ~string();
+
+    // --- Assignment ---
+    string& operator=(const string& o);
+    string& operator=(string&& o) noexcept;
+    string& operator=(const char* s);
+
+    // --- Access ---
+    const char* c_str()  const;
+    const char* data()   const;
+    size_t      size()   const;
+    size_t      length() const;
+    bool        empty()  const;
+    char        operator[](size_t i) const;
+
+    // --- Comparison ---
+    bool operator==(const string& o) const;
+    bool operator!=(const string& o) const;
+    bool operator==(const char* s)   const;
+    bool operator!=(const char* s)   const;
+
+    // --- Swap ---
+    friend void swap(string& a, string& b) noexcept;
+};
+
+// --- hash<string> specialization ---
+template<>
+struct hash<string> {
+    size_t operator()(const string& s) const {
+        return detail::fnv1a(s.c_str(), s.size());
+    }
+};
+
+} // namespace std
+
+} // extern "C++"

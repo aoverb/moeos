@@ -1,0 +1,81 @@
+#pragma once
+// ===========================================================================
+// std/hash.h - Hash functions and key equality
+// ===========================================================================
+
+#include <stddef.h>
+#include "type_traits"
+
+extern "C++" {
+
+namespace std {
+
+namespace detail {
+
+inline size_t fnv1a(const void* data, size_t len) {
+    constexpr size_t FNV_OFFSET = (sizeof(size_t) == 8)
+        ? static_cast<size_t>(14695981039346656037ULL)
+        : static_cast<size_t>(2166136261U);
+    constexpr size_t FNV_PRIME = (sizeof(size_t) == 8)
+        ? static_cast<size_t>(1099511628211ULL)
+        : static_cast<size_t>(16777619U);
+
+    auto* bytes = static_cast<const unsigned char*>(data);
+    size_t h = FNV_OFFSET;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= bytes[i];
+        h *= FNV_PRIME;
+    }
+    return h;
+}
+
+inline size_t splitmix(size_t x) {
+    x ^= x >> 30; x *= static_cast<size_t>(0xbf58476d1ce4e5b9ULL);
+    x ^= x >> 27; x *= static_cast<size_t>(0x94d049bb133111ebULL);
+    x ^= x >> 31;
+    return x;
+}
+
+} // namespace detail
+
+// --- Primary template: byte-level hash (trivially-copyable fallback) ---
+template<class T, class Enable = void>
+struct hash {
+    size_t operator()(const T& val) const {
+        return detail::fnv1a(&val, sizeof(T));
+    }
+};
+
+// --- Integral types ---
+template<class T>
+struct hash<T, enable_if_t<is_integral<T>::value>> {
+    size_t operator()(T val) const {
+        return detail::splitmix(static_cast<size_t>(val));
+    }
+};
+
+// --- Pointer types ---
+template<class T>
+struct hash<T*, void> {
+    size_t operator()(T* p) const {
+        return detail::splitmix(reinterpret_cast<size_t>(p));
+    }
+};
+
+// --- Enum types ---
+template<class T>
+struct hash<T, enable_if_t<is_enum<T>::value && !is_integral<T>::value>> {
+    size_t operator()(T val) const {
+        return detail::splitmix(static_cast<size_t>(val));
+    }
+};
+
+// --- equal_to ---
+template<class T>
+struct equal_to {
+    bool operator()(const T& a, const T& b) const { return a == b; }
+};
+
+} // namespace std
+
+} // extern "C++"

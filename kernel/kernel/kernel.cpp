@@ -1,6 +1,8 @@
 /* kernel/kernel/kernel.cpp */
 #include <stddef.h>
 #include <stdint.h>
+#include <unordered_map>
+#include <string>
 // 引入上面定义的两个头文件
 #include <boot/multiboot.h>
 #include <stdio.h>
@@ -169,6 +171,18 @@ void save_module(multiboot_info_t* mbi, saved_module*& saved, uint32_t& mod_coun
     }
 }
 
+void test_unordered_map() {
+    std::unordered_map<int, int> m;
+    m[1] = 10; m[2] = 20;
+    printf("kernel: m[1]=%d m[2]=%d size=%zu\n", m[1], m[2], m.size());
+
+    std::unordered_map<std::string, int> s;
+    s[std::string("test")] = 42;
+    printf("kernel: s[\"test\"]=%d\n", s[std::string("test")]);
+
+    printf("test_unordered_map KERNEL MODE OK\n");
+}
+
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
@@ -201,11 +215,12 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("process initializing...");
     process_init();
     asm volatile ("sti");
+    printf("OK\n");
 
+    test_unordered_map();
     init_vfs();
     init_tarfs();
-
-    printf("OK\n");
+    
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
 

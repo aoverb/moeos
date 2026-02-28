@@ -6,11 +6,14 @@ LIBC_OBJS=\
 stdio/printf.o \
 stdio/putchar.o \
 stdio/puts.o \
-string/strlen.o \
-string/memcpy.o \
-string/memset.o \
-string/strcmp.o \
-string/strcpy.o \
+cstring/strlen.o \
+cstring/memcpy.o \
+cstring/memset.o \
+cstring/strcmp.o \
+cstring/strcpy.o \
+cstring/strcpy.o \
+string/string.o \
+string/allocator.o \
 stdio/setcolor.o \
 stdio/getline.o
 
@@ -19,7 +22,7 @@ SYSROOT?=
 CFLAGS?=-O0 -g
 CPPFLAGS?=
 
-CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
+CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra -fno-exceptions -fno-rtti
 CPPFLAGS:=$(CPPFLAGS) -D__is_libc --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
 LIBK_CFLAGS:=$(CFLAGS)
 LIBK_CPPFLAGS:=$(CPPFLAGS) -D__is_libk

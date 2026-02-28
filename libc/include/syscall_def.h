@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-enum SYSCALL {
+enum class SYSCALL {
     EXIT = 0,
     TERMINAL_WRITE = 1,
     TERMINAL_SET_TEXT_COLOR = 2,

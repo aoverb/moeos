@@ -1,0 +1,193 @@
+#pragma once
+// ===========================================================================
+// std/unordered_map.h - Freestanding unordered_map (interface)
+//
+// Template class → header-only. Declarations here, out-of-line definitions
+// in unordered_map_impl.h (auto-included at the bottom).
+// ===========================================================================
+
+#include <stddef.h>
+#include <string.h>     // memset
+#include "allocator"
+#include "type_traits"
+#include "utility"
+#include "hash"
+
+extern "C++" {
+
+namespace std {
+
+template<
+    class Key,
+    class Value,
+    class Hash  = hash<Key>,
+    class KeyEq = equal_to<Key>
+>
+class unordered_map {
+public:
+    using key_type    = Key;
+    using mapped_type = Value;
+    using value_type  = pair<const Key, Value>;
+    using size_type   = size_t;
+    using hasher      = Hash;
+    using key_equal   = KeyEq;
+
+private:
+    struct Node {
+        value_type kv;
+        Node*      next;
+        template<class... Args>
+        Node(Args&&... args) : kv(forward<Args>(args)...), next(nullptr) {}
+    };
+
+    Node**    buckets_    = nullptr;
+    size_type bucket_cnt_ = 0;
+    size_type size_       = 0;
+    float     max_load_   = 1.0f;
+    Hash      hasher_;
+    KeyEq     eq_;
+
+    static constexpr size_type INITIAL_BUCKETS = 16;
+
+    size_type bucket_index(const Key& k) const;
+    void      alloc_buckets(size_type n);
+    void      free_buckets();
+    void      rehash_internal(size_type new_count);
+    void      maybe_rehash();
+    Node*     find_node(const Key& k) const;
+
+    template<class... Args> Node* create_node(Args&&... args);
+    void destroy_node(Node* n);
+
+    template<class K, class V> Node* insert_default(K&& k, V&& v);
+
+public:
+    // =================================================================
+    // Iterator
+    // =================================================================
+    class iterator {
+        friend class unordered_map;
+        Node**    buckets_;
+        size_type bucket_cnt_;
+        size_type bucket_idx_;
+        Node*     node_;
+        void advance();
+    public:
+        iterator();
+        iterator(Node** b, size_type bc, size_type bi, Node* n);
+
+        value_type& operator*()  const;
+        value_type* operator->() const;
+        iterator&   operator++();
+        iterator    operator++(int);
+        bool operator==(const iterator& o) const;
+        bool operator!=(const iterator& o) const;
+    };
+
+    class const_iterator {
+        friend class unordered_map;
+        Node**    buckets_;
+        size_type bucket_cnt_;
+        size_type bucket_idx_;
+        Node*     node_;
+        void advance();
+    public:
+        const_iterator();
+        const_iterator(Node** b, size_type bc, size_type bi, Node* n);
+        const_iterator(const iterator& it);
+
+        const value_type& operator*()  const;
+        const value_type* operator->() const;
+        const_iterator&   operator++();
+        const_iterator    operator++(int);
+        bool operator==(const const_iterator& o) const;
+        bool operator!=(const const_iterator& o) const;
+    };
+
+    // =================================================================
+    // Lifecycle
+    // =================================================================
+    unordered_map();
+    explicit unordered_map(size_type bucket_hint,
+                           const Hash& h = Hash(),
+                           const KeyEq& eq = KeyEq());
+    unordered_map(const unordered_map& other);
+    unordered_map(unordered_map&& other) noexcept;
+    unordered_map& operator=(const unordered_map& other);
+    unordered_map& operator=(unordered_map&& other) noexcept;
+    ~unordered_map();
+
+    friend void swap(unordered_map& a, unordered_map& b) noexcept {
+        std::swap(a.buckets_,    b.buckets_);
+        std::swap(a.bucket_cnt_, b.bucket_cnt_);
+        std::swap(a.size_,       b.size_);
+        std::swap(a.max_load_,   b.max_load_);
+        std::swap(a.hasher_,     b.hasher_);
+        std::swap(a.eq_,         b.eq_);
+    }
+
+    // =================================================================
+    // Capacity
+    // =================================================================
+    bool      empty()        const noexcept;
+    size_type size()         const noexcept;
+    size_type bucket_count() const noexcept;
+
+    // =================================================================
+    // Iterators
+    // =================================================================
+    iterator       begin()  noexcept;
+    iterator       end()    noexcept;
+    const_iterator begin()  const noexcept;
+    const_iterator end()    const noexcept;
+    const_iterator cbegin() const noexcept;
+    const_iterator cend()   const noexcept;
+
+    // =================================================================
+    // Lookup
+    // =================================================================
+    iterator       find(const Key& k);
+    const_iterator find(const Key& k) const;
+    size_type      count(const Key& k) const;
+    bool           contains(const Key& k) const;
+
+    // =================================================================
+    // Element access
+    // =================================================================
+    Value&       operator[](const Key& k);
+    Value&       operator[](Key&& k);
+    Value&       at(const Key& k);
+    const Value& at(const Key& k) const;
+
+    // =================================================================
+    // Modifiers
+    // =================================================================
+    pair<iterator, bool> insert(const value_type& kv);
+    pair<iterator, bool> insert(value_type&& kv);
+
+    template<class... Args>
+    pair<iterator, bool> emplace(Args&&... args);
+
+    template<class M>
+    pair<iterator, bool> insert_or_assign(const Key& k, M&& val);
+
+    size_type erase(const Key& k);
+    iterator  erase(iterator it);
+    void      clear() noexcept;
+
+    // =================================================================
+    // Hash policy
+    // =================================================================
+    float load_factor()     const noexcept;
+    float max_load_factor() const noexcept;
+    void  max_load_factor(float ml);
+    void  rehash(size_type count);
+    void  reserve(size_type count);
+};
+
+} // namespace std
+
+// Template implementation (must be visible to every TU)
+#include "unordered_map_impl.h"
+
+} // extern "C++"
