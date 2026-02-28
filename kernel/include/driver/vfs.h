@@ -17,7 +17,7 @@ enum class FS_DRIVER {
 struct dirent {
     char name[256];
     uint32_t inode;
-    uint8_t type;
+    char type;
 };
 
 struct file_stat {

@@ -222,22 +222,22 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     asm volatile ("sti");
     printf("OK\n");
 
-    test_unordered_map();
+    // test_unordered_map();
     init_vfs();
     init_tarfs();
     
     printf("Welcome, aoverb!\n\n");
-    printf("The kernel_main lies in %X, sounds great!\n\n", &kernel_main);
+    printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);
 
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
         tarmeta.data = saved[i].data;
         tarmeta.size = saved[i].size;
-        int ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta); // 假设我这里准备好了一块tarfs_data传进去
+        int ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta);
         if (ret < 0) {
             panic("failed to mount root!");
         } else {
-            printf("root mounted!\n\n");
+            printf("Root mounted!\n\n");
         }
     }
 
@@ -250,6 +250,16 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     int size = v_read(cur_pcb, fd, buffer, 65536);
     printf("Executing shell: %d bytes loaded\n", size);
     create_user_process(buffer, size, 1);
+
+    int fd2 = v_opendir(cur_pcb, "/usr/bin");
+    if (fd2 == -1) {
+        panic("failed to open shell!");
+    }
+    dirent* my_dirent = (dirent*)kmalloc(sizeof(dirent));
+    while(v_readdir(cur_pcb, fd2, my_dirent) == 1) {
+        printf("%d %s %c\n", my_dirent->inode, my_dirent->name, my_dirent->type);
+    }
+    v_closedir(cur_pcb, fd2);
 
     while (1) {
         do_process_recycle();

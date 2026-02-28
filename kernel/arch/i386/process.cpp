@@ -39,7 +39,7 @@ void process_init() {
     cur_process_id = 0;
 }
 
-constexpr uint32_t CODE_SPACE_ADDR = 0x10000000;
+constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
 
 uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {

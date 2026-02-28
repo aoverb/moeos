@@ -9,9 +9,9 @@ AS = i686-elf-as
 
 # 关键编译参数
 # -ffreestanding: 裸机环境，无标准库
-CFLAGS:=-O0 -g -ffreestanding -Wall -Wextra --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
+CFLAGS:=-O2 -g -ffreestanding -Wall -Wextra --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
 CXXFLAGS:=$(CFLAGS) -fno-exceptions -fno-rtti # C++需要禁用异常和RTTI
-LDFLAGS:=-ffreestanding -O0 -nostdlib
+LDFLAGS:=-ffreestanding -O2 -nostdlib
 
 # 2. 引入架构特有的零件清单
 # 这会导入变量 $(KERNEL_ARCH_OBJS)

@@ -3,6 +3,7 @@
 #include <kernel/mm.h>
 #include <kernel/mm.h>
 #include <string.h>
+#include <stdio.h>
 
 fs_operation* fs_operations[MAX_DRIVER_NUM];
 
@@ -177,7 +178,8 @@ int v_readdir(PCB* proc, int fd, dirent* out) {
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
-    return mp->operations->readdir(mp, proc->fd[fd].handle_id, out);
+    int ret = mp->operations->readdir(mp, proc->fd[fd].handle_id, out);
+    return ret;
 }
 
 int v_closedir(PCB* proc, int fd) {

@@ -19,7 +19,7 @@ stdio/getline.o
 
 SYSROOT?=
 
-CFLAGS?=-O0 -g
+CFLAGS?=-O2 -g
 CPPFLAGS?=
 
 CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra -fno-exceptions -fno-rtti
