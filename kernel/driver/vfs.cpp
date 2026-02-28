@@ -3,6 +3,7 @@
 #include <kernel/mm.h>
 #include <kernel/mm.h>
 #include <string.h>
+#include <format.h>
 #include <stdio.h>
 
 fs_operation* fs_operations[MAX_DRIVER_NUM];
@@ -193,4 +194,66 @@ int v_stat(const char* path, file_stat* out) {
     mounting_point* mp = get_mounting_point(path);
     if (!mp) return -1;
     return mp->operations->stat(mp, get_mounting_relative_path(mp, path), out);
+}
+
+void resolve_path(const char* cwd, const char* input, char* output) {
+    char tmp[MAX_PATH_LEN];
+
+    // 1. 拼接：相对路径拼上 cwd，绝对路径直接用
+    if (input[0] == '/') {
+        strcpy(tmp, input);
+    } else {
+        uint32_t cwd_len = strlen(cwd);
+        strcpy(tmp, cwd);
+        if (cwd_len > 1 || cwd[0] != '/') {
+            // cwd 末尾没有 / 就补一个
+            if (tmp[cwd_len - 1] != '/') {
+                tmp[cwd_len] = '/';
+                tmp[cwd_len + 1] = '\0';
+            }
+        }
+        strcat(tmp, input);
+    }
+
+    // 2. 按 '/' 分割，逐段处理 "." 和 ".."
+    char* components[MAX_PATH_LEN / 2];
+    int depth = 0;
+
+    char* token = tmp;
+    while (*token) {
+        // 跳过连续的 /
+        while (*token == '/') token++;
+        if (*token == '\0') break;
+
+        // 找到这一段的结尾
+        char* end = token;
+        while (*end && *end != '/') end++;
+
+        // 临时截断
+        char saved = *end;
+        *end = '\0';
+
+        if (strcmp(token, ".") == 0) {
+            // 当前目录，跳过
+        } else if (strcmp(token, "..") == 0) {
+            // 上级目录，弹出一层
+            if (depth > 0) depth--;
+        } else {
+            components[depth++] = token;
+        }
+
+        *end = saved;
+        token = end;
+    }
+
+    if (depth == 0) {
+        strcpy(output, "/");
+        return;
+    }
+
+    output[0] = '\0';
+    for (int i = 0; i < depth; i++) {
+        strcat(output, "/");
+        strcat(output, components[i]);
+    }
 }

@@ -61,6 +61,8 @@ int v_readdir(PCB* proc, int fd, dirent* out);
 int v_closedir(PCB* proc, int fd);
 int v_stat(const char* path, file_stat* out);
 
+void resolve_path(const char* cwd, const char* input, char* output);
+
 #ifdef __cplusplus
 }
 #endif

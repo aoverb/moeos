@@ -190,7 +190,6 @@ void free_pcb(PCB*& process) {
 }
 
 uint32_t exit_process(uint8_t pid) {
-    printf("exiting: %d\n", pid);
     if (pid == 0 || process_list[pid] == nullptr) return 1;
     PCB*& cur_process = process_list[pid];
     if (pid != cur_process_id) {

@@ -33,8 +33,16 @@ int readdir(int fd, dirent* out) {
     return syscall2((uint32_t)SYSCALL::READDIR, (uint32_t)fd, (uint32_t)out);
 }
 
+int getcwd(char* buf, uint32_t size) {
+    return syscall2((uint32_t)SYSCALL::GETCWD, (uint32_t)buf, (uint32_t)size);
+}
+
 int closedir(int fd) {
     return syscall1((uint32_t)SYSCALL::CLOSEDIR, (uint32_t)fd);
+}
+
+int chdir(const char* path) {
+    return syscall1((uint32_t)SYSCALL::CHDIR, (uint32_t)path);
 }
 
 uint32_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {

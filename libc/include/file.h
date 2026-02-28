@@ -29,6 +29,8 @@ typedef struct {
 int opendir(const char* path);
 int readdir(int fd, dirent* out);
 int closedir(int fd);
+int chdir(const char* path);
+int getcwd(char* buf, uint32_t size);
 
 #ifdef __cplusplus
 }

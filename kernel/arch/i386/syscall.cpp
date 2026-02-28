@@ -33,6 +33,13 @@ static PCB* current_pcb() {
     return process_list[cur_process_id];
 }
 
+// STAT(ebx = path, ecx = &file_stat)
+int sys_stat(interrupt_frame* reg) {
+    const char* path = reinterpret_cast<const char*>(reg->ebx);
+    file_stat*  out  = reinterpret_cast<file_stat*>(reg->ecx);
+    return v_stat(path, out);
+}
+
 // MOUNT(ebx = driver_id, ecx = mount_path, edx = device_data)
 int sys_mount(interrupt_frame* reg) {
     FS_DRIVER driver  = static_cast<FS_DRIVER>(reg->ebx);
@@ -95,6 +102,35 @@ int sys_closedir(interrupt_frame* reg) {
     return v_closedir(current_pcb(), fd);
 }
 
+// SYS_CHDIR(ebx = path)  → 0 on success, -1 on end/error
+int sys_chdir(interrupt_frame* reg) {
+    const char* path = reinterpret_cast<const char*>(reg->ebx);
+    PCB* cur_pcb = process_list[cur_process_id];
+    
+    char resolved[MAX_PATH_LEN];
+    resolve_path(cur_pcb->cwd, path, resolved);
+    
+    file_stat st;
+    if (v_stat(resolved, &st) != 0) return -1;
+    if (st.type != 0) return -1;
+    
+    strcpy(cur_pcb->cwd, resolved);
+    return 0;
+}
+
+// GETCWD(ebx = buf, ecx = size) → returns 0 on success, -1 on failure
+int sys_getcwd(interrupt_frame* reg) {
+    char* buf       = reinterpret_cast<char*>(reg->ebx);
+    uint32_t size   = static_cast<uint32_t>(reg->ecx);
+    PCB* proc = current_pcb();
+
+    uint32_t len = strlen(proc->cwd) + 1;
+    if (len > size) return -1;
+
+    strcpy(buf, proc->cwd);
+    return 0;
+}
+
 // EXEC(ebx = code, ecx = code_size, edx = priority, esi = argc, ebp = argv)
 int sys_exec(interrupt_frame* reg) {
     void*    code      = reinterpret_cast<void*>(reg->ebx);
@@ -110,6 +146,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);
+    register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
     register_syscall(uint32_t(SYSCALL::UNMOUNT),  sys_unmount);
     register_syscall(uint32_t(SYSCALL::OPEN),     sys_open);
@@ -119,6 +156,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::OPENDIR),  sys_opendir);
     register_syscall(uint32_t(SYSCALL::READDIR),  sys_readdir);
     register_syscall(uint32_t(SYSCALL::CLOSEDIR), sys_closedir);
+    register_syscall(uint32_t(SYSCALL::CHDIR),    sys_chdir);
+    register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
 }
 

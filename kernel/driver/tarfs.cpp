@@ -335,7 +335,14 @@ int closedir(mounting_point* mp, uint32_t handle_id) {
 }
 
 int stat(mounting_point* mp, const char* path, file_stat* out) {
-    return -1;
+    tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
+    tar_inode* inode = get_inode_by_path(data, path);
+    if (inode == nullptr || inode->block == nullptr) return -1;
+
+    out->size = parse_octal(inode->block->size, 12);
+    out->type = inode->block->type;
+    out->mode = parse_octal(inode->block->filemode, 8);
+    return 0;
 }
 
 void init_tarfs() {

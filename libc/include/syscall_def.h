@@ -11,6 +11,7 @@ enum class SYSCALL {
     TERMINAL_WRITE = 1,
     TERMINAL_SET_TEXT_COLOR = 2,
     TERMINAL_GET_LINE = 3,
+    STAT = 99,
     MOUNT = 100,
     UNMOUNT = 101,
     OPEN = 102,
@@ -20,6 +21,8 @@ enum class SYSCALL {
     OPENDIR = 106,
     READDIR = 107,
     CLOSEDIR = 108,
+    CHDIR = 109,
+    GETCWD = 110,
     EXEC = 200
 };
 
