@@ -340,7 +340,7 @@ int stat(mounting_point* mp, const char* path, file_stat* out) {
     if (inode == nullptr || inode->block == nullptr) return -1;
 
     out->size = parse_octal(inode->block->size, 12);
-    out->type = inode->block->type;
+    out->type = inode->block->type == TYPE_DIR ? 0 : 1;
     out->mode = parse_octal(inode->block->filemode, 8);
     return 0;
 }

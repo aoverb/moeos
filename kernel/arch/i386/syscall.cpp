@@ -109,7 +109,6 @@ int sys_chdir(interrupt_frame* reg) {
     
     char resolved[MAX_PATH_LEN];
     resolve_path(cur_pcb->cwd, path, resolved);
-    
     file_stat st;
     if (v_stat(resolved, &st) != 0) return -1;
     if (st.type != 0) return -1;
