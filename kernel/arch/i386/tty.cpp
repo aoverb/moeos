@@ -106,6 +106,7 @@ void terminal_write(const char* data, size_t size) {
     for (size_t i = 0; i < size; i++) {
         if (data[i] == '\b') {
             if (terminal_col == 0 && terminal_row == 0) {
+                spinlock_release(&tty_lock);
                 return;
             }
             if (terminal_col == 0) {
@@ -123,6 +124,19 @@ void terminal_write(const char* data, size_t size) {
         if (data[i] == '\n') {
             ++terminal_row;
             terminal_col = 0;
+            if (terminal_row >= terminal_rows)
+                terminal_scroll();
+            continue;
+        }
+        if (data[i] == '\t') {
+            uint32_t spaces = 8 - (terminal_col % 8);
+            terminal_col += spaces;
+            if (terminal_col >= terminal_cols) {
+                terminal_col = 0;
+                ++terminal_row;
+            }
+            if (terminal_row >= terminal_rows)
+                terminal_scroll();
             continue;
         }
         if (terminal_col >= terminal_cols) {

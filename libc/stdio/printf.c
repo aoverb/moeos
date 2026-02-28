@@ -62,10 +62,35 @@ int printf(const char* restrict format, ...) {
             continue;
         }
         ++p;
+
+        bool left_align = false;
+        if (*p == '-') {
+            left_align = true;
+            ++p;
+        }
+
+        int width = 0;
+        while (*p >= '0' && *p <= '9') {
+            width = width * 10 + (*p - '0');
+            ++p;
+        }
+
         switch (*p) {
             case 'd': {
                 int num = va_arg(args, int);
                 print_int(num);
+                break;
+            }
+            case 's': {
+                char* s = va_arg(args, char*);
+                size_t len = strlen(s);
+                if (left_align) {
+                    print(s, len);
+                    for (size_t i = len; i < (size_t)width; i++) putchar(' ');
+                } else {
+                    for (size_t i = len; i < (size_t)width; i++) putchar(' ');
+                    print(s, len);
+                }
                 break;
             }
             case 'x': {
@@ -80,11 +105,6 @@ int printf(const char* restrict format, ...) {
                 putchar('x');
                 uint32_t num = va_arg(args, uint32_t);
                 print_int_hex(num, false);
-                break;
-            }
-            case 's': {
-                char* s = va_arg(args, char*);
-                print(s, strlen(s));
                 break;
             }
             case 'c': {
