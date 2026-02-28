@@ -177,8 +177,13 @@ void test_unordered_map() {
     printf("kernel: m[1]=%d m[2]=%d size=%zu\n", m[1], m[2], m.size());
 
     std::unordered_map<std::string, int> s;
-    s[std::string("test")] = 42;
-    printf("kernel: s[\"test\"]=%d\n", s[std::string("test")]);
+    char ss[9];
+    ss[0] = 'i';
+    ss[1] = 'l';
+    ss[2] = 'y';
+    ss[3] = '\0';
+    s[ss] = 42;
+    printf("kernel: s[\"test\"]=%d\n", s["ily"]);
 
     printf("test_unordered_map KERNEL MODE OK\n");
 }
@@ -233,11 +238,18 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
             panic("failed to mount root!");
         } else {
             printf("root mounted!\n\n");
-            while(1) asm volatile ("hlt");
         }
     }
 
-    kfree(saved);
+    PCB* cur_pcb = process_list[cur_process_id];
+    int fd = v_open(cur_pcb, "/usr/bin/shell.bin", 1);
+    if (fd == -1) {
+        panic("failed to open shell!");
+    }
+    char* buffer = (char*)kmalloc(65536);
+    int size = v_read(cur_pcb, fd, buffer, 65536);
+    printf("Executing shell: %d bytes loaded\n", size);
+    create_user_process(buffer, size, 1);
 
     while (1) {
         do_process_recycle();

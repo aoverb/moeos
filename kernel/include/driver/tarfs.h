@@ -18,10 +18,11 @@ extern "C" {
 
 void init_tarfs();
 struct file_handle {
-    uint32_t file_no;
+    uint32_t inode_no;
     uint32_t offset;
     uint32_t mode;
     uint8_t type;
+    uint8_t valid;
 };
 
 constexpr uint32_t READ = 1;

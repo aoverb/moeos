@@ -20,7 +20,7 @@ enum class process_state {
 
 struct file_description {
     mounting_point* mp;
-    char* path;
+    char path[256];
     uint32_t handle_id; // 用于在mp对应的挂载点上找到对应的文件交互上下文，不用传PATH
 };
 

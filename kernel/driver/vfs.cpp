@@ -127,7 +127,8 @@ int v_open(PCB* proc, const char* path, uint8_t mode) {
     strcpy(fd.path, path);
     fd.handle_id = handle_id;
     fd.mp = mp;
-    return proc->fd_num - 1;
+    proc->fd_num++;
+    return fd_id;
 }
 
 int v_read(PCB* proc, int fd, char* buffer, uint32_t size) {

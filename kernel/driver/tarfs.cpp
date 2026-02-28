@@ -40,7 +40,8 @@ uint32_t parse_octal(const char* s, int len) {
 
 tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
     tar_inode* cur_node = tdata->inodes[0];
-    char s[256];
+    char fix_s[256];
+    char* s = fix_s;
 
     uint32_t i = 0;
     uint32_t prev_inode_id = 0;
@@ -55,7 +56,6 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
         }
         s[s_len] = '\0';
         if (s[0] == '\0') break;
-
         if (cur_node->child_inodes.find(s) == cur_node->child_inodes.end()) {
             uint32_t new_id = tdata->inode_cnt++;
             if (tdata->inode_cnt > MAX_INODE_NUM) {
@@ -71,6 +71,35 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
             tdata->inodes[new_id] = new_node;
         }
         prev_inode_id = cur_node->child_inodes[s];
+        cur_node = tdata->inodes[cur_node->child_inodes[s]];
+    }
+    return cur_node;
+}
+
+tar_inode* get_inode_by_path(tarfs_data* tdata, const char* path) {
+    tar_inode* cur_node = tdata->inodes[0];
+    char fix_s[256];
+    char* s = fix_s;
+
+    uint32_t i = 0;
+    while (i < 155 && path[i] != '\0') {
+        if (path[i] == '/') { ++i; continue; }
+
+        uint32_t s_len = 0;
+        while(i < 155 && path[i] != '/' && path[i] != '\0' && s_len < 255) {
+            s[s_len] = path[i];
+            ++i;
+            ++s_len;
+        }
+        s[s_len] = '\0';
+        if (s[0] == '\0') break;
+
+        printf("locating %s...", s);
+        if (cur_node->child_inodes.find(s) == cur_node->child_inodes.end()) {
+            printf("not found\n");
+            return nullptr;
+        }
+        printf("found\n");
         cur_node = tdata->inodes[cur_node->child_inodes[s]];
     }
     return cur_node;
@@ -102,7 +131,24 @@ int construct_index(tarfs_data* tdata) {
              // todo: cleaning
             return -1;
         }
+        if (cur_block->name_prefix[0] == '\0') {
+            char path[100];
+            strcpy(cur_block->name_prefix, cur_block->name);
+            int len = strlen(cur_block->name);
+            if (cur_block->name[len - 1] == '/') --len;
+            while(--len >= 0 && cur_block->name_prefix[len] != '/') cur_block->name_prefix[len] = '\0';
+            if (len >= 0) cur_block->name_prefix[len] = '\0';
+            int idx = 0;
+            int len_prefix = strlen(cur_block->name_prefix);
+            while (cur_block->name[idx] != '\0') {
+                cur_block->name[idx] = cur_block->name[idx + len_prefix + 1];
+                ++idx;
+            }
+            cur_block->name[idx] = '\0';
+        }
+        printf("path: %s, name: %s\n", cur_block->name_prefix, cur_block->name);
         tar_inode* dir = construct_inode_by_path(tdata, cur_block->name_prefix);
+        
         if (dir == nullptr) {
             // todo: cleaning
             return -1;
@@ -118,10 +164,8 @@ int construct_index(tarfs_data* tdata) {
         }
         tdata->inodes[dir->child_inodes[cur_block->name]]->block = cur_block;
 
-        if (cur_block->type == TYPE_DIR) {
-            tdata->inodes[dir->child_inodes[cur_block->name]]->child_inodes["."] = dir->child_inodes[cur_block->name];
-            tdata->inodes[dir->child_inodes[cur_block->name]]->child_inodes[".."] = dir->child_inodes["."];
-        }
+        tdata->inodes[dir->child_inodes[cur_block->name]]->child_inodes["."] = dir->child_inodes[cur_block->name];
+        tdata->inodes[dir->child_inodes[cur_block->name]]->child_inodes[".."] = dir->child_inodes["."];
 
         printf("inode[%d]->%s/%s\n", dir->child_inodes[cur_block->name], cur_block->name_prefix,
             cur_block->name);
@@ -154,26 +198,95 @@ int unmount(mounting_point*) {
 }
 
 int open(mounting_point* mp, const char* path, uint8_t mode) {
+    tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
+    tar_inode* file_inode = get_inode_by_path(data, path);
+    if (file_inode == nullptr) return -1;
+    for (int i = 0; i < MAX_HANDLE_NUM; ++i) {
+        if (data->file_handles[i].valid == 0) {
+            file_handle& handle = data->file_handles[i];
+            handle.inode_no = file_inode->child_inodes["."];
+            handle.offset = 0;
+            handle.type = file_inode->block->type;
+            handle.mode = mode;
+            handle.valid = 1;
+            return i;
+        }
+    }
     return -1;
 }
 
 int close(mounting_point* mp, uint32_t handle_id) {
-    return -1;
+    tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
+    if (data->file_handles[handle_id].valid == 0) {
+        return -1;
+    }
+    data->file_handles[handle_id].valid = 0;
+    return 0;
+}
+
+static void print_field(const char* label, const char* field, int max_len) {
+    char buf[256];
+    memcpy(buf, field, max_len);
+    buf[max_len] = '\0';
+    printf("%s %s\n", label, buf);
+}
+
+void tar_dump_block(tar_block* block) {
+    if (!block) {
+        printf("tar_block: NULL\n");
+        return;
+    }
+
+    printf("=== tar_block ===\n");
+    print_field("name:         ", block->name,           100);
+    print_field("filemode:     ", block->filemode,         8);
+    print_field("owner_id:     ", block->owner_id,         8);
+    print_field("group_id:     ", block->group_id,         8);
+    print_field("size:         ", block->size,            12);
+    print_field("last_modified:", block->last_modified,   12);
+    print_field("checksum:     ", block->checksum,         8);
+    printf(     "type:          %c (%d)\n", block->type, block->type);
+    print_field("name_of_link: ", block->name_of_link,   100);
+    print_field("ustar:        ", block->ustar_indicator,  6);
+    print_field("ustar_ver:    ", block->ustar_ver,        2);
+    print_field("owner_name:   ", block->owner_name,      32);
+    print_field("group_name:   ", block->group_name,      32);
+    print_field("dev_major_no: ", block->dev_major_no,     8);
+    print_field("dev_minor_no: ", block->dev_minor_no,     8);
+    print_field("name_prefix:  ", block->name_prefix,    155);
+    printf("=================\n");
 }
 
 int tar_read(tarfs_data* data, uint32_t handle_id, char* buffer, uint32_t size) {
-    return -1;
+    if (!data->file_handles[handle_id].valid) {
+        return -1;
+    }
+    uint32_t offset = data->file_handles[handle_id].offset;
+    tar_inode* file_inode = data->inodes[data->file_handles[handle_id].inode_no];
+    tar_dump_block(file_inode->block);
+    uint32_t file_size = parse_octal(file_inode->block->size, 12);
+    if (offset >= file_size) {
+        return 0;  // EOF
+    }
+    if (offset + size > file_size) {
+        size = file_size - offset;
+    }
+    memcpy(buffer, (char*)file_inode->block + 512 + offset, size);
+    data->file_handles[handle_id].offset += size;
+    return size;
 }
 
 int read(mounting_point* mp, uint32_t handle_id, char* buffer, uint32_t size) {
+    if (handle_id >= MAX_HANDLE_NUM) return -1;
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
-    if (!(data->file_handles[handle_id].mode & READ)) {
+    if ((data->file_handles[handle_id].mode & READ) == 0 || data->file_handles[handle_id].type == TYPE_DIR) {
         return -1;
     }
     return tar_read(data, handle_id, buffer, size);
 }
 
 int write(mounting_point* mp, uint32_t handle_id, const char* buffer, uint32_t size) {
+    // read-only filesystem
     return -1;
 }
 
@@ -195,6 +308,7 @@ int stat(mounting_point* mp, const char* path, file_stat* out) {
 
 void init_tarfs() {
     tar_fs_operation.mount = &mount;
+    tar_fs_operation.open = &open;
     tar_fs_operation.read = &read;
     register_fs_operation(FS_DRIVER::TARFS, &tar_fs_operation);
 }
