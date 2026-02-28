@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <format.h>
 #include <syscall_def.h>
 #include <file.h>
 
@@ -24,6 +25,7 @@ void print_lolios() {
 }
 
 void main() {
+    char buffer[32768];
     char input[256];
     printf("Shell is running in user addr: %x\n", &main);
     while (1) {
@@ -49,8 +51,22 @@ void main() {
         } else if (strcmp(input, "test") == 0) {
             asm volatile ("hlt");
         } else {
-            print_rumia_text();
-            printf(": Unknown command '%s'!\n", input);
+            bool flag = false;
+            char fn[256] = "/usr/bin/";
+            for (int i = 0; i < 2; ++i) {
+                int fd = open(strcat(fn, input), 1);
+                if (fd == -1) continue;
+                int size = read(fd, buffer, 32768);
+                printf("Executing %s: %d bytes loaded\n", fn, size);
+                exec(buffer, size, 1);
+                flag = true;
+            }
+            
+            if (!flag) {
+                print_rumia_text();
+                printf(": Unknown command '%s'!\n", input);
+            }
+
         }
         
         printf("\n");

@@ -58,6 +58,10 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
 
     uint32_t pd_addr_old = vmm_get_cr3();
     uint32_t pd_addr = vmm_create_page_directory();
+
+    void* code_buf = kmalloc(code_size);
+    memcpy(code_buf, code, code_size);
+
     asm volatile ("cli");
     vmm_switch(pd_addr);
     uint32_t pages_needed = (code_size + 4095) / 4096;
@@ -65,10 +69,13 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
         void* phys = pmm_alloc(1);
         vmm_map_page((uintptr_t)phys, CODE_SPACE_ADDR + i * 4096, 6);
     }
-    memcpy((void*)CODE_SPACE_ADDR, code, code_size);
+    memcpy((void*)CODE_SPACE_ADDR, code_buf, code_size);
+    kfree(code_buf);
 
-    void* stack_space = pmm_alloc(1);
-    vmm_map_page(reinterpret_cast<uintptr_t>(stack_space), CODE_STACK_TOP_ADDR, 6);
+    for (uint32_t i = 0; i < 16; i++) {
+        void* stack_space = pmm_alloc(1);
+        vmm_map_page((uintptr_t)stack_space, CODE_STACK_TOP_ADDR - (16 - i) * 4096, 6);
+    }
 
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
@@ -78,7 +85,7 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority) {
     
     // 内核栈
     *((uintptr_t*)(new_process->esp - 4)) = 0x23; // SS
-    *((uintptr_t*)(new_process->esp - 8)) = CODE_STACK_TOP_ADDR + 4096; // ESP
+    *((uintptr_t*)(new_process->esp - 8)) = CODE_STACK_TOP_ADDR; // ESP
     *((uintptr_t*)(new_process->esp - 12)) = 0x202; // EFLAG
     *((uintptr_t*)(new_process->esp - 16)) = 0x1B; // CS
     *((uintptr_t*)(new_process->esp - 20)) = CODE_SPACE_ADDR; // EIP

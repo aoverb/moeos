@@ -251,17 +251,6 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Executing shell: %d bytes loaded\n", size);
     create_user_process(buffer, size, 1);
 
-    int fd2 = v_opendir(cur_pcb, "/usr/bin");
-    if (fd2 == -1) {
-        panic("failed to open shell!");
-    }
-    dirent* my_dirent = (dirent*)kmalloc(sizeof(dirent));
-    printf("\n");
-    while(v_readdir(cur_pcb, fd2, my_dirent) == 1) {
-        printf("%-4d %-12s %c\n", my_dirent->inode, my_dirent->name, my_dirent->type);
-    }
-    v_closedir(cur_pcb, fd2);
-
     while (1) {
         do_process_recycle();
         yield();
