@@ -206,7 +206,6 @@ void resolve_path(const char* cwd, const char* input, char* output) {
         uint32_t cwd_len = strlen(cwd);
         strcpy(tmp, cwd);
         if (cwd_len > 1 || cwd[0] != '/') {
-            // cwd 末尾没有 / 就补一个
             if (tmp[cwd_len - 1] != '/') {
                 tmp[cwd_len] = '/';
                 tmp[cwd_len + 1] = '\0';
@@ -221,29 +220,26 @@ void resolve_path(const char* cwd, const char* input, char* output) {
 
     char* token = tmp;
     while (*token) {
-        // 跳过连续的 /
         while (*token == '/') token++;
         if (*token == '\0') break;
 
-        // 找到这一段的结尾
         char* end = token;
         while (*end && *end != '/') end++;
 
-        // 临时截断
         char saved = *end;
         *end = '\0';
 
         if (strcmp(token, ".") == 0) {
             // 当前目录，跳过
         } else if (strcmp(token, "..") == 0) {
-            // 上级目录，弹出一层
             if (depth > 0) depth--;
         } else {
             components[depth++] = token;
         }
 
-        *end = saved;
-        token = end;
+        // 不恢复截断，让每个 component 保持独立的 '\0' 结尾
+        // 根据原字符决定如何推进 token
+        token = saved ? end + 1 : end;
     }
 
     if (depth == 0) {

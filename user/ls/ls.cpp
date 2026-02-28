@@ -9,8 +9,8 @@ int main(int argc, char** argv) {
     }
     int fd = opendir(path);
     bool showall = false;
-    if (argc > 0) {
-        if (strcmp(argv[0], "-a") == 0) {
+    if (argc > 1) {
+        if (strcmp(argv[1], "-a") == 0) {
             showall = true;
         }
     }
