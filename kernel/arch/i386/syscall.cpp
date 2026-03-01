@@ -163,8 +163,9 @@ int sys_sbrk(interrupt_frame* reg) {
         uintptr_t new_page = (new_break + 0xFFF) & ~0xFFF; // 按页对齐
         for (uintptr_t addr = old_page; addr < new_page; addr += 0x1000) {
             if (vmm_get_mapping(addr) == 0) {
-                uintptr_t phys = reinterpret_cast<uintptr_t>(pmm_alloc(1));
+                uintptr_t phys = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
                 vmm_map_page(phys, addr, 0x7); // Present | RW | User
+                memset((void*)addr, 0, 0x1000);
             }
         }
     }

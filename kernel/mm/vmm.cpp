@@ -75,7 +75,7 @@ void vmm_init() {
 
 uintptr_t vmm_create_page_directory() {
     constexpr uint32_t TEMP_PD_ADDR = 0xCF000000;
-    uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1));
+    uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
 
     vmm_map_page(p_addr, TEMP_PD_ADDR, 3);
 

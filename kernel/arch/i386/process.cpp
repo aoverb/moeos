@@ -77,6 +77,18 @@ void process_init() {
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
+// ============ 临时方案：.bss 处理（解析 ELF 后可删除） ============
+constexpr uint32_t BSS_EXTRA_PAGES = 4; // 额外给 .bss 的页数
+
+static uint32_t calc_total_pages(uint32_t code_size) {
+    return (code_size + 4095) / 4096 + BSS_EXTRA_PAGES;
+}
+
+static void load_code_and_clear_bss(uintptr_t dest, void* code_buf, uint32_t code_size, uint32_t total_pages) {
+    memcpy((void*)dest, code_buf, code_size);
+    memset((void*)(dest + code_size), 0, total_pages * 4096 - code_size);
+}
+// ============ 临时方案结束 ============
 
 pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
@@ -108,12 +120,14 @@ pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int 
 
     asm volatile ("cli");
     vmm_switch(pd_addr);
-    uint32_t pages_needed = (code_size + 4095) / 4096;
-    for (uint32_t i = 0; i < pages_needed; i++) {
+
+    // ---- 映射代码 + .bss ----
+    uint32_t total_pages = calc_total_pages(code_size);
+    for (uint32_t i = 0; i < total_pages; i++) {
         void* phys = pmm_alloc(1);
         vmm_map_page((uintptr_t)phys, CODE_SPACE_ADDR + i * 4096, 6);
     }
-    memcpy((void*)CODE_SPACE_ADDR, code_buf, code_size);
+    load_code_and_clear_bss(CODE_SPACE_ADDR, code_buf, code_size, total_pages);
     kfree(code_buf);
 
     for (uint32_t i = 0; i < 16; i++) {
@@ -175,8 +189,11 @@ pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int 
     new_process->pid = newpid;
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
-    new_process->heap_start = (CODE_SPACE_ADDR + code_size + 0xFFF) & ~0xFFF; // 页对齐
-    new_process->heap_break = new_process->heap_start; // 一开始堆空间大小是0
+
+    // heap_start 也要考虑 .bss 额外页
+    new_process->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
+    new_process->heap_break = new_process->heap_start;
+
     new_process->state = process_state::READY;
     new_process->parent_pid = cur_process_id;
     new_process->waiting_queue = nullptr;

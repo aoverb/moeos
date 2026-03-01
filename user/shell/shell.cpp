@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <format.h>
-#include <syscall_def.h>
 #include <file.h>
 
 #include <sys/wait.h>
@@ -64,23 +64,33 @@ void print_lolios() {
 }
 
 bool try_exec(const char* cmd, int argc, char* argv[]) {
-    char buffer[BUFFER_SIZE];
     char fn[MAX_PATH];
+    file_stat fst;
 
     for (int i = 0; i < 2; ++i) {
         snprintf(fn, sizeof(fn), "%s%s", PATH[i], cmd);
 
+        if (stat(fn, &fst) == -1) continue;
+
         int fd = open(fn, 1);
-        if (fd == -1) {
+        if (fd == -1) continue;
+
+        char* buffer = (char*)malloc(fst.size);
+        if (!buffer) {
+            close(fd);
             continue;
         }
 
-        int size = read(fd, buffer, BUFFER_SIZE);
-        if (fd == -1) {
+        int size = read(fd, buffer, fst.size);
+        close(fd);
+
+        if (size <= 0) {
+            free(buffer);
             continue;
         }
-        
+
         int child_pid = exec(buffer, size, 1, argc, argv);
+        free(buffer);
         int ret = waitpid(child_pid);
         return true;
     }

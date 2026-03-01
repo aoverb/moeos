@@ -17,7 +17,8 @@ string/allocator.o \
 file/file.o \
 sys/wait.o \
 stdio/setcolor.o \
-stdio/getline.o
+stdio/getline.o \
+stdlib/malloc.o
 
 SYSROOT?=
 
