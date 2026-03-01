@@ -61,7 +61,6 @@ void schedule() {
         cur_pcb->state = process_state::READY;
         if (--(cur_pcb->quota) == 0) {
             if (cur_pcb->priority > 0) {
-                remove_from_scheduling_queue(cur_process_id);
                 insert_into_scheduling_queue(cur_process_id, cur_pcb->priority - 1);
             }
             cur_pcb->quota = MAP_PRIORITY_TO_QUOTA[cur_pcb->priority];

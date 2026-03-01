@@ -40,10 +40,10 @@ int waitpid(pid_t child) {
     PCB* child_pcb = process_list[child];
     // 父进程设置为等待态，从调度队列中移除
     process_list[cur_process_id]->state = process_state::WAITING;
-    remove_from_scheduling_queue(cur_process_id);
     // 放入新进程的等待序列
     insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
     while(child_pcb->state != process_state::ZOMBIE) {
+        process_list[cur_process_id]->state = process_state::WAITING;
         yield();
     }
     free_pcb(process_list[child]);
@@ -232,12 +232,10 @@ uint32_t exit_process(pid_t pid) {
     PCB* itr;
     while (itr = exiting_process->waiting_queue) {
         itr->state = process_state::READY;
-        exiting_process->state = process_state::ZOMBIE;
         remove_from_process_queue(exiting_process->waiting_queue, itr->pid);
         insert_into_scheduling_queue(itr->pid);
     }
-    remove_from_scheduling_queue(pid);
-    // insert_into_process_recycle_queue(cur_process); 不需要了
+    exiting_process->state = process_state::ZOMBIE;
     yield();
     // 不应该执行到这里
     return 0;
