@@ -38,14 +38,18 @@ int waitpid(pid_t child) {
         return -1;
     }
     PCB* child_pcb = process_list[child];
-    // 父进程设置为等待态，从调度队列中移除
-    process_list[cur_process_id]->state = process_state::WAITING;
-    // 放入新进程的等待序列
-    insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
-    while(child_pcb->state != process_state::ZOMBIE) {
-        process_list[cur_process_id]->state = process_state::WAITING;
-        yield();
+
+    asm volatile("cli");
+    if (child_pcb->state == process_state::ZOMBIE) {
+        // 子进程已经退出了，直接回收
+        asm volatile("sti");
+        free_pcb(process_list[child]);
+        return 0;
     }
+    process_list[cur_process_id]->state = process_state::WAITING;
+    insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
+    yield();
+
     free_pcb(process_list[child]);
     return 0;
 }

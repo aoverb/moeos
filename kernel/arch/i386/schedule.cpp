@@ -42,6 +42,7 @@ void move_all_to_top_priority() {
     }
     PCB* head = sche_queue_head[MAX_PRIORITY];
     PCB* tail = head;
+    if (!tail) return;
     do {
         tail->priority = MAX_PRIORITY;
         tail->quota = MAP_PRIORITY_TO_QUOTA[MAX_PRIORITY];
@@ -78,8 +79,14 @@ void schedule() {
             break;
         }
     }
-    if (!chosen_process) {
-        chosen_process = process_list[0];
+    while (!chosen_process) { // 不设置保底进程，等待有就绪进程入队
+        asm volatile("sti; hlt; cli");
+        for (int i = NUM_PRIORITY - 1; i >= 0; --i) {
+            if (sche_queue_head[i]) {
+                chosen_process = sche_queue_head[i];
+                break;
+            }
+        }
     }
     chosen_process->state = process_state::RUNNING;
     remove_from_scheduling_queue(chosen_process->pid);
