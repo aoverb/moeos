@@ -37,6 +37,8 @@ typedef struct PCB {
     uint32_t saved_eflags;
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
+    uintptr_t heap_start;  // 堆起始地址（固定不变）
+    uintptr_t heap_break;  // 当前堆顶（sbrk 移动这个）
 
     uint16_t priority;
     uint16_t quota;

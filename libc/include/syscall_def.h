@@ -11,6 +11,7 @@ enum class SYSCALL {
     TERMINAL_WRITE = 1,
     TERMINAL_SET_TEXT_COLOR = 2,
     TERMINAL_GET_LINE = 3,
+    SBRK = 50,
     STAT = 99,
     MOUNT = 100,
     UNMOUNT = 101,

@@ -1,4 +1,5 @@
 #include <kernel/syscall.h>
+#include <kernel/mm.h>
 #include <syscall_def.h>
 #include <kernel/process.h>
 #include <driver/vfs.h>
@@ -148,11 +149,36 @@ int sys_waitpid(interrupt_frame* reg) {
     return waitpid(pid);
 }
 
+// SBRK(ebx = increment)
+int sys_sbrk(interrupt_frame* reg) {
+    uintptr_t increment = static_cast<uintptr_t>(reg->ebx);
+    PCB* cur_pcb = process_list[cur_process_id];
+    uintptr_t old_break = cur_pcb->heap_break;
+    uintptr_t new_break = old_break + increment;
+
+    if (new_break < cur_pcb->heap_start) return -1;
+
+    if (increment > 0) {
+        uintptr_t old_page = (old_break + 0xFFF) & ~0xFFF;
+        uintptr_t new_page = (new_break + 0xFFF) & ~0xFFF; // 按页对齐
+        for (uintptr_t addr = old_page; addr < new_page; addr += 0x1000) {
+            if (vmm_get_mapping(addr) == 0) {
+                uintptr_t phys = reinterpret_cast<uintptr_t>(pmm_alloc(1));
+                vmm_map_page(phys, addr, 0x7); // Present | RW | User
+            }
+        }
+    }
+
+    cur_pcb->heap_break = new_break;
+    return old_break;
+}
+
 void syscall_init() {
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);
+    register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
     register_syscall(uint32_t(SYSCALL::UNMOUNT),  sys_unmount);

@@ -82,7 +82,6 @@ bool try_exec(const char* cmd, int argc, char* argv[]) {
         
         int child_pid = exec(buffer, size, 1, argc, argv);
         int ret = waitpid(child_pid);
-        printf("process exited with exit code %d\n", ret);
         return true;
     }
     return false;

@@ -175,6 +175,8 @@ pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int 
     new_process->pid = newpid;
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
+    new_process->heap_start = (CODE_SPACE_ADDR + code_size + 0xFFF) & ~0xFFF; // 页对齐
+    new_process->heap_break = new_process->heap_start; // 一开始堆空间大小是0
     new_process->state = process_state::READY;
     new_process->parent_pid = cur_process_id;
     new_process->waiting_queue = nullptr;
