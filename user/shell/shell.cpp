@@ -50,17 +50,17 @@ int tokenize(char* input, char* tokens[], int max_tokens) {
 }
 
 void print_rumia_text() {
-    set_color(0xF0B526);
+    set_color(0xE8BF5A);
     printf("Rumi");
-    set_color(0xEB392D);
+    set_color(0xD4524E);
     printf("a");
-    set_color(0xFFFFFF);
+    set_color(0xF4F0EB);
 }
 
 void print_lolios() {
-    set_color(0xEB9D2F);
+    set_color(0xE8BF5A);
     printf("LoliOS");
-    set_color(0xFFFFFF);
+    set_color(0xF4F0EB);
 }
 
 bool try_exec(const char* cmd, int argc, char* argv[]) {
@@ -99,15 +99,30 @@ void builtin_cd(int argc, char* argv[]) {
     }
 }
 
+void print_cwd(){
+    static char cwd[255];
+    if (getcwd(cwd, 255) != 0) {
+        return;
+    }
+    set_color(0xD4524E);
+    printf("%s", cwd);
+    set_color(0xF4F0EB);
+}
+
 int main(int argc_main, char** argv_main) {
     char input[MAX_INPUT];
     char* tokens[MAX_ARGS];
 
     printf("Shell is running in user addr: %x\n", &main);
-
+    
     while (1) {
+        set_color(0x39C5BB);
+        printf("root@");
+        set_color(0xF4F0EB);
         print_lolios();
-        printf(">");
+        printf(":");
+        print_cwd();
+        printf("$ ");
 
         getline(input, MAX_INPUT);
 

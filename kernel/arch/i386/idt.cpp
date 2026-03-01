@@ -26,7 +26,7 @@ void inner_interrupt_handler(registers* regs) {
         outb(0x20, 0x20);
         return;
     }
-    set_color(0x00FF0000);
+    set_color(0xE0565C);
     printf("proc: %d, int:  %d\n", cur_process_id, regs->int_no);
     printf("An critical error has occurred: %d\n", regs->err_code);
     exit_process(cur_process_id);
