@@ -73,7 +73,7 @@ constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
 
 pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
-    spinlock_acquire(&process_list_lock);
+    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     pid_t newpid = 0;
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
@@ -82,7 +82,7 @@ pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int 
         }
     }
     if (newpid == 0) {
-        spinlock_release(&process_list_lock);
+        spinlock_release(&process_list_lock, saved_eflags);
         return 0;
     }
 
@@ -178,14 +178,14 @@ pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int 
 
     insert_into_scheduling_queue(newpid, priority);
     vmm_switch(pd_addr_old);
-    spinlock_release(&process_list_lock);
+    spinlock_release(&process_list_lock, saved_eflags);
     asm volatile ("sti");
 
     return newpid;
 }
 
 pid_t create_process(void* entry, void* args) {
-    spinlock_acquire(&process_list_lock);
+    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             PCB*& new_process = process_list[nid];
@@ -213,22 +213,22 @@ pid_t create_process(void* entry, void* args) {
             new_process->state = process_state::READY;
 
             insert_into_scheduling_queue(nid);
-            spinlock_release(&process_list_lock);
+            spinlock_release(&process_list_lock, saved_eflags);
             return nid;
         }
     }
-    spinlock_release(&process_list_lock);
+    spinlock_release(&process_list_lock, saved_eflags);
     return 0;
 }
 
 uint32_t exit_process(pid_t pid) {
     if (pid == 0 || process_list[pid] == nullptr) return 1;
-    
     PCB*& exiting_process = process_list[pid];
     if (pid != cur_process_id) { // 要退出的进程不是自己的话
 		exiting_process->to_exit = 1; // 不要直接清理这个进程的空间，告诉进程自己将要被退出就好
         return 0;
     }
+    asm volatile("cli");
     PCB* itr;
     while (itr = exiting_process->waiting_queue) {
         itr->state = process_state::READY;

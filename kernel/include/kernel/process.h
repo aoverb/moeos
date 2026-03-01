@@ -38,6 +38,13 @@ typedef struct PCB {
     // 该任务的内核栈底（用于释放内存）
     void* kernel_stack_bottom;
 
+    uint16_t priority;
+    uint16_t quota;
+    uint32_t create_time;
+
+    PCB* prev = nullptr;
+    PCB* next = nullptr;
+
     pid_t parent_pid;
     uint8_t to_exit;
     int exit_no;
@@ -48,13 +55,6 @@ typedef struct PCB {
     uint32_t fd_num;
 
     char cwd[256];
-
-    uint16_t priority;
-    uint16_t quota;
-    uint32_t create_time;
-
-    PCB* prev = nullptr;
-    PCB* next = nullptr;
 } PCB;
 
 extern PCB* process_list[MAX_PROCESSES_NUM];
