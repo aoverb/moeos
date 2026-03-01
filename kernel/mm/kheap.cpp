@@ -132,12 +132,16 @@ free_block coalesce(free_block block) {
 }
 
 void* kmalloc(uint32_t size) {
+    uint32_t flags;
+    asm volatile ("pushfl; popl %0; cli" : "=r"(flags) : : "memory");
+    
     size = (size + 0x7) & ~0x7;
     free_block cur_block = kheap_head;
     while (cur_block) {
         if (!is_block_alloc(cur_block) && block_size(cur_block) >= size) {
             split_block(cur_block, size);
             block_alloc(cur_block);
+            asm volatile ("pushl %0; popfl" : : "r"(flags) : "memory");
             return cur_block + 1;
         }
         if (next_block(cur_block)) {
@@ -150,11 +154,15 @@ void* kmalloc(uint32_t size) {
     free_block new_block = coalesce(next_block(cur_block));
     split_block(new_block, size);
     block_alloc(new_block);
+    asm volatile ("pushl %0; popfl" : : "r"(flags) : "memory");
     return new_block + 1;
 }
 
 void kfree(void* addr) {
+    uint32_t flags;
+    asm volatile ("pushfl; popl %0; cli" : "=r"(flags) : : "memory");
     free_block block_addr = reinterpret_cast<free_block>(addr) - 1;
     block_free(block_addr);
     coalesce(block_addr);
+    asm volatile ("pushl %0; popfl" : : "r"(flags) : "memory");
 }
