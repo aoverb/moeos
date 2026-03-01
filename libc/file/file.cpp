@@ -1,6 +1,10 @@
 #include <file.h>
 #include <syscall_def.h>
 
+int stat(const char* path, file_stat* stat) {
+    return syscall2((uint32_t)SYSCALL::STAT, (uint32_t)path, (uint32_t)stat);
+}
+
 int mount(uint32_t driver, const char* mount_path, void* device_data) {
     return syscall3((uint32_t)SYSCALL::MOUNT, driver, (uint32_t)mount_path, (uint32_t)device_data);
 }

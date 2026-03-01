@@ -22,8 +22,15 @@ struct dirent {
 
 struct file_stat {
     uint32_t size;
-    uint8_t type;
+    uint8_t  type;
     uint32_t mode;
+    uint32_t owner_id;
+    uint32_t group_id;
+    uint32_t last_modified;
+    char     owner_name[32];
+    char     group_name[32];
+    char     name[100];
+    char     link_name[100];
 };
 
 struct fs_operation {

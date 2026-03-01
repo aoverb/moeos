@@ -12,6 +12,20 @@ extern "C" {
 #define O_RDWR    0x03
 #define O_CREATE  0x04
 
+struct file_stat {
+    uint32_t size;
+    uint8_t  type;
+    uint32_t mode;
+    uint32_t owner_id;
+    uint32_t group_id;
+    uint32_t last_modified;
+    char     owner_name[32];
+    char     group_name[32];
+    char     name[100];
+    char     link_name[100];
+};
+
+int stat(const char* path, file_stat* stat);
 int mount(uint32_t driver, const char* mount_path, void* device_data);
 int unmount(const char* mount_path);
 int open(const char* path, uint8_t mode);

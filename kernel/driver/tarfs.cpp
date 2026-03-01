@@ -339,9 +339,20 @@ int stat(mounting_point* mp, const char* path, file_stat* out) {
     tar_inode* inode = get_inode_by_path(data, path);
     if (inode == nullptr || inode->block == nullptr) return -1;
 
-    out->size = parse_octal(inode->block->size, 12);
-    out->type = inode->block->type == TYPE_DIR ? 0 : 1;
-    out->mode = parse_octal(inode->block->filemode, 8);
+    tar_block* blk = inode->block;
+
+    out->size          = parse_octal(blk->size, 12);
+    out->type          = blk->type == TYPE_DIR ? 0 : 1;
+    out->mode          = parse_octal(blk->filemode, 8);
+    out->owner_id      = parse_octal(blk->owner_id, 8);
+    out->group_id      = parse_octal(blk->group_id, 8);
+    out->last_modified = parse_octal(blk->last_modified, 12);
+
+    strncpy(out->owner_name, blk->owner_name, 32);
+    strncpy(out->group_name, blk->group_name, 32);
+    strncpy(out->name,       blk->name, 100);
+    strncpy(out->link_name,  blk->name_of_link, 100);
+
     return 0;
 }
 
