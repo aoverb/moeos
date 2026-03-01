@@ -5,6 +5,8 @@
 #include <syscall_def.h>
 #include <file.h>
 
+#include <sys/wait.h>
+
 constexpr char* PATH[2] = {
     "/usr/bin/",
     "/"
@@ -77,8 +79,9 @@ bool try_exec(const char* cmd, int argc, char* argv[]) {
         if (fd == -1) {
             continue;
         }
-
-        exec(buffer, size, 1, argc, argv);
+        
+        int child_pid = exec(buffer, size, 1, argc, argv);
+        int ret = waitpid(child_pid);
         return true;
     }
     return false;

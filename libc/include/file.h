@@ -18,7 +18,7 @@ int open(const char* path, uint8_t mode);
 int read(int fd, char* buffer, uint32_t size);
 int write(int fd, const char* buffer, uint32_t size);
 int close(int fd);
-uint32_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
+int exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
 
 typedef struct {
     char     name[256];

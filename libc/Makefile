@@ -15,6 +15,7 @@ cstring/strcpy.o \
 string/string.o \
 string/allocator.o \
 file/file.o \
+sys/wait.o \
 stdio/setcolor.o \
 stdio/getline.o
 

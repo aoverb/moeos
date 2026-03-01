@@ -11,7 +11,7 @@ process_switch_to:
     pushl %ebp
 
     #保存...
-    movzbl cur_process_id, %eax
+    movl cur_process_id, %eax
     movl process_list(, %eax, 4), %eax
     movl %esp, 4(%eax)
 
@@ -19,9 +19,9 @@ process_switch_to:
     movzbl 20(%esp), %eax
     movl process_list(, %eax, 4), %eax
     movl (%eax), %ebx
-    cmpb %bl, (cur_process_id)
+    cmp %ebx, (cur_process_id)
     je 1f
-    movb %bl, cur_process_id
+    movl %ebx, cur_process_id
     movl 4(%eax), %esp
 
     movl 8(%eax), %eax

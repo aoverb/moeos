@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 PCB* process_list[MAX_PROCESSES_NUM] = {};
-uint8_t cur_process_id = 0;
+pid_t cur_process_id = 0;
 spinlock process_list_lock;
 
 extern "C" void ret_to_user_mode();
@@ -25,6 +25,31 @@ void print_process() {
     }
 }
 
+void free_pcb(PCB*& process) {
+    kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
+    kfree(reinterpret_cast<void*>(process));
+    // todo：如果是用户态进程，需要销毁用户空间（CR3）
+    process = nullptr;
+}
+
+int waitpid(pid_t child) {
+    if (child < 0 || child > MAX_PROCESSES_NUM ||
+        !process_list[child] || process_list[child]->parent_pid != cur_process_id) {
+        return -1;
+    }
+    PCB* child_pcb = process_list[child];
+    // 父进程设置为等待态，从调度队列中移除
+    process_list[cur_process_id]->state = process_state::WAITING;
+    remove_from_scheduling_queue(cur_process_id);
+    // 放入新进程的等待序列
+    insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
+    while(child_pcb->state != process_state::ZOMBIE) {
+        yield();
+    }
+    free_pcb(process_list[child]);
+    return 0;
+}
+
 void process_init() {
     init_scheduler();
     process_list[0] = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
@@ -32,6 +57,10 @@ void process_init() {
     process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
     process_list[0]->prev = process_list[0]->next = nullptr;
     process_list[0]->pid = 0;
+    process_list[0]->fd_num = 0;
+    process_list[0]->to_exit = 0;
+    process_list[0]->parent_pid = 0;
+    process_list[0]->waiting_queue = nullptr;
     strcpy(process_list[0]->cwd, "/");
     process_list[0]->saved_eflags = 0x202;
     process_list[0]->create_time = 0;
@@ -43,9 +72,9 @@ void process_init() {
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
 
-uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
+pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     spinlock_acquire(&process_list_lock);
-    uint8_t newpid = 0;
+    pid_t newpid = 0;
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             newpid = nid;
@@ -141,16 +170,21 @@ uint32_t create_user_process(void* code, uint32_t code_size, uint8_t priority, i
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
     new_process->state = process_state::READY;
+    new_process->parent_pid = cur_process_id;
+    new_process->waiting_queue = nullptr;
+    new_process->fd_num = 0;
+    new_process->to_exit = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
+
     insert_into_scheduling_queue(newpid, priority);
     vmm_switch(pd_addr_old);
-    asm volatile ("sti");
     spinlock_release(&process_list_lock);
+    asm volatile ("sti");
 
     return newpid;
 }
 
-uint32_t create_process(void* entry, void* args) {
+pid_t create_process(void* entry, void* args) {
     spinlock_acquire(&process_list_lock);
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
@@ -171,8 +205,13 @@ uint32_t create_process(void* entry, void* args) {
             new_process->pid = nid;
             new_process->cr3 = vmm_get_cr3();
             new_process->create_time = pit_get_ticks();
+            new_process->fd_num = 0;
+            new_process->to_exit = 0;
+            new_process->parent_pid = cur_process_id;
+            new_process->waiting_queue = nullptr;
             strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
             new_process->state = process_state::READY;
+
             insert_into_scheduling_queue(nid);
             spinlock_release(&process_list_lock);
             return nid;
@@ -182,23 +221,23 @@ uint32_t create_process(void* entry, void* args) {
     return 0;
 }
 
-void free_pcb(PCB*& process) {
-    kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
-    kfree(reinterpret_cast<void*>(process));
-    // todo：如果是用户态进程，需要销毁用户空间（CR3）
-    process = nullptr;
-}
-
-uint32_t exit_process(uint8_t pid) {
+uint32_t exit_process(pid_t pid) {
     if (pid == 0 || process_list[pid] == nullptr) return 1;
-    PCB*& cur_process = process_list[pid];
-    if (pid != cur_process_id) {
-		remove_from_scheduling_queue(pid);
-        free_pcb(cur_process);
+    
+    PCB*& exiting_process = process_list[pid];
+    if (pid != cur_process_id) { // 要退出的进程不是自己的话
+		exiting_process->to_exit = 1; // 不要直接清理这个进程的空间，告诉进程自己将要被退出就好
         return 0;
-    } 
-    cur_process->state = process_state::ZOMBIE;
-    insert_into_process_recycle_queue(cur_process);
+    }
+    PCB* itr;
+    while (itr = exiting_process->waiting_queue) {
+        itr->state = process_state::READY;
+        exiting_process->state = process_state::ZOMBIE;
+        remove_from_process_queue(exiting_process->waiting_queue, itr->pid);
+        insert_into_scheduling_queue(itr->pid);
+    }
+    remove_from_scheduling_queue(pid);
+    // insert_into_process_recycle_queue(cur_process); 不需要了
     yield();
     // 不应该执行到这里
     return 0;
@@ -210,7 +249,6 @@ void exit_process_wrapper() {
 
 bool insert_into_process_queue(process_queue& queue, PCB* process) {
     if (process == nullptr || process->prev != nullptr || process->next != nullptr) {
-        // 重复插入直接忽略
         return false;
     }
  
@@ -227,7 +265,7 @@ bool insert_into_process_queue(process_queue& queue, PCB* process) {
     return true;
 }
 
-void remove_from_process_queue(process_queue& queue, uint8_t pid) {
+void remove_from_process_queue(process_queue& queue, pid_t pid) {
     // 不打算在这里检查pid对应的PCB是否在传入的queue中，调用者应该做检查
     PCB* cur_pcb = process_list[pid];
     PCB* prev_pcb = cur_pcb->prev;
@@ -246,18 +284,4 @@ void remove_from_process_queue(process_queue& queue, uint8_t pid) {
     }
 
     cur_pcb->prev = cur_pcb->next = nullptr;
-}
-
-process_queue process_recycle_queue;
-
-void insert_into_process_recycle_queue(PCB* process) {
-    insert_into_process_queue(process_recycle_queue, process);
-}
-
-void do_process_recycle() {
-    while (process_recycle_queue) {
-        uint8_t pid = process_recycle_queue->pid;
-        remove_from_process_queue(process_recycle_queue, process_recycle_queue->pid);
-        free_pcb(process_list[pid]);
-    }
 }

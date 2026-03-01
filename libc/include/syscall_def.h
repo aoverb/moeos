@@ -23,7 +23,8 @@ enum class SYSCALL {
     CLOSEDIR = 108,
     CHDIR = 109,
     GETCWD = 110,
-    EXEC = 200
+    EXEC = 200,
+    WAITPID = 201
 };
 
 enum SYSCALL_RET {

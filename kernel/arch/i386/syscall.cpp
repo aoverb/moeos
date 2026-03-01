@@ -140,6 +140,12 @@ int sys_exec(interrupt_frame* reg) {
     return static_cast<int>(create_user_process(code, code_size, priority, argc, argv));
 }
 
+// WAITPID(ebx = pid)
+int sys_waitpid(interrupt_frame* reg) {
+    pid_t pid = static_cast<pid_t>(reg->ebx);
+    return waitpid(pid);
+}
+
 void syscall_init() {
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
@@ -158,6 +164,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::CHDIR),    sys_chdir);
     register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
+    register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
 }
 
 void register_syscall(uint8_t n, syscall_handler_t handler) {
