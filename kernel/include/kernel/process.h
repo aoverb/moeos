@@ -47,7 +47,7 @@ typedef struct PCB {
 
     pid_t parent_pid;
     uint8_t to_exit;
-    int exit_no;
+    int exit_code;
     process_state state;
     process_queue waiting_queue;
 
@@ -67,7 +67,7 @@ void process_init();
 
 void print_process();
 pid_t create_process(void* entry, void* args);
-uint32_t exit_process(pid_t pid);
+uint32_t exit_process(pid_t pid, int exit_code);
 
 pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
 int waitpid(pid_t child);

@@ -9,8 +9,10 @@
 constexpr uint32_t MAX_SYSCALL = 255;
 syscall_handler_t syscall_table[255] = { nullptr };
 
-int sys_exit(interrupt_frame*) {
-    exit_process(cur_process_id);
+// CLOSE(ebx = exit_code)
+int sys_exit(interrupt_frame* reg) {
+    int exit_code = static_cast<int>(reg->ebx);
+    exit_process(cur_process_id, exit_code);
     return 0;
 }
 

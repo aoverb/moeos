@@ -103,7 +103,7 @@ void schedule() {
     asm volatile ("pushl %0; popfl" : : "r"(flags));
 
     if (process_list[cur_process_id]->to_exit) {
-        exit_process(cur_process_id);
+        exit_process(cur_process_id, 0); // 退出码无所谓，设置了to_exit的不会被覆盖
     }
 }
 

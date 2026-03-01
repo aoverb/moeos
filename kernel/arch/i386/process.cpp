@@ -43,15 +43,17 @@ int waitpid(pid_t child) {
     if (child_pcb->state == process_state::ZOMBIE) {
         // 子进程已经退出了，直接回收
         asm volatile("sti");
+        int exit_code = child_pcb->exit_code;
         free_pcb(process_list[child]);
-        return 0;
+        return exit_code;
     }
     process_list[cur_process_id]->state = process_state::WAITING;
     insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
     yield();
 
+    int exit_code = child_pcb->exit_code;
     free_pcb(process_list[child]);
-    return 0;
+    return exit_code;
 }
 
 void process_init() {
@@ -225,9 +227,13 @@ pid_t create_process(void* entry, void* args) {
     return 0;
 }
 
-uint32_t exit_process(pid_t pid) {
+uint32_t exit_process(pid_t pid, int exit_code) {
     if (pid == 0 || process_list[pid] == nullptr) return 1;
     PCB*& exiting_process = process_list[pid];
+    if (!exiting_process->to_exit) {
+        // 当前进程还没被指派退出，使用传入的退出码
+        exiting_process->exit_code = exit_code;
+    }
     if (pid != cur_process_id) { // 要退出的进程不是自己的话
 		exiting_process->to_exit = 1; // 不要直接清理这个进程的空间，告诉进程自己将要被退出就好
         return 0;
@@ -246,7 +252,7 @@ uint32_t exit_process(pid_t pid) {
 }
 
 void exit_process_wrapper() {
-    exit_process(cur_process_id);
+    exit_process(cur_process_id, 0);
 }
 
 bool insert_into_process_queue(process_queue& queue, PCB* process) {
