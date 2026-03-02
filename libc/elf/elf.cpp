@@ -44,7 +44,7 @@ int verify_elf(void* elf_image, uint32_t size) {
     if (ehdr->e_ident[EI_VERSION] != EV_CURRENT)
         return 0;
 
-    if (ehdr->e_type != ET_EXEC && ehdr->e_type != ET_REL) // 不支持重定向
+    if (ehdr->e_type != ET_EXEC) // 不支持重定向
         return 0;
 
     if (ehdr->e_machine != EM_386) // x86
