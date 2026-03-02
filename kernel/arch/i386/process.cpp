@@ -92,18 +92,6 @@ void process_init() {
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t USER_STACK_TOP_ADDR = 0xBFF00000;
-// ============ 临时方案：.bss 处理（解析 ELF 后可删除） ============
-constexpr uint32_t BSS_EXTRA_PAGES = 4; // 额外给 .bss 的页数
-
-static uint32_t calc_total_pages(uint32_t code_size) {
-    return (code_size + 4095) / 4096 + BSS_EXTRA_PAGES;
-}
-
-static void load_code_and_clear_bss(uintptr_t dest, void* code_buf, uint32_t code_size, uint32_t total_pages) {
-    memcpy((void*)dest, code_buf, code_size);
-    memset((void*)(dest + code_size), 0, total_pages * 4096 - code_size);
-}
-// ============ 临时方案结束 ============
 
 pid_t get_new_pid() {
     pid_t newpid = 0;
@@ -163,20 +151,10 @@ void* copy_image_to_kernel_buffer(void* code, uint32_t code_size) {
     return code_buf;
 }
 
-void copy_image_from_kernel_buffer(void* code_buf, uint32_t code_size) {
-    uint32_t total_pages = calc_total_pages(code_size);
-    for (uint32_t i = 0; i < total_pages; i++) {
-        void* phys = pmm_alloc(1);
-        vmm_map_page((uintptr_t)phys, CODE_SPACE_ADDR + i * 4096, 6);
-    }
-    load_code_and_clear_bss(CODE_SPACE_ADDR, code_buf, code_size, total_pages);
-    kfree(code_buf);
-}
-
 uintptr_t create_user_stack(uint32_t page_size) {
     uintptr_t stack_top_addr = USER_STACK_TOP_ADDR;
     for (uint32_t i = 0; i < page_size; i++) {
-        void* stack_space = pmm_alloc(1);
+        void* stack_space = pmm_alloc(1 << 12);
         vmm_map_page((uintptr_t)stack_space, stack_top_addr - (page_size - i) * 4096, 6);
     }
     return stack_top_addr;
@@ -208,7 +186,12 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         return 0;
     }
 
-    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
+    if (!verify_elf(code, code_size)) {
+        return 0;
+    }
+
+    // 待会我们直接在内核缓冲区解析ELF，不需要复制
+    // void* code_buf = copy_image_to_kernel_buffer(code, code_size);
 
     uint32_t* arg_lens;
     char** arg_bufs;
@@ -219,20 +202,25 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     asm volatile ("cli");
     vmm_switch(pd_addr);
 
-    copy_image_from_kernel_buffer(code_buf, code_size);
-    
+    uint32_t entry = 0;
+    uint32_t heap_addr = 0;
+    if (!construct_user_space_by_elf_image(code, code_size, entry, heap_addr)) {
+        vmm_switch(pd_addr_old);
+        asm volatile ("sti");
+        spinlock_release(&process_list_lock, saved_eflags);
+        return 0;
+    }
+
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
     construct_args_for_user_stack(argc, arg_lens, arg_bufs, sp);
 
     PCB* new_pcb = init_pcb(newpid);
     prepare_pcb_for_new_process(new_pcb);
     new_pcb->cr3 = pd_addr;
-    // heap_start 也要考虑 .bss 额外页
-    uint32_t total_pages = calc_total_pages(code_size);
-    new_pcb->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
-    new_pcb->heap_break = new_pcb->heap_start;
-    init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, CODE_SPACE_ADDR);
-
+    
+    new_pcb->heap_start = heap_addr;
+    new_pcb->heap_break = heap_addr;
+    init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, entry);
     insert_into_scheduling_queue(newpid, priority);
 
     vmm_switch(pd_addr_old);

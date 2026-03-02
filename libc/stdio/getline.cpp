@@ -39,7 +39,6 @@ void getline(char* buf, uint32_t size) {
 
     buf[i] = '\0';
 #else
-	// TODO: Implement stdio and the write system call.
 	syscall2(3, reinterpret_cast<uint32_t>(buf), size);
 #endif
 

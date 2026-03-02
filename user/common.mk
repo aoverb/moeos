@@ -13,10 +13,7 @@ LINKER_LD := ../linker.ld
 # PROG_NAME 和 OBJS 由各子目录的 Makefile 定义
 all: $(PROG_NAME)
 
-$(PROG_NAME): $(PROG_NAME).elf
-	objcopy -O binary $< $@
-
-$(PROG_NAME).elf: $(OBJS) $(LINKER_LD) $(LIBC) $(CRT0)
+$(PROG_NAME): $(OBJS) $(LINKER_LD) $(LIBC) $(CRT0)
 	$(CC) -T $(LINKER_LD) -o $@ $(LDFLAGS) $(OBJS) $(CRT0) -L$(SYSROOT)/usr/lib -lc -lgcc
 
 %.o: %.c
