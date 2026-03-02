@@ -7,10 +7,13 @@
 
 #include <sys/wait.h>
 
-constexpr char* PATH[2] = {
+constexpr uint8_t PATH_LIST_SIZE = 2;
+constexpr char* PATH[PATH_LIST_SIZE] = {
     "/usr/bin/",
     "/"
 };
+
+static char cwd[255];
 
 constexpr int MAX_ARGS = 64;
 constexpr int MAX_INPUT = 256;
@@ -67,20 +70,24 @@ bool try_exec(const char* cmd, int argc, char* argv[]) {
     char fn[MAX_PATH];
     file_stat fst;
 
-    for (int i = 0; i < 2; ++i) {
-        snprintf(fn, sizeof(fn), "%s%s", PATH[i], cmd);
+    for (int i = 0; i < PATH_LIST_SIZE + 1; ++i) {
+        if (i < PATH_LIST_SIZE) {
+            snprintf(fn, sizeof(fn), "%s%s", PATH[i], cmd);
+        } else {
+            snprintf(fn, sizeof(fn), "%s/%s", cwd, cmd);
+        }
 
         if (stat(fn, &fst) == -1) continue;
-
+        
         int fd = open(fn, 1);
         if (fd == -1) continue;
-
+        
         char* buffer = (char*)malloc(fst.size);
         if (!buffer) {
             close(fd);
             continue;
         }
-
+        
         int size = read(fd, buffer, fst.size);
         close(fd);
 
@@ -110,7 +117,6 @@ void builtin_cd(int argc, char* argv[]) {
 }
 
 void print_cwd(){
-    static char cwd[255];
     if (getcwd(cwd, 255) != 0) {
         return;
     }
