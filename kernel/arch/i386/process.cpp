@@ -167,30 +167,7 @@ uintptr_t create_user_stack(uint32_t page_size) {
     return stack_top_addr;
 }
 
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
-    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
-    pid_t newpid = get_new_pid();
-
-    if (newpid == 0) {
-        spinlock_release(&process_list_lock, saved_eflags);
-        return 0;
-    }
-
-    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
-
-    uint32_t* arg_lens;
-    char** arg_bufs;
-    copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
-
-    uint32_t pd_addr_old = vmm_get_cr3();
-    uint32_t pd_addr = vmm_create_page_directory();
-    vmm_switch(pd_addr);
-
-    copy_image_from_kernel_buffer(code_buf, code_size);
-    
-    uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
-    construct_args_from_kernel_buffer(argc, arg_lens, arg_bufs, sp);
-
+void init_pcb_for_new_process(pid_t newpid, uintptr_t sp, uint32_t pd_addr, uint32_t code_size) {
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     memset(new_process, 0, sizeof(PCB));
@@ -226,12 +203,38 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     new_process->fd_num = 0;
     new_process->to_exit = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
+}
 
+pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
+    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
+    pid_t newpid = get_new_pid();
+
+    if (newpid == 0) {
+        spinlock_release(&process_list_lock, saved_eflags);
+        return 0;
+    }
+
+    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
+
+    uint32_t* arg_lens;
+    char** arg_bufs;
+    copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
+
+    uint32_t pd_addr_old = vmm_get_cr3();
+    uint32_t pd_addr = vmm_create_page_directory();
+    vmm_switch(pd_addr);
+
+    copy_image_from_kernel_buffer(code_buf, code_size);
+    
+    uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
+    construct_args_from_kernel_buffer(argc, arg_lens, arg_bufs, sp);
+
+    init_pcb_for_new_process(newpid, sp, pd_addr, code_size);
     insert_into_scheduling_queue(newpid, priority);
-    vmm_switch(pd_addr_old);
-    spinlock_release(&process_list_lock, saved_eflags);
-    asm volatile ("sti");
 
+    vmm_switch(pd_addr_old);
+
+    spinlock_release(&process_list_lock, saved_eflags);
     return newpid;
 }
 
