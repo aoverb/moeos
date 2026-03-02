@@ -10,7 +10,7 @@ typedef int pid_t;
 constexpr pid_t MAX_PROCESSES_NUM = 65536;
 constexpr uint32_t KERNEL_STACK_SIZE = 4096;
 constexpr uint32_t MAX_FD_NUM = 32;
-
+constexpr uint32_t USER_STACK_PAGE_SIZE = 16;
 struct mounting_point;
 
 enum class process_state {

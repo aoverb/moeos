@@ -117,6 +117,16 @@ void* copy_image_to_kernel_buffer(void* code, uint32_t code_size) {
     return code_buf;
 }
 
+void copy_image_from_kernel_buffer(void* code_buf, uint32_t code_size) {
+    uint32_t total_pages = calc_total_pages(code_size);
+    for (uint32_t i = 0; i < total_pages; i++) {
+        void* phys = pmm_alloc(1);
+        vmm_map_page((uintptr_t)phys, CODE_SPACE_ADDR + i * 4096, 6);
+    }
+    load_code_and_clear_bss(CODE_SPACE_ADDR, code_buf, code_size, total_pages);
+    kfree(code_buf);
+}
+
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     pid_t newpid = get_new_pid();
@@ -136,16 +146,9 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     uint32_t pd_addr = vmm_create_page_directory();
     vmm_switch(pd_addr);
 
-    // ---- 映射代码 + .bss ----
-    uint32_t total_pages = calc_total_pages(code_size);
-    for (uint32_t i = 0; i < total_pages; i++) {
-        void* phys = pmm_alloc(1);
-        vmm_map_page((uintptr_t)phys, CODE_SPACE_ADDR + i * 4096, 6);
-    }
-    load_code_and_clear_bss(CODE_SPACE_ADDR, code_buf, code_size, total_pages);
-    kfree(code_buf);
-
-    for (uint32_t i = 0; i < 16; i++) {
+    copy_image_from_kernel_buffer(code_buf, code_size);
+    
+    for (uint32_t i = 0; i < USER_STACK_PAGE_SIZE; i++) {
         void* stack_space = pmm_alloc(1);
         vmm_map_page((uintptr_t)stack_space, CODE_STACK_TOP_ADDR - (16 - i) * 4096, 6);
     }
@@ -206,6 +209,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     new_process->cr3 = pd_addr;
 
     // heap_start 也要考虑 .bss 额外页
+    uint32_t total_pages = calc_total_pages(code_size);
     new_process->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
     new_process->heap_break = new_process->heap_start;
 
