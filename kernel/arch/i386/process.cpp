@@ -101,6 +101,22 @@ pid_t get_new_pid() {
     return newpid;
 }
 
+void copy_args_to_kernel_buffer(int argc, char** argv, uint32_t*& arg_lens, char**& arg_bufs) {
+    arg_lens = (uint32_t*)kmalloc(argc * sizeof(uint32_t));
+    arg_bufs = (char**)kmalloc(argc * sizeof(char*));
+    for (int i = 0; i < argc; i++) {
+        arg_lens[i] = strlen(argv[i]) + 1;
+        arg_bufs[i] = (char*)kmalloc(arg_lens[i]);
+        memcpy(arg_bufs[i], argv[i], arg_lens[i]);
+    }
+}
+
+void* copy_image_to_kernel_buffer(void* code, uint32_t code_size) {
+    void* code_buf = kmalloc(code_size);
+    memcpy(code_buf, code, code_size);
+    return code_buf;
+}
+
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     pid_t newpid = get_new_pid();
@@ -113,16 +129,10 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     uint32_t pd_addr_old = vmm_get_cr3();
     uint32_t pd_addr = vmm_create_page_directory();
 
-    void* code_buf = kmalloc(code_size);
-    memcpy(code_buf, code, code_size);
- 
-    uint32_t* arg_lens = (uint32_t*)kmalloc(argc * sizeof(uint32_t));
-    char** arg_bufs = (char**)kmalloc(argc * sizeof(char*));
-    for (int i = 0; i < argc; i++) {
-        arg_lens[i] = strlen(argv[i]) + 1;
-        arg_bufs[i] = (char*)kmalloc(arg_lens[i]);
-        memcpy(arg_bufs[i], argv[i], arg_lens[i]);
-    }
+    uint32_t* arg_lens;
+    char** arg_bufs;
+    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
+    copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
 
     asm volatile ("cli");
     vmm_switch(pd_addr);
