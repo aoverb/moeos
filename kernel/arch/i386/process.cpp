@@ -171,7 +171,7 @@ uintptr_t create_user_stack(uint32_t page_size) {
     uintptr_t stack_top_addr = USER_STACK_TOP_ADDR;
     for (uint32_t i = 0; i < page_size; i++) {
         void* stack_space = pmm_alloc(1);
-        vmm_map_page((uintptr_t)stack_space, stack_top_addr - (16 - i) * 4096, 6);
+        vmm_map_page((uintptr_t)stack_space, stack_top_addr - (page_size - i) * 4096, 6);
     }
     return stack_top_addr;
 }
@@ -210,6 +210,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
 
     uint32_t pd_addr_old = vmm_get_cr3();
     uint32_t pd_addr = vmm_create_page_directory();
+    asm volatile ("cli");
     vmm_switch(pd_addr);
 
     copy_image_from_kernel_buffer(code_buf, code_size);
@@ -231,6 +232,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     vmm_switch(pd_addr_old);
 
     spinlock_release(&process_list_lock, saved_eflags);
+    asm volatile ("sti");
     return newpid;
 }
 
