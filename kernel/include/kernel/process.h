@@ -70,8 +70,8 @@ void process_init();
 void print_process();
 pid_t create_process(void* entry, void* args);
 uint32_t exit_process(pid_t pid, int exit_code);
+pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
 
-pid_t create_user_process(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
 int waitpid(pid_t child);
 
 void process_switch_to(pid_t pid);

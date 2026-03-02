@@ -140,7 +140,7 @@ int sys_exec(interrupt_frame* reg) {
     uint8_t  priority  = static_cast<uint8_t>(reg->edx);
     int      argc      = static_cast<int>(reg->esi);
     char**   argv      = reinterpret_cast<char**>(reg->ebp);
-    return static_cast<int>(create_user_process(code, code_size, priority, argc, argv));
+    return static_cast<int>(exec(code, code_size, priority, argc, argv));
 }
 
 // WAITPID(ebx = pid)
