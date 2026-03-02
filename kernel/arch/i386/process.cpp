@@ -126,15 +126,14 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         return 0;
     }
 
-    uint32_t pd_addr_old = vmm_get_cr3();
-    uint32_t pd_addr = vmm_create_page_directory();
+    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
 
     uint32_t* arg_lens;
     char** arg_bufs;
-    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
     copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
 
-    asm volatile ("cli");
+    uint32_t pd_addr_old = vmm_get_cr3();
+    uint32_t pd_addr = vmm_create_page_directory();
     vmm_switch(pd_addr);
 
     // ---- 映射代码 + .bss ----
