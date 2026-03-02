@@ -6,6 +6,7 @@
 #include <driver/pit.h>
 #include <string.h>
 #include <stdio.h>
+#include <elf.h>
 
 PCB* process_list[MAX_PROCESSES_NUM] = {};
 pid_t cur_process_id = 0;
@@ -79,9 +80,10 @@ void process_init() {
     init_scheduler();
     PCB* new_process = init_pcb(0);
     cur_process_id = 0;
+    prepare_pcb_for_new_process(new_process);
     strcpy(process_list[0]->cwd, "/");
     process_list[0]->cr3 = vmm_get_cr3();
-    prepare_pcb_for_new_process(new_process);
+    new_process->state = process_state::RUNNING;
 }
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
