@@ -98,6 +98,9 @@ bool try_exec(const char* cmd, int argc, char* argv[]) {
 
         int child_pid = exec(buffer, size, 1, argc, argv);
         free(buffer);
+        if (child_pid == 0) {
+            return false;
+        }
         int ret = waitpid(child_pid);
         return true;
     }
