@@ -84,6 +84,10 @@ void process_init() {
     strcpy(process_list[0]->cwd, "/");
     process_list[0]->cr3 = vmm_get_cr3();
     new_process->state = process_state::RUNNING;
+    // 0号进程没有用户态，esp为0无所谓
+    // 调度到别的进程的时候会把这个esp自动刷新
+    // kernel_bottom 同样不需要刷新，调用free_pcb销毁内核栈用
+    // 但是引导程序的内核栈是不会也不应该被销毁的
 }
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
