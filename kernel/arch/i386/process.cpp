@@ -111,7 +111,7 @@ void copy_args_to_kernel_buffer(int argc, char** argv, uint32_t*& arg_lens, char
     }
 }
 
-void construct_args_from_kernel_buffer(int argc, uint32_t* arg_lens, char** arg_bufs,
+void construct_args_for_user_stack(int argc, uint32_t* arg_lens, char** arg_bufs,
     uintptr_t& user_stack_pointer) {
     uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
     for (int i = argc - 1; i >= 0; i--) {
@@ -184,24 +184,20 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
     new_process->esp -= 40;
 }
 
-void init_pcb_for_new_process(pid_t newpid, uintptr_t sp, uint32_t pd_addr, uint32_t code_size) {
+PCB* prepare_pcb_for_new_process(pid_t newpid) {
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     memset(new_process, 0, sizeof(PCB));
     new_process->saved_eflags = 0x202;
     new_process->pid = newpid;
     new_process->create_time = pit_get_ticks();
-    new_process->cr3 = pd_addr;
-    // heap_start 也要考虑 .bss 额外页
-    uint32_t total_pages = calc_total_pages(code_size);
-    new_process->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
-    new_process->heap_break = new_process->heap_start;
     new_process->state = process_state::READY;
     new_process->parent_pid = cur_process_id;
     new_process->waiting_queue = nullptr;
     new_process->fd_num = 0;
     new_process->to_exit = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
+    return new_process;
 }
 
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
@@ -226,10 +222,15 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     copy_image_from_kernel_buffer(code_buf, code_size);
     
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
-    construct_args_from_kernel_buffer(argc, arg_lens, arg_bufs, sp);
+    construct_args_for_user_stack(argc, arg_lens, arg_bufs, sp);
 
-    init_pcb_for_new_process(newpid, sp, pd_addr, code_size);
-    init_kernel_stack(process_list[newpid], KERNEL_STACK_SIZE, sp, CODE_SPACE_ADDR);
+    PCB* new_pcb = prepare_pcb_for_new_process(newpid);
+    new_pcb->cr3 = pd_addr;
+    // heap_start 也要考虑 .bss 额外页
+    uint32_t total_pages = calc_total_pages(code_size);
+    new_pcb->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
+    new_pcb->heap_break = new_pcb->heap_start;
+    init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, CODE_SPACE_ADDR);
 
     insert_into_scheduling_queue(newpid, priority);
 
