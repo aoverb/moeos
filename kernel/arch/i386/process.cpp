@@ -111,6 +111,37 @@ void copy_args_to_kernel_buffer(int argc, char** argv, uint32_t*& arg_lens, char
     }
 }
 
+void construct_args_from_kernel_buffer(int argc, uint32_t* arg_lens, char** arg_bufs,
+    uintptr_t& user_stack_pointer) {
+    uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
+    for (int i = argc - 1; i >= 0; i--) {
+        user_stack_pointer -= arg_lens[i];
+        memcpy((void*)user_stack_pointer, arg_bufs[i], arg_lens[i]);
+        user_argv_ptrs[i] = user_stack_pointer;
+        kfree(arg_bufs[i]);
+    }
+    kfree(arg_bufs);
+    kfree(arg_lens);
+
+    user_stack_pointer &= ~0x3; // 4 字节对齐
+ 
+    // argv[argc] = NULL
+    user_stack_pointer -= 4;
+    *((uintptr_t*)user_stack_pointer) = 0;
+ 
+    // argv[0] ~ argv[argc-1]
+    for (int i = argc - 1; i >= 0; i--) {
+        user_stack_pointer -= 4;
+        *((uintptr_t*)user_stack_pointer) = user_argv_ptrs[i];
+    }
+    uintptr_t argv_array_addr = user_stack_pointer;
+    kfree(user_argv_ptrs);
+    user_stack_pointer -= 4;
+    *((uintptr_t*)user_stack_pointer) = argv_array_addr;  // argv
+    user_stack_pointer -= 4;
+    *((uintptr_t*)user_stack_pointer) = (uintptr_t)argc;  // argc
+}
+
 void* copy_image_to_kernel_buffer(void* code, uint32_t code_size) {
     void* code_buf = kmalloc(code_size);
     memcpy(code_buf, code, code_size);
@@ -158,35 +189,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     copy_image_from_kernel_buffer(code_buf, code_size);
     
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
- 
-    uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
-    for (int i = argc - 1; i >= 0; i--) {
-        sp -= arg_lens[i];
-        memcpy((void*)sp, arg_bufs[i], arg_lens[i]);
-        user_argv_ptrs[i] = sp;
-        kfree(arg_bufs[i]);
-    }
-    kfree(arg_bufs);
-    kfree(arg_lens);
- 
-    sp &= ~0x3; // 4 字节对齐
- 
-    // argv[argc] = NULL
-    sp -= 4;
-    *((uintptr_t*)sp) = 0;
- 
-    // argv[0] ~ argv[argc-1]
-    for (int i = argc - 1; i >= 0; i--) {
-        sp -= 4;
-        *((uintptr_t*)sp) = user_argv_ptrs[i];
-    }
-    uintptr_t argv_array_addr = sp;
-    kfree(user_argv_ptrs);
- 
-    sp -= 4;
-    *((uintptr_t*)sp) = argv_array_addr;  // argv
-    sp -= 4;
-    *((uintptr_t*)sp) = (uintptr_t)argc;  // argc
+    construct_args_from_kernel_buffer(argc, arg_lens, arg_bufs, sp);
 
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
