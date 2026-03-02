@@ -90,8 +90,7 @@ static void load_code_and_clear_bss(uintptr_t dest, void* code_buf, uint32_t cod
 }
 // ============ 临时方案结束 ============
 
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
-    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
+pid_t get_new_pid() {
     pid_t newpid = 0;
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
@@ -99,6 +98,13 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
             break;
         }
     }
+    return newpid;
+}
+
+pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
+    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
+    pid_t newpid = get_new_pid();
+
     if (newpid == 0) {
         spinlock_release(&process_list_lock, saved_eflags);
         return 0;
