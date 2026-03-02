@@ -56,23 +56,32 @@ int waitpid(pid_t child) {
     return exit_code;
 }
 
+PCB* init_pcb(pid_t newpid) {
+    PCB*& new_process = process_list[newpid];
+    new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
+    memset(new_process, 0, sizeof(PCB));
+    new_process->pid = newpid;
+    return new_process;
+}
+
+void prepare_pcb_for_new_process(PCB*& new_process) {
+    new_process->saved_eflags = 0x202;
+    new_process->create_time = pit_get_ticks();
+    new_process->state = process_state::READY;
+    new_process->parent_pid = cur_process_id;
+    new_process->waiting_queue = nullptr;
+    new_process->fd_num = 0;
+    new_process->to_exit = 0;
+    strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
+}
+
 void process_init() {
     init_scheduler();
-    process_list[0] = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
-    memset(process_list[0], 0, sizeof(PCB));
-    process_list[0]->kernel_stack_bottom = reinterpret_cast<void*>(stack_bottom);
-    process_list[0]->prev = process_list[0]->next = nullptr;
-    process_list[0]->pid = 0;
-    process_list[0]->fd_num = 0;
-    process_list[0]->to_exit = 0;
-    process_list[0]->parent_pid = 0;
-    process_list[0]->waiting_queue = nullptr;
-    strcpy(process_list[0]->cwd, "/");
-    process_list[0]->saved_eflags = 0x202;
-    process_list[0]->create_time = 0;
-    process_list[0]->cr3 = vmm_get_cr3();
-    process_list[0]->state = process_state::RUNNING;
+    PCB* new_process = init_pcb(0);
     cur_process_id = 0;
+    strcpy(process_list[0]->cwd, "/");
+    process_list[0]->cr3 = vmm_get_cr3();
+    prepare_pcb_for_new_process(new_process);
 }
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
@@ -184,22 +193,6 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
     new_process->esp -= 40;
 }
 
-PCB* prepare_pcb_for_new_process(pid_t newpid) {
-    PCB*& new_process = process_list[newpid];
-    new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
-    memset(new_process, 0, sizeof(PCB));
-    new_process->saved_eflags = 0x202;
-    new_process->pid = newpid;
-    new_process->create_time = pit_get_ticks();
-    new_process->state = process_state::READY;
-    new_process->parent_pid = cur_process_id;
-    new_process->waiting_queue = nullptr;
-    new_process->fd_num = 0;
-    new_process->to_exit = 0;
-    strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
-    return new_process;
-}
-
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     pid_t newpid = get_new_pid();
@@ -224,7 +217,8 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
     construct_args_for_user_stack(argc, arg_lens, arg_bufs, sp);
 
-    PCB* new_pcb = prepare_pcb_for_new_process(newpid);
+    PCB* new_pcb = init_pcb(newpid);
+    prepare_pcb_for_new_process(new_pcb);
     new_pcb->cr3 = pd_addr;
     // heap_start 也要考虑 .bss 额外页
     uint32_t total_pages = calc_total_pages(code_size);
