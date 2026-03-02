@@ -191,7 +191,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     }
 
     // 待会我们直接在内核缓冲区解析ELF，不需要复制
-    // void* code_buf = copy_image_to_kernel_buffer(code, code_size);
+    void* code_buf = copy_image_to_kernel_buffer(code, code_size);
 
     uint32_t* arg_lens;
     char** arg_bufs;
@@ -204,13 +204,14 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
 
     uint32_t entry = 0;
     uint32_t heap_addr = 0;
-    if (!construct_user_space_by_elf_image(code, code_size, entry, heap_addr)) {
+    if (!construct_user_space_by_elf_image(code_buf, code_size, entry, heap_addr)) {
+        kfree(code_buf);
         vmm_switch(pd_addr_old);
         asm volatile ("sti");
         spinlock_release(&process_list_lock, saved_eflags);
         return 0;
     }
-
+    kfree(code_buf);
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
     construct_args_for_user_stack(argc, arg_lens, arg_bufs, sp);
 
