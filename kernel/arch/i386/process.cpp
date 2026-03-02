@@ -76,7 +76,7 @@ void process_init() {
 }
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
-constexpr uint32_t CODE_STACK_TOP_ADDR = 0xBFF00000;
+constexpr uint32_t USER_STACK_TOP_ADDR = 0xBFF00000;
 // ============ 临时方案：.bss 处理（解析 ELF 后可删除） ============
 constexpr uint32_t BSS_EXTRA_PAGES = 4; // 额外给 .bss 的页数
 
@@ -159,7 +159,7 @@ void copy_image_from_kernel_buffer(void* code_buf, uint32_t code_size) {
 }
 
 uintptr_t create_user_stack(uint32_t page_size) {
-    uintptr_t stack_top_addr = CODE_STACK_TOP_ADDR;
+    uintptr_t stack_top_addr = USER_STACK_TOP_ADDR;
     for (uint32_t i = 0; i < page_size; i++) {
         void* stack_space = pmm_alloc(1);
         vmm_map_page((uintptr_t)stack_space, stack_top_addr - (16 - i) * 4096, 6);
@@ -167,36 +167,35 @@ uintptr_t create_user_stack(uint32_t page_size) {
     return stack_top_addr;
 }
 
-void init_pcb_for_new_process(pid_t newpid, uintptr_t sp, uint32_t pd_addr, uint32_t code_size) {
-    PCB*& new_process = process_list[newpid];
-    new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
-    memset(new_process, 0, sizeof(PCB));
-    new_process->kernel_stack_bottom = kmalloc(KERNEL_STACK_SIZE);
-    new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + KERNEL_STACK_SIZE;
-    
+void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_pointer, uintptr_t entry) {
+    new_process->kernel_stack_bottom = kmalloc(size);
+    new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + size;
     // 内核栈
     *((uintptr_t*)(new_process->esp - 4)) = 0x23; // SS
-    *((uintptr_t*)(new_process->esp - 8)) = CODE_STACK_TOP_ADDR; // ESP
-    *((uintptr_t*)(new_process->esp - 8)) = sp; // ESP
+    *((uintptr_t*)(new_process->esp - 8)) = user_stack_pointer; // ESP
     *((uintptr_t*)(new_process->esp - 12)) = 0x202; // EFLAG
     *((uintptr_t*)(new_process->esp - 16)) = 0x1B; // CS
-    *((uintptr_t*)(new_process->esp - 20)) = CODE_SPACE_ADDR; // EIP
+    *((uintptr_t*)(new_process->esp - 20)) = entry; // EIP
     *((uintptr_t*)(new_process->esp - 24)) = reinterpret_cast<uintptr_t>(&ret_to_user_mode);
     *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebx
     *((uintptr_t*)(new_process->esp - 32)) = 0;      // esi
     *((uintptr_t*)(new_process->esp - 36)) = 0;      // edi
     *((uintptr_t*)(new_process->esp - 40)) = 0;      // ebp
     new_process->esp -= 40;
+}
+
+void init_pcb_for_new_process(pid_t newpid, uintptr_t sp, uint32_t pd_addr, uint32_t code_size) {
+    PCB*& new_process = process_list[newpid];
+    new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
+    memset(new_process, 0, sizeof(PCB));
     new_process->saved_eflags = 0x202;
     new_process->pid = newpid;
     new_process->create_time = pit_get_ticks();
     new_process->cr3 = pd_addr;
-
     // heap_start 也要考虑 .bss 额外页
     uint32_t total_pages = calc_total_pages(code_size);
     new_process->heap_start = CODE_SPACE_ADDR + total_pages * 4096;
     new_process->heap_break = new_process->heap_start;
-
     new_process->state = process_state::READY;
     new_process->parent_pid = cur_process_id;
     new_process->waiting_queue = nullptr;
@@ -230,6 +229,8 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     construct_args_from_kernel_buffer(argc, arg_lens, arg_bufs, sp);
 
     init_pcb_for_new_process(newpid, sp, pd_addr, code_size);
+    init_kernel_stack(process_list[newpid], KERNEL_STACK_SIZE, sp, CODE_SPACE_ADDR);
+
     insert_into_scheduling_queue(newpid, priority);
 
     vmm_switch(pd_addr_old);
