@@ -127,6 +127,15 @@ void copy_image_from_kernel_buffer(void* code_buf, uint32_t code_size) {
     kfree(code_buf);
 }
 
+uintptr_t create_user_stack(uint32_t page_size) {
+    uintptr_t stack_top_addr = CODE_STACK_TOP_ADDR;
+    for (uint32_t i = 0; i < page_size; i++) {
+        void* stack_space = pmm_alloc(1);
+        vmm_map_page((uintptr_t)stack_space, stack_top_addr - (16 - i) * 4096, 6);
+    }
+    return stack_top_addr;
+}
+
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
     pid_t newpid = get_new_pid();
@@ -148,12 +157,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
 
     copy_image_from_kernel_buffer(code_buf, code_size);
     
-    for (uint32_t i = 0; i < USER_STACK_PAGE_SIZE; i++) {
-        void* stack_space = pmm_alloc(1);
-        vmm_map_page((uintptr_t)stack_space, CODE_STACK_TOP_ADDR - (16 - i) * 4096, 6);
-    }
-
-    uintptr_t sp = CODE_STACK_TOP_ADDR;
+    uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
  
     uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
     for (int i = argc - 1; i >= 0; i--) {
