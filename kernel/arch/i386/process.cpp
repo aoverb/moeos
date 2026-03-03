@@ -86,6 +86,7 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     new_process->waiting_queue = nullptr;
     new_process->fd_num = 0;
     new_process->to_exit = 0;
+    new_process->plock.locked = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
 }
 

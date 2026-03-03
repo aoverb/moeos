@@ -29,6 +29,7 @@ typedef struct {
     uint32_t mode;
     uint32_t handle_id;
     uint32_t refcnt;
+    char path[255];
 } file_description;
 
 struct PCB;
@@ -57,6 +58,7 @@ typedef struct PCB {
     process_state state;
     process_queue waiting_queue;
 
+    spinlock plock;
     file_description* fd[MAX_FD_NUM];
     uint32_t fd_num;
 

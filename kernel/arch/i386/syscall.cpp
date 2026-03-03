@@ -49,7 +49,7 @@ int sys_mount(interrupt_frame* reg) {
     FS_DRIVER driver  = static_cast<FS_DRIVER>(reg->ebx);
     const char* path  = reinterpret_cast<const char*>(reg->ecx);
     void* device_data = reinterpret_cast<void*>(reg->edx);
-    return v_mount(driver, path, device_data);
+    return v_mount(driver, path, device_data) == nullptr ? -1 : 0;
 }
 
 // UNMOUNT(ebx = mount_path)
@@ -68,7 +68,6 @@ int sys_open(interrupt_frame* reg) {
 
 // READ(ebx = fd, ecx = buffer, edx = size)  → returns bytes read
 int sys_read(interrupt_frame* reg) {
-    SpinlockGuard guard(process_list_lock);
     int fd         = static_cast<int>(reg->ebx);
     char* buffer   = reinterpret_cast<char*>(reg->ecx);
     uint32_t size  = reg->edx;
@@ -77,7 +76,6 @@ int sys_read(interrupt_frame* reg) {
 
 // WRITE(ebx = fd, ecx = buffer, edx = size)  → returns bytes written
 int sys_write(interrupt_frame* reg) {
-    SpinlockGuard guard(process_list_lock);
     int fd              = static_cast<int>(reg->ebx);
     const char* buffer  = reinterpret_cast<const char*>(reg->ecx);
     uint32_t size       = reg->edx;

@@ -7,12 +7,12 @@
 idt_entry_struct idt_entries[256];
 extern "C" void system_call_handler();
 
-void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t dpl) {
+void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t dpl, uint8_t gate_type = 0xE) {
     idt_entries[num].offset_low  = base & 0xFFFF;
     idt_entries[num].offset_high = (base >> 16) & 0xFFFF;
     idt_entries[num].selector    = sel;
     idt_entries[num].zero        = 0;
-    idt_entries[num].gate_type       = 0xE;
+    idt_entries[num].gate_type       = gate_type;
     idt_entries[num].storage_segment = 0;
     idt_entries[num].dpl            = dpl;
     idt_entries[num].present        = 1;
@@ -29,7 +29,7 @@ void inner_interrupt_handler(registers* regs) {
     set_color(0xE0565C);
     printf("proc: %d, int:  %d\n", cur_process_id, regs->int_no);
     printf("An critical error has occurred: %d\n", regs->err_code);
-    // exit_process(cur_process_id, regs->int_no);
+    exit_process(cur_process_id, regs->int_no);
     set_color(0xF4F0EB);
     return;
 }
@@ -84,7 +84,7 @@ void idt_set_gates() {
     SET_ISR(46);
     SET_ISR(47);
 
-    idt_set_gate(0x80, (uint32_t)(&system_call_handler), 0x08, 3);
+    idt_set_gate(0x80, (uint32_t)(&system_call_handler), 0x08, 3, 0xF);
 }
 
 void idt_init() {

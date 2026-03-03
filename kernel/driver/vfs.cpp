@@ -85,7 +85,7 @@ void init_vfs() {
     file_handle_num = 0;
 }
 
-int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data) {
+mounting_point* v_mount(FS_DRIVER driver, const char* mount_path, void* device_data) {
     SpinlockGuard guard(vfs_lock);
     mount_list[mount_num] = reinterpret_cast<mounting_point*>(kmalloc(sizeof(mounting_point)));
     mount_list[mount_num]->operations = get_fs_operation(driver);
@@ -97,10 +97,10 @@ int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data) {
         mount_list[mount_num]->operations->mount(mount_list[mount_num]) != 0) {
         kfree(mount_list[mount_num]);
         mount_list[mount_num] = nullptr;
-        return -1;
+        return nullptr;
     }
     
-    return mount_num++;
+    return mount_list[mount_num++];
 }
 
 int v_unmount(const char* mount_path) {
@@ -158,29 +158,57 @@ int v_open(PCB* proc, const char* path, uint8_t mode) {
     fd->mode = mode;
     fd->offset = 0;
     fd->refcnt = 1;
+    strcpy(fd->path, path);
     ++file_handle_num;
     proc->fd_num++;
     return fd_pos;
 }
 
 int v_read(PCB* proc, int fd_pos, char* buffer, uint32_t size) {
-    SpinlockGuard guard(vfs_lock);
-    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
-    file_description*& fd = proc->fd[fd_pos];
-    mounting_point* mp = fd->mp;
-    if (!mp) return -1;
-    int ret = mp->operations->read(mp, fd->inode_id, fd->offset, buffer, size);
-    if (ret > 0) fd->offset += ret;
+    mounting_point* mp;
+    uint32_t inode_id;
+    uint32_t offset;
+
+    {
+        SpinlockGuard guard(vfs_lock);
+        if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+        {
+            SpinlockGuard guard(proc->plock);
+            file_description* fd = proc->fd[fd_pos];
+            if (!fd || !fd->mp) return -1;
+            mp = fd->mp;
+            inode_id = fd->inode_id;
+            offset = fd->offset;
+        }
+    }
+
+    int ret = mp->operations->read(mp, inode_id, offset, buffer, size);
+
+    if (ret > 0) {
+        SpinlockGuard guard(proc->plock);
+        proc->fd[fd_pos]->offset += ret;
+    }
+
     return ret;
 }
 
 int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size) {
-    SpinlockGuard guard(vfs_lock);
-    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
-    file_description*& fd = proc->fd[fd_pos];
-    mounting_point* mp = fd->mp;
-    if (!mp) return -1;
-    return mp->operations->write(mp, fd->inode_id, buffer, size);
+    mounting_point* mp;
+    uint32_t inode_id;
+
+    {
+        SpinlockGuard guard(vfs_lock);
+        if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+        {
+            SpinlockGuard guard(proc->plock);
+            file_description* fd = proc->fd[fd_pos];
+            if (!fd || !fd->mp) return -1;
+            mp = fd->mp;
+            inode_id = fd->inode_id;
+        }
+    }
+
+    return mp->operations->write(mp, inode_id, buffer, size);
 }
 
 int v_close(PCB* proc, int fd_pos) {
@@ -226,6 +254,7 @@ int v_opendir(PCB* proc, const char* path) {
     fd->inode_id = inode_id;
     fd->offset = 0;
     fd->refcnt = 1;
+    strcpy(fd->path, path);
     ++file_handle_num;
     proc->fd_num++;
     return fd_pos;
@@ -235,9 +264,48 @@ int v_readdir(PCB* proc, int fd_pos, dirent* out) {
     SpinlockGuard guard(vfs_lock);
     if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
     file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
     mounting_point* mp = fd->mp;
     if (!mp) return -1;
-    int ret = mp->operations->readdir(mp, fd->inode_id, fd->offset, out);
+
+    uint32_t n_mounts = 0;
+    uint32_t dir_len = strlen(fd->path);
+
+    for (uint32_t i = 0; i < mount_num; i++) {
+        if (!mount_list[i] || mount_list[i] == mp) continue;
+        const char* mpath = mount_list[i]->mount_path;
+
+        // 检查这个挂载点是否是 fd->path 的直接子级
+        bool is_child = false;
+        if (dir_len == 1 && fd->path[0] == '/') {
+            // 当前目录是 "/"：挂载点形如 "/xxx"（无更多 '/'）
+            if (mpath[0] == '/' && mpath[1] != '\0' && !strchr(mpath + 1, '/'))
+                is_child = true;
+        } else {
+            // 当前目录是 "/home" 等：挂载点必须是 "/home/xxx"
+            if (strncmp(mpath, fd->path, dir_len) == 0 
+                && mpath[dir_len] == '/'
+                && mpath[dir_len + 1] != '\0'
+                && !strchr(mpath + dir_len + 1, '/'))
+                is_child = true;
+        }
+
+        if (!is_child) continue;
+
+        if (n_mounts == fd->offset) {
+            // 提取最后一段名字
+            const char* name = (dir_len == 1) ? mpath + 1 : mpath + dir_len + 1;
+            strcpy(out->name, name);
+            out->type = '5';
+            out->inode = 0;
+            fd->offset++;
+            return 1;
+        }
+        n_mounts++;
+    }
+
+    uint32_t fs_offset = fd->offset - n_mounts;
+    int ret = mp->operations->readdir(mp, fd->inode_id, fs_offset, out);
     if (ret == 1) fd->offset++;
     return ret;
 }
@@ -266,26 +334,21 @@ int v_stat(const char* path, file_stat* out) {
     if (!mp) return -1;
     return mp->operations->stat(mp, get_mounting_relative_path(mp, path), out);
 }
-
 void resolve_path(const char* cwd, const char* input, char* output) {
     char tmp[MAX_PATH_LEN];
 
-    // 1. 拼接：相对路径拼上 cwd，绝对路径直接用
     if (input[0] == '/') {
         strcpy(tmp, input);
     } else {
-        uint32_t cwd_len = strlen(cwd);
         strcpy(tmp, cwd);
-        if (cwd_len > 1 || cwd[0] != '/') {
-            if (tmp[cwd_len - 1] != '/') {
-                tmp[cwd_len] = '/';
-                tmp[cwd_len + 1] = '\0';
-            }
+        uint32_t len = strlen(tmp);
+        if (len > 0 && tmp[len - 1] != '/') {
+            tmp[len] = '/';
+            tmp[len + 1] = '\0';
         }
         strcat(tmp, input);
     }
 
-    // 2. 按 '/' 分割，逐段处理 "." 和 ".."
     char* components[MAX_PATH_LEN / 2];
     int depth = 0;
 
@@ -301,15 +364,12 @@ void resolve_path(const char* cwd, const char* input, char* output) {
         *end = '\0';
 
         if (strcmp(token, ".") == 0) {
-            // 当前目录，跳过
         } else if (strcmp(token, "..") == 0) {
             if (depth > 0) depth--;
         } else {
             components[depth++] = token;
         }
 
-        // 不恢复截断，让每个 component 保持独立的 '\0' 结尾
-        // 根据原字符决定如何推进 token
         token = saved ? end + 1 : end;
     }
 

@@ -11,7 +11,8 @@ extern "C" {
 constexpr uint32_t MAX_DRIVER_NUM = 32;
 constexpr uint32_t MAX_PATH_LEN = 256;
 enum class FS_DRIVER {
-    TARFS = 0
+    TARFS = 0,
+    DEVFS = 1
 };
 
 struct dirent {
@@ -57,7 +58,7 @@ typedef struct mounting_point {
 void init_vfs();
 
 int register_fs_operation(FS_DRIVER driver, fs_operation* operations);
-int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data);
+mounting_point* v_mount(FS_DRIVER driver, const char* mount_path, void* device_data);
 int v_unmount(const char* mount_path);
 int v_open(PCB* proc, const char* path, uint8_t mode);
 int v_read(PCB* proc, int fd_pos, char* buffer, uint32_t size);

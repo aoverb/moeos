@@ -20,6 +20,7 @@
 #include <driver/pit.h>
 #include <driver/vfs.hpp>
 #include <driver/tarfs.hpp>
+#include <driver/devfs.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -188,6 +189,8 @@ void test_unordered_map() {
     printf("test_unordered_map KERNEL MODE OK\n");
 }
 
+extern int init_console_dev(mounting_point* mp);
+
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
@@ -225,7 +228,8 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     // test_unordered_map();
     init_vfs();
     init_tarfs();
-    
+    init_devfs();
+
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);
 
@@ -233,13 +237,21 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     for (uint32_t i = 0; i < mod_count; i++) {
         tarmeta.data = saved[i].data;
         tarmeta.size = saved[i].size;
-        int ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta);
+        mounting_point* ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta);
         if (ret < 0) {
             panic("failed to mount root!");
         } else {
             printf("Root mounted!\n\n");
         }
     }
+
+    mounting_point* ret = v_mount(FS_DRIVER::DEVFS, "/dev", nullptr);
+    if (ret == nullptr) {
+        panic("failed to mount devfs to /dev!");
+    } else {
+        printf("/dev mounted!\n\n");
+    }
+    init_console_dev(ret);
 
     PCB* cur_pcb = process_list[cur_process_id];
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);

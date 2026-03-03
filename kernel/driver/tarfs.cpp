@@ -166,7 +166,6 @@ int construct_index(tarfs_data* tdata) {
             return -1;
         }
         if (cur_block->name_prefix[0] == '\0') {
-            char path[100];
             strcpy(cur_block->name_prefix, cur_block->name);
             int len = strlen(cur_block->name);
             if (cur_block->name[len - 1] == '/') --len;
@@ -211,7 +210,7 @@ int construct_index(tarfs_data* tdata) {
     return 0;
 }
 
-int mount(mounting_point* mp) {
+static int mount(mounting_point* mp) {
     tarfs_data* tdata = (tarfs_data*)kmalloc(sizeof(tarfs_data));
     if (!mp->data) return -1;
     tarfs_metadata* mdata = reinterpret_cast<tarfs_metadata*>(mp->data);
@@ -228,11 +227,11 @@ int mount(mounting_point* mp) {
     return 0;
 }
 
-int unmount(mounting_point*) {
+static int unmount(mounting_point*) {
     return -1;
 }
 
-int open(mounting_point* mp, const char* path, uint8_t mode) {
+static int open(mounting_point* mp, const char* path, uint8_t) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
     tar_inode* file_inode = get_inode_by_path(data, path);
@@ -240,7 +239,7 @@ int open(mounting_point* mp, const char* path, uint8_t mode) {
     return file_inode->child_inodes["."];
 }
 
-int close(mounting_point* mp, uint32_t inode_id) {
+static int close(mounting_point*, uint32_t) {
     return 0;
 }
 
@@ -251,7 +250,7 @@ static void print_field(const char* label, const char* field, int max_len) {
     printf("%s %s\n", label, buf);
 }
 
-void tar_dump_block(tar_block* block) {
+static void tar_dump_block(tar_block* block) {
     if (!block) {
         printf("tar_block: NULL\n");
         return;
@@ -277,7 +276,7 @@ void tar_dump_block(tar_block* block) {
     printf("=================\n");
 }
 
-int tar_read(tarfs_data* data, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+static int tar_read(tarfs_data* data, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     tar_inode* file_inode = data->inodes[inode_id];
     // tar_dump_block(file_inode->block);
     uint32_t file_size = parse_octal(file_inode->block->size, 12);
@@ -291,7 +290,7 @@ int tar_read(tarfs_data* data, uint32_t inode_id, uint32_t offset, char* buffer,
     return size;
 }
 
-int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
     if (inode_id >= data->inode_cnt || !data->inodes[inode_id]) {
@@ -300,16 +299,16 @@ int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, u
     return tar_read(data, inode_id, offset, buffer, size);
 }
 
-int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
+static int write(mounting_point*, uint32_t, const char*, uint32_t) {
     // read-only filesystem
     return -1;
 }
 
-int opendir(mounting_point* mp, const char* path) {
+static int opendir(mounting_point* mp, const char* path) {
     return open(mp, path, 1);
 }
 
-int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
+static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
     if (inode_id >= data->inode_cnt) return -1;
@@ -339,11 +338,11 @@ int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out)
     return 1;
 }
 
-int closedir(mounting_point* mp, uint32_t inode_id) {
+static int closedir(mounting_point* mp, uint32_t inode_id) {
     return close(mp, inode_id);
 }
 
-int stat(mounting_point* mp, const char* path, file_stat* out) {
+static int stat(mounting_point* mp, const char* path, file_stat* out) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
     tar_inode* inode = get_inode_by_path(data, path);
