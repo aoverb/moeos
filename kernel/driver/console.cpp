@@ -5,12 +5,28 @@
 
 static int console_read(char* buffer, uint32_t offset, uint32_t size) {
     uint32_t i = 0;
-    while (i < size) {
+    while (i < size - 1) {
         while (!keyboard_haschar())
             asm volatile("pause");
         char c = keyboard_getchar();
-        buffer[i++] = c;
-        if (c == '\n') break;
+
+        if (c == '\b') {
+            if (i == 0) continue;
+            --i;
+            terminal_write("\b", 1);   // 回显退格
+            continue;
+        }
+
+        if (c == '\n') {
+            buffer[i++] = '\n';
+            terminal_write("\n", 1);   // 回显换行
+            break;
+        }
+
+        if (c >= 32 && c <= 126) {
+            buffer[i++] = c;
+            terminal_write(&c, 1);     // 回显可见字符
+        }
     }
     return i;
 }

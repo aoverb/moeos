@@ -7,10 +7,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <elf.h>
+#include <file.h>
 
 PCB* process_list[MAX_PROCESSES_NUM] = {};
 pid_t cur_process_id = 0;
 spinlock process_list_lock;
+
+extern "C" int v_open(PCB* proc, const char* path, uint8_t mode);
 
 extern "C" void ret_to_user_mode();
 extern uintptr_t stack_bottom;
@@ -88,6 +91,9 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     new_process->to_exit = 0;
     new_process->plock.locked = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
+    v_open(new_process, "/dev/console", O_RDONLY);
+    v_open(new_process, "/dev/console", O_WRONLY);
+    v_open(new_process, "/dev/console", O_WRONLY);
 }
 
 void process_init() {

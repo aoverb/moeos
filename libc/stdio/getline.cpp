@@ -3,6 +3,8 @@
 #include <syscall_def.h>
 #if defined(__is_libk)
 #include <driver/keyboard.h>
+#else
+#include <file.h>
 #endif
 
 
@@ -39,7 +41,10 @@ void getline(char* buf, uint32_t size) {
 
     buf[i] = '\0';
 #else
-	syscall2(3, reinterpret_cast<uint32_t>(buf), size);
+    int n = read(0, buf, size - 1);
+    if (n < 0) n = 0;
+    if (n > 0 && buf[n - 1] == '\n') n--;
+    buf[n] = '\0';
 #endif
 
 }

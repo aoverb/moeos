@@ -2,6 +2,8 @@
 
 #if defined(__is_libk)
 #include <kernel/tty.h>
+#else
+#include <file.h>
 #endif
 
 #include <syscall_def.h>
@@ -15,7 +17,7 @@ int putchar(int ic) {
 	char s[2];
 	s[0] = c;
 	s[1] = '\0';
-	syscall1((uint32_t)SYSCALL::TERMINAL_WRITE, reinterpret_cast<uint32_t>(s));
+	write(1, s, 1);
 #endif
 	return ic;
 }

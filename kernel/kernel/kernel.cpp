@@ -189,7 +189,7 @@ void test_unordered_map() {
     printf("test_unordered_map KERNEL MODE OK\n");
 }
 
-extern int init_console_dev(mounting_point* mp);
+extern void init_console_dev(mounting_point* mp);
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
@@ -220,25 +220,16 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     syscall_init();
     printf("OK\n");
 
-    printf("process initializing...");
-    process_init();
-    asm volatile ("sti");
-    printf("OK\n");
-
-    // test_unordered_map();
+    printf("filesystem initializing...");
     init_vfs();
     init_tarfs();
     init_devfs();
-
-    printf("Welcome, aoverb!\n\n");
-    printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);
-
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
         tarmeta.data = saved[i].data;
         tarmeta.size = saved[i].size;
         mounting_point* ret = v_mount(FS_DRIVER::TARFS, "/", &tarmeta);
-        if (ret < 0) {
+        if (ret == nullptr) {
             panic("failed to mount root!");
         } else {
             printf("Root mounted!\n\n");
@@ -252,6 +243,18 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
         printf("/dev mounted!\n\n");
     }
     init_console_dev(ret);
+    printf("OK\n");
+    
+    printf("process initializing...");
+    process_init();
+    asm volatile ("sti");
+    printf("OK\n");
+
+    // test_unordered_map();
+
+
+    printf("Welcome, aoverb!\n\n");
+    printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);
 
     PCB* cur_pcb = process_list[cur_process_id];
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
