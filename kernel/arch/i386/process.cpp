@@ -187,6 +187,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     }
 
     if (!verify_elf(code, code_size)) {
+        printf("illegal elf!\n");
         spinlock_release(&process_list_lock, saved_eflags);
         return 0;
     }

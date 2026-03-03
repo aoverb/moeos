@@ -251,6 +251,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     printf("Executing shell: %d bytes loaded\n", size);
 
     pid_t shell_pid = exec(buffer, size, 1, 0, nullptr);
+    if (shell_pid == 0) panic("Loading shell failed!");
     waitpid(shell_pid);
     while (1) {
         yield();
