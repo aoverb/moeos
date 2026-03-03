@@ -37,12 +37,12 @@ struct fs_operation {
     int (*mount)(mounting_point* mp);
     int (*unmount)(mounting_point* mp);
     int (*open)(mounting_point* mp, const char* path, uint8_t mode);
-    int (*close)(mounting_point* mp, uint32_t handle_id);
-    int (*read)(mounting_point* mp, uint32_t handle_id, char* buffer, uint32_t size);
-    int (*write)(mounting_point* mp, uint32_t handle_id, const char* buffer, uint32_t size);
+    int (*close)(mounting_point* mp, uint32_t inode_id);
+    int (*read)(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size);
+    int (*write)(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size);
     int (*opendir)(mounting_point* mp, const char* path);
-    int (*readdir)(mounting_point* mp, uint32_t handle_id, dirent* out);
-    int (*closedir)(mounting_point* mp, uint32_t handle_id);
+    int (*readdir)(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out);
+    int (*closedir)(mounting_point* mp, uint32_t inode_id);
     int (*stat)(mounting_point* mp, const char* path, file_stat* out);
 };
 
@@ -60,12 +60,12 @@ int register_fs_operation(FS_DRIVER driver, fs_operation* operations);
 int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data);
 int v_unmount(const char* mount_path);
 int v_open(PCB* proc, const char* path, uint8_t mode);
-int v_read(PCB* proc, int fd, char* buffer, uint32_t size);
-int v_write(PCB* proc, int fd, const char* buffer, uint32_t size);
-int v_close(PCB* proc, int fd);
+int v_read(PCB* proc, int fd_pos, char* buffer, uint32_t size);
+int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size);
+int v_close(PCB* proc, int fd_pos);
 int v_opendir(PCB* proc, const char* path);
-int v_readdir(PCB* proc, int fd, dirent* out);
-int v_closedir(PCB* proc, int fd);
+int v_readdir(PCB* proc, int fd_pos, dirent* out);
+int v_closedir(PCB* proc, int fd_pos);
 int v_stat(const char* path, file_stat* out);
 
 void resolve_path(const char* cwd, const char* input, char* output);

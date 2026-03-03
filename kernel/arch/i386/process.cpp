@@ -193,7 +193,6 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
 
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
     if (!verify_elf(code, code_size)) {
-        printf("illegal elf!\n");
         return 0;
     }
 

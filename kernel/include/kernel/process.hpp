@@ -10,7 +10,7 @@ typedef int pid_t;
 
 constexpr pid_t MAX_PROCESSES_NUM = 65536;
 constexpr uint32_t KERNEL_STACK_SIZE = 4096;
-constexpr uint32_t MAX_FD_NUM = 32;
+constexpr uint32_t MAX_FD_NUM = 128;
 constexpr uint32_t USER_STACK_PAGE_SIZE = 16;
 struct mounting_point;
 
@@ -22,11 +22,14 @@ enum class process_state {
     WAITING = 4
 };
 
-struct file_description {
+typedef struct {
     mounting_point* mp;
-    char path[256];
-    uint32_t handle_id; // 用于在mp对应的挂载点上找到对应的文件交互上下文，不用传PATH
-};
+    uint32_t inode_id;
+    uint32_t offset;
+    uint32_t mode;
+    uint32_t handle_id;
+    uint32_t refcnt;
+} file_description;
 
 struct PCB;
 typedef PCB* process_queue;
@@ -54,7 +57,7 @@ typedef struct PCB {
     process_state state;
     process_queue waiting_queue;
 
-    file_description fd[MAX_FD_NUM];
+    file_description* fd[MAX_FD_NUM];
     uint32_t fd_num;
 
     char cwd[256];

@@ -9,7 +9,6 @@ fs_operation tar_fs_operation;
 
 constexpr uint32_t READ = 1;
 constexpr uint32_t MAX_INODE_NUM = 32768;
-constexpr uint32_t MAX_HANDLE_NUM = 4096;
 
 typedef struct {
     char name[100];
@@ -42,7 +41,6 @@ struct tarfs_data {
     uint32_t tar_size;
     tar_inode* inodes[MAX_INODE_NUM]; 
     uint32_t inode_cnt;
-    file_handle file_handles[MAX_HANDLE_NUM];
     spinlock lock;
 };
 
@@ -96,10 +94,10 @@ tar_inode* construct_inode_by_path(tarfs_data* tdata, const char* path) {
         s[s_len] = '\0';
         if (s[0] == '\0') break;
         if (cur_node->child_inodes.find(s) == cur_node->child_inodes.end()) {
-            uint32_t new_id = tdata->inode_cnt++;
             if (tdata->inode_cnt > MAX_INODE_NUM) {
                 return nullptr;
             }
+            uint32_t new_id = tdata->inode_cnt++;
             cur_node->child_inodes[s] = new_id;
 
             tar_inode* new_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
@@ -222,7 +220,6 @@ int mount(mounting_point* mp) {
     tdata->inode_cnt = 0;
     tdata->lock.locked = 0;
     memset(tdata->inodes, 0, sizeof(tdata->inodes));
-    memset(tdata->file_handles, 0, sizeof(tdata->file_handles));
     if (construct_index(tdata) != 0) {
         // todo: cleaning
         return -1;
@@ -240,27 +237,10 @@ int open(mounting_point* mp, const char* path, uint8_t mode) {
     SpinlockGuard guard(data->lock);
     tar_inode* file_inode = get_inode_by_path(data, path);
     if (file_inode == nullptr) return -1;
-    for (int i = 0; i < MAX_HANDLE_NUM; ++i) {
-        if (data->file_handles[i].valid == 0) {
-            file_handle& handle = data->file_handles[i];
-            handle.inode_no = file_inode->child_inodes["."];
-            handle.offset = 0;
-            handle.type = file_inode->block->type;
-            handle.mode = mode;
-            handle.valid = 1;
-            return i;
-        }
-    }
-    return -1;
+    return file_inode->child_inodes["."];
 }
 
-int close(mounting_point* mp, uint32_t handle_id) {
-    tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
-    SpinlockGuard guard(data->lock);
-    if (data->file_handles[handle_id].valid == 0) {
-        return -1;
-    }
-    data->file_handles[handle_id].valid = 0;
+int close(mounting_point* mp, uint32_t inode_id) {
     return 0;
 }
 
@@ -297,12 +277,8 @@ void tar_dump_block(tar_block* block) {
     printf("=================\n");
 }
 
-int tar_read(tarfs_data* data, uint32_t handle_id, char* buffer, uint32_t size) {
-    if (!data->file_handles[handle_id].valid) {
-        return -1;
-    }
-    uint32_t offset = data->file_handles[handle_id].offset;
-    tar_inode* file_inode = data->inodes[data->file_handles[handle_id].inode_no];
+int tar_read(tarfs_data* data, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+    tar_inode* file_inode = data->inodes[inode_id];
     // tar_dump_block(file_inode->block);
     uint32_t file_size = parse_octal(file_inode->block->size, 12);
     if (offset >= file_size) {
@@ -312,21 +288,19 @@ int tar_read(tarfs_data* data, uint32_t handle_id, char* buffer, uint32_t size) 
         size = file_size - offset;
     }
     memcpy(buffer, (char*)file_inode->block + 512 + offset, size);
-    data->file_handles[handle_id].offset += size;
     return size;
 }
 
-int read(mounting_point* mp, uint32_t handle_id, char* buffer, uint32_t size) {
-    if (handle_id >= MAX_HANDLE_NUM) return -1;
+int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
-    if ((data->file_handles[handle_id].mode & READ) == 0 || data->file_handles[handle_id].type == TYPE_DIR) {
+    if (inode_id >= data->inode_cnt || !data->inodes[inode_id]) {
         return -1;
     }
-    return tar_read(data, handle_id, buffer, size);
+    return tar_read(data, inode_id, offset, buffer, size);
 }
 
-int write(mounting_point* mp, uint32_t handle_id, const char* buffer, uint32_t size) {
+int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
     // read-only filesystem
     return -1;
 }
@@ -335,27 +309,19 @@ int opendir(mounting_point* mp, const char* path) {
     return open(mp, path, 1);
 }
 
-int readdir(mounting_point* mp, uint32_t handle_id, dirent* out) {
-    if (handle_id >= MAX_HANDLE_NUM) return -1;
+int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
     tarfs_data* data = reinterpret_cast<tarfs_data*>(mp->data);
     SpinlockGuard guard(data->lock);
-    file_handle& handle = data->file_handles[handle_id];
-
-    if ((data->file_handles[handle_id].mode & READ) == 0 || data->file_handles[handle_id].type != TYPE_DIR) {
-        return -1;
-    }
-    if (!data->file_handles[handle_id].valid) {
-        return -1;
-    }
-    tar_inode* dir_inode = data->inodes[handle.inode_no];
+    if (inode_id >= data->inode_cnt) return -1;
+    tar_inode* dir_inode = data->inodes[inode_id];
     auto& children = dir_inode->child_inodes;
 
-    if (handle.offset >= children.size()) {
+    if (offset >= children.size()) {
         return 0;
     }
 
     auto it = children.begin();
-    for (uint32_t i = 0; i < handle.offset; ++i) {
+    for (uint32_t i = 0; i < offset; ++i) {
         ++it; // 非常拉跨
     }
 
@@ -370,12 +336,11 @@ int readdir(mounting_point* mp, uint32_t handle_id, dirent* out) {
     } else {
         out->type = TYPE_DIR;
     }
-    handle.offset++;
     return 1;
 }
 
-int closedir(mounting_point* mp, uint32_t handle_id) {
-    return close(mp, handle_id);
+int closedir(mounting_point* mp, uint32_t inode_id) {
+    return close(mp, inode_id);
 }
 
 int stat(mounting_point* mp, const char* path, file_stat* out) {

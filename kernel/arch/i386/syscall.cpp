@@ -60,6 +60,7 @@ int sys_unmount(interrupt_frame* reg) {
 
 // OPEN(ebx = path, ecx = mode)  → returns fd
 int sys_open(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     const char* path = reinterpret_cast<const char*>(reg->ebx);
     uint8_t mode     = static_cast<uint8_t>(reg->ecx);
     return v_open(current_pcb(), path, mode);
@@ -67,6 +68,7 @@ int sys_open(interrupt_frame* reg) {
 
 // READ(ebx = fd, ecx = buffer, edx = size)  → returns bytes read
 int sys_read(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     int fd         = static_cast<int>(reg->ebx);
     char* buffer   = reinterpret_cast<char*>(reg->ecx);
     uint32_t size  = reg->edx;
@@ -75,6 +77,7 @@ int sys_read(interrupt_frame* reg) {
 
 // WRITE(ebx = fd, ecx = buffer, edx = size)  → returns bytes written
 int sys_write(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     int fd              = static_cast<int>(reg->ebx);
     const char* buffer  = reinterpret_cast<const char*>(reg->ecx);
     uint32_t size       = reg->edx;
@@ -83,18 +86,21 @@ int sys_write(interrupt_frame* reg) {
 
 // CLOSE(ebx = fd)
 int sys_close(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     int fd = static_cast<int>(reg->ebx);
     return v_close(current_pcb(), fd);
 }
 
 // OPENDIR(ebx = path)  → returns dir fd
 int sys_opendir(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     const char* path = reinterpret_cast<const char*>(reg->ebx);
     return v_opendir(current_pcb(), path);
 }
 
 // READDIR(ebx = fd, ecx = &dirent)  → 0 on success, -1 on end/error
 int sys_readdir(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     int fd        = static_cast<int>(reg->ebx);
     dirent* out   = reinterpret_cast<dirent*>(reg->ecx);
     return v_readdir(current_pcb(), fd, out);
@@ -102,6 +108,7 @@ int sys_readdir(interrupt_frame* reg) {
 
 // CLOSEDIR(ebx = fd)
 int sys_closedir(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     int fd = static_cast<int>(reg->ebx);
     return v_closedir(current_pcb(), fd);
 }
