@@ -28,7 +28,7 @@ static int mount(mounting_point* mp) {
     mp->data = (dev_item*)kmalloc(sizeof(dev_item));
     memset(mp->data, 0, sizeof(dev_item));
     reinterpret_cast<dev_item*>(mp->data)->entry[0].dev_id = 0;
-    strcpy(reinterpret_cast<dev_item*>(mp->data)->entry[0].name, "/");
+    strcpy(reinterpret_cast<dev_item*>(mp->data)->entry[0].name, ".");
     reinterpret_cast<dev_item*>(mp->data)->entry[0].opr = (dev_operation*)kmalloc(sizeof(dev_operation));
     reinterpret_cast<dev_item*>(mp->data)->entry[0].opr->read = &return_minus_1;
     reinterpret_cast<dev_item*>(mp->data)->entry[0].opr->write = &return_minus_1_;

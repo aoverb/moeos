@@ -191,18 +191,20 @@ int construct_index(tarfs_data* tdata) {
         if (strlen(key) && key[strlen(key) - 1] == '/') {
             key[strlen(key) - 1] = '\0';
         }
-        if (dir->child_inodes.find(key) == dir->child_inodes.end()) {
-            tar_inode* new_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
-            dir->child_inodes[key] = tdata->inode_cnt;
-            tdata->inodes[tdata->inode_cnt++] = new_node;
-            if (tdata->inode_cnt > MAX_INODE_NUM) {
-                // todo: cleaning
-                return -1;
+        if (*key) {
+            if (dir->child_inodes.find(key) == dir->child_inodes.end()) {
+                tar_inode* new_node = new (kmalloc(sizeof(tar_inode))) tar_inode();
+                dir->child_inodes[key] = tdata->inode_cnt;
+                tdata->inodes[tdata->inode_cnt++] = new_node;
+                if (tdata->inode_cnt > MAX_INODE_NUM) {
+                    // todo: cleaning
+                    return -1;
+                }
             }
+            tdata->inodes[dir->child_inodes[key]]->block = cur_block;
+            tdata->inodes[dir->child_inodes[key]]->child_inodes["."] = dir->child_inodes[key];
+            tdata->inodes[dir->child_inodes[key]]->child_inodes[".."] = dir->child_inodes["."];
         }
-        tdata->inodes[dir->child_inodes[key]]->block = cur_block;
-        tdata->inodes[dir->child_inodes[key]]->child_inodes["."] = dir->child_inodes[key];
-        tdata->inodes[dir->child_inodes[key]]->child_inodes[".."] = dir->child_inodes["."];
 
         uint64_t file_size = parse_octal(cur_block->size, 12);
         cur_addr = (uint8_t*)cur_addr + 512 + ((file_size + 511) / 512) * 512;
