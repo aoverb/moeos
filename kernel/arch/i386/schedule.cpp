@@ -1,6 +1,6 @@
-#include <kernel/schedule.h>
+#include <kernel/schedule.hpp>
 #include <kernel/panic.h>
-#include <kernel/process.h>
+#include <kernel/process.hpp>
 #include <kernel/hal.h>
 #include <stdio.h>
 #include <string.h>

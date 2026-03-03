@@ -2,6 +2,7 @@
 #define _KERNEL_PROCESS_H
 
 #include <stdint.h>
+#include <kernel/spinlock.hpp>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,6 +62,7 @@ typedef struct PCB {
 
 extern PCB* process_list[MAX_PROCESSES_NUM];
 extern pid_t cur_process_id;
+extern spinlock process_list_lock;
 
 bool insert_into_process_queue(process_queue& queue, PCB* process);
 void remove_from_process_queue(process_queue& queue, pid_t pid);

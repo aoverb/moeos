@@ -1,14 +1,18 @@
 #include <kernel/mm.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.hpp>
 #include <string.h>
 
-page_frame* all_pages;
+static page_frame* all_pages;
 
-page_frame* free_area[MAX_ORDER];
+static page_frame* free_area[MAX_ORDER];
 
-uint32_t page_limit;
+static uint32_t page_limit;
+
+static spinlock pmm_lock;
 
 void pmm_probe() {
+    SpinlockGuard guard(pmm_lock);
     uint32_t i = 0;
     for(;i < MAX_ORDER; i++) {
         page_frame* pf = free_area[i];
@@ -79,7 +83,8 @@ void pmm_init(pm_list* pms) {
     }
 }
 
-void* pmm_alloc(uint32_t size) {
+// 内部无锁版本，供递归调用
+static void* pmm_alloc_internal(uint32_t size) {
     if (size < (1 << 12)) {
         size = 1 << 12;
     } else if ((size & (size - 1)) != 0) {
@@ -96,7 +101,7 @@ void* pmm_alloc(uint32_t size) {
         free_area[order] = free_area[order]->next;
         return ret;
     } else {
-        void* cur_ret = pmm_alloc(1 << (order + 12 + 1));
+        void* cur_ret = pmm_alloc_internal(1 << (order + 12 + 1));  // 递归调用无锁版本
         if (!cur_ret) return 0;
         all_pages[(uintptr_t)cur_ret >> 12].order = order;
         // 只有一半是我们要用到的，另一半我们加入到本阶的free_area里
@@ -110,11 +115,18 @@ void* pmm_alloc(uint32_t size) {
     }
 }
 
+void* pmm_alloc(uint32_t size) {
+    SpinlockGuard guard(pmm_lock);
+    return pmm_alloc_internal(size);
+}
+
 uintptr_t get_buddy_index(uintptr_t idx) {
     return (idx ^ (1 << (all_pages[idx].order)));
 }
 
 void pmm_free(void* addr) {
+    SpinlockGuard guard(pmm_lock);
+
     uintptr_t cur_index = (uintptr_t)addr >> 12;
     page_frame* pf = &all_pages[cur_index];
     pf->allocated = 0;

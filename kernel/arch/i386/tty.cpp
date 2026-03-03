@@ -2,7 +2,7 @@
 #include <kernel/tty.h>
 #include <kernel/font.h>
 #include <kernel/mm.h>
-#include <kernel/spinlock.h>
+#include <kernel/spinlock.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
 #include <stddef.h>
@@ -102,11 +102,10 @@ void terminal_scroll() {
 }
 
 void terminal_write(const char* data, size_t size) {
-    uint32_t saved_eflags = spinlock_acquire(&tty_lock);
+    SpinlockGuard guard(tty_lock);
     for (size_t i = 0; i < size; i++) {
         if (data[i] == '\b') {
             if (terminal_col == 0 && terminal_row == 0) {
-                spinlock_release(&tty_lock, saved_eflags);
                 return;
             }
             if (terminal_col == 0) {
@@ -150,5 +149,4 @@ void terminal_write(const char* data, size_t size) {
         const uint8_t* glyph = font_8x16[c];
         terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
     }
-    spinlock_release(&tty_lock, saved_eflags);
 }

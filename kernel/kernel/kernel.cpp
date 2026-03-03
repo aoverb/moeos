@@ -10,7 +10,7 @@
 #include <kernel/tty.h>
 #include <kernel/hal.h>
 #include <kernel/mm.h>
-#include <kernel/schedule.h>
+#include <kernel/schedule.hpp>
 #include <kernel/process.h>
 #include <kernel/syscall.h>
 #include <kernel/panic.h>
@@ -18,8 +18,8 @@
 
 #include <driver/keyboard.h>
 #include <driver/pit.h>
-#include <driver/vfs.h>
-#include <driver/tarfs.h>
+#include <driver/vfs.hpp>
+#include <driver/tarfs.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push

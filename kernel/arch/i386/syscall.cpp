@@ -1,9 +1,10 @@
 #include <kernel/syscall.h>
 #include <kernel/mm.h>
 #include <syscall_def.h>
-#include <kernel/process.h>
-#include <driver/vfs.h>
+#include <kernel/process.hpp>
+#include <driver/vfs.hpp>
 #include <kernel/tty.h>
+#include <kernel/spinlock.hpp>
 #include <string.h>
 #include <stdio.h>
 
@@ -107,8 +108,9 @@ int sys_closedir(interrupt_frame* reg) {
 
 // SYS_CHDIR(ebx = path)  → 0 on success, -1 on end/error
 int sys_chdir(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     const char* path = reinterpret_cast<const char*>(reg->ebx);
-    PCB* cur_pcb = process_list[cur_process_id];
+    PCB* cur_pcb = current_pcb();
     
     char resolved[MAX_PATH_LEN];
     resolve_path(cur_pcb->cwd, path, resolved);
@@ -122,6 +124,7 @@ int sys_chdir(interrupt_frame* reg) {
 
 // GETCWD(ebx = buf, ecx = size) → returns 0 on success, -1 on failure
 int sys_getcwd(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     char* buf       = reinterpret_cast<char*>(reg->ebx);
     uint32_t size   = static_cast<uint32_t>(reg->ecx);
     PCB* proc = current_pcb();
@@ -151,8 +154,9 @@ int sys_waitpid(interrupt_frame* reg) {
 
 // SBRK(ebx = increment)
 int sys_sbrk(interrupt_frame* reg) {
+    SpinlockGuard guard(process_list_lock);
     uintptr_t increment = static_cast<uintptr_t>(reg->ebx);
-    PCB* cur_pcb = process_list[cur_process_id];
+    PCB* cur_pcb = current_pcb();
     uintptr_t old_break = cur_pcb->heap_break;
     uintptr_t new_break = old_break + increment;
 

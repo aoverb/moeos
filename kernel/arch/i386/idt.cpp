@@ -2,7 +2,7 @@
 #include "io.h"
 #include <stdio.h>
 #include <string.h>
-#include <kernel/process.h>
+#include <kernel/process.hpp>
 
 idt_entry_struct idt_entries[256];
 extern "C" void system_call_handler();

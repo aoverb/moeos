@@ -1,7 +1,7 @@
 #include <driver/pit.h>
 #include <kernel/hal.h>
 #include <kernel/isr.h>
-#include <kernel/schedule.h>
+#include <kernel/schedule.hpp>
 
 #include <stdio.h>
 

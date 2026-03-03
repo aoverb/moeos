@@ -1,8 +1,8 @@
-#include <kernel/process.h>
+#include <kernel/process.hpp>
 #include <kernel/mm.h>
 #include <kernel/panic.h>
-#include <kernel/schedule.h>
-#include <kernel/spinlock.h>
+#include <kernel/schedule.hpp>
+#include <kernel/spinlock.hpp>
 #include <driver/pit.h>
 #include <string.h>
 #include <stdio.h>
@@ -17,6 +17,7 @@ extern uintptr_t stack_bottom;
 void exit_process_wrapper();
 
 void print_process() {
+    uint32_t flags = spinlock_acquire(&process_list_lock);
     uint32_t cur_tick = pit_get_ticks();
     printf("id  priority  state  time(s)\n");
     for (auto pid = 0; pid < MAX_PROCESSES_NUM; ++pid) {
@@ -24,9 +25,11 @@ void print_process() {
             printf("%d   %d         %d         %d\n", pid, process_list[pid]->priority, process_list[pid]->state, (cur_tick - process_list[pid]->create_time) / 100);
         }
     }
+    spinlock_release(&process_list_lock, flags);
 }
 
 void free_pcb(PCB*& process) {
+    // 调用者必须持有 process_list_lock
     kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
     kfree(reinterpret_cast<void*>(process));
     // todo：如果是用户态进程，需要销毁用户空间（CR3）
@@ -34,30 +37,39 @@ void free_pcb(PCB*& process) {
 }
 
 int waitpid(pid_t child) {
-    if (child < 0 || child > MAX_PROCESSES_NUM ||
+    // 不能用 SpinlockGuard：yield() 前必须手动释放锁
+    uint32_t flags = spinlock_acquire(&process_list_lock);
+
+    if (child < 0 || child >= MAX_PROCESSES_NUM ||
         !process_list[child] || process_list[child]->parent_pid != cur_process_id) {
+        spinlock_release(&process_list_lock, flags);
         return -1;
     }
+
     PCB* child_pcb = process_list[child];
 
-    asm volatile("cli");
     if (child_pcb->state == process_state::ZOMBIE) {
         // 子进程已经退出了，直接回收
-        asm volatile("sti");
         int exit_code = child_pcb->exit_code;
         free_pcb(process_list[child]);
+        spinlock_release(&process_list_lock, flags);
         return exit_code;
     }
+
     process_list[cur_process_id]->state = process_state::WAITING;
     insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
+    spinlock_release(&process_list_lock, flags);
     yield();
 
+    flags = spinlock_acquire(&process_list_lock);
     int exit_code = child_pcb->exit_code;
     free_pcb(process_list[child]);
+    spinlock_release(&process_list_lock, flags);
     return exit_code;
 }
 
 PCB* init_pcb(pid_t newpid) {
+    // 调用者必须持有 process_list_lock
     PCB*& new_process = process_list[newpid];
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     memset(new_process, 0, sizeof(PCB));
@@ -66,6 +78,7 @@ PCB* init_pcb(pid_t newpid) {
 }
 
 void prepare_pcb_for_new_process(PCB*& new_process) {
+    // 调用者必须持有 process_list_lock
     new_process->saved_eflags = 0x202;
     new_process->create_time = pit_get_ticks();
     new_process->state = process_state::READY;
@@ -94,6 +107,7 @@ constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;
 constexpr uint32_t USER_STACK_TOP_ADDR = 0xBFF00000;
 
 pid_t get_new_pid() {
+    // 调用者必须持有 process_list_lock
     pid_t newpid = 0;
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
@@ -127,11 +141,11 @@ void construct_args_for_user_stack(int argc, uint32_t* arg_lens, char** arg_bufs
     kfree(arg_lens);
 
     user_stack_pointer &= ~0x3; // 4 字节对齐
- 
+
     // argv[argc] = NULL
     user_stack_pointer -= 4;
     *((uintptr_t*)user_stack_pointer) = 0;
- 
+
     // argv[0] ~ argv[argc-1]
     for (int i = argc - 1; i >= 0; i--) {
         user_stack_pointer -= 4;
@@ -178,30 +192,31 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
 }
 
 pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
-    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
-    pid_t newpid = get_new_pid();
-
-    if (newpid == 0) {
-        spinlock_release(&process_list_lock, saved_eflags);
-        return 0;
-    }
-
     if (!verify_elf(code, code_size)) {
         printf("illegal elf!\n");
-        spinlock_release(&process_list_lock, saved_eflags);
         return 0;
     }
 
-    // 待会我们直接在内核缓冲区解析ELF，不需要复制
     void* code_buf = copy_image_to_kernel_buffer(code, code_size);
 
     uint32_t* arg_lens;
     char** arg_bufs;
     copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
 
+    pid_t newpid;
+    PCB* new_pcb;
+    {
+        SpinlockGuard guard(process_list_lock);
+        newpid = get_new_pid();
+        if (newpid == 0) {
+            kfree(code_buf);
+            return 0;
+        }
+        new_pcb = init_pcb(newpid);
+    }
+
     uint32_t pd_addr_old = vmm_get_cr3();
     uint32_t pd_addr = vmm_create_page_directory();
-    asm volatile ("cli");
     vmm_switch(pd_addr);
 
     uint32_t entry = 0;
@@ -209,32 +224,30 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     if (!construct_user_space_by_elf_image(code_buf, code_size, entry, heap_addr)) {
         kfree(code_buf);
         vmm_switch(pd_addr_old);
-        asm volatile ("sti");
-        spinlock_release(&process_list_lock, saved_eflags);
+        SpinlockGuard guard(process_list_lock);
+        free_pcb(process_list[newpid]);
         return 0;
     }
     kfree(code_buf);
     uintptr_t sp = create_user_stack(USER_STACK_PAGE_SIZE);
     construct_args_for_user_stack(argc, arg_lens, arg_bufs, sp);
 
-    PCB* new_pcb = init_pcb(newpid);
-    prepare_pcb_for_new_process(new_pcb);
-    new_pcb->cr3 = pd_addr;
-    
-    new_pcb->heap_start = heap_addr;
-    new_pcb->heap_break = heap_addr;
-    init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, entry);
-    insert_into_scheduling_queue(newpid, priority);
+    {
+        SpinlockGuard guard(process_list_lock);
+        prepare_pcb_for_new_process(new_pcb);
+        new_pcb->cr3 = pd_addr;
+        new_pcb->heap_start = heap_addr;
+        new_pcb->heap_break = heap_addr;
+        init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, entry);
+        insert_into_scheduling_queue(newpid, priority);
+    }
 
     vmm_switch(pd_addr_old);
-
-    spinlock_release(&process_list_lock, saved_eflags);
-    asm volatile ("sti");
     return newpid;
 }
 
 pid_t create_process(void* entry, void* args) {
-    uint32_t saved_eflags = spinlock_acquire(&process_list_lock);
+    SpinlockGuard guard(process_list_lock);
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
             PCB*& new_process = process_list[nid];
@@ -262,16 +275,20 @@ pid_t create_process(void* entry, void* args) {
             new_process->state = process_state::READY;
 
             insert_into_scheduling_queue(nid);
-            spinlock_release(&process_list_lock, saved_eflags);
             return nid;
         }
     }
-    spinlock_release(&process_list_lock, saved_eflags);
     return 0;
 }
 
 uint32_t exit_process(pid_t pid, int exit_code) {
-    if (pid == 0 || process_list[pid] == nullptr) return 1;
+    uint32_t flags = spinlock_acquire(&process_list_lock);
+
+    if (pid == 0 || process_list[pid] == nullptr) {
+        spinlock_release(&process_list_lock, flags);
+        return 1;
+    }
+
     PCB*& exiting_process = process_list[pid];
     if (!exiting_process->to_exit) {
         // 当前进程还没被指派退出，使用传入的退出码
@@ -279,9 +296,9 @@ uint32_t exit_process(pid_t pid, int exit_code) {
     }
     if (pid != cur_process_id) { // 要退出的进程不是自己的话
 		exiting_process->to_exit = 1; // 不要直接清理这个进程的空间，告诉进程自己将要被退出就好
+        spinlock_release(&process_list_lock, flags);
         return 0;
     }
-    asm volatile("cli");
     PCB* itr;
     while (itr = exiting_process->waiting_queue) {
         itr->state = process_state::READY;
@@ -289,6 +306,7 @@ uint32_t exit_process(pid_t pid, int exit_code) {
         insert_into_scheduling_queue(itr->pid);
     }
     exiting_process->state = process_state::ZOMBIE;
+    spinlock_release(&process_list_lock, flags);
     yield();
     // 不应该执行到这里
     return 0;
@@ -299,10 +317,11 @@ void exit_process_wrapper() {
 }
 
 bool insert_into_process_queue(process_queue& queue, PCB* process) {
+    // 调用者必须持有 process_list_lock
     if (process == nullptr || process->prev != nullptr || process->next != nullptr) {
         return false;
     }
- 
+
     if (queue) {
         process->next = queue;
         process->prev = queue->prev;
@@ -317,7 +336,7 @@ bool insert_into_process_queue(process_queue& queue, PCB* process) {
 }
 
 void remove_from_process_queue(process_queue& queue, pid_t pid) {
-    // 不打算在这里检查pid对应的PCB是否在传入的queue中，调用者应该做检查
+    // 调用者必须持有 process_list_lock
     PCB* cur_pcb = process_list[pid];
     PCB* prev_pcb = cur_pcb->prev;
     PCB* next_pcb = cur_pcb->next;
@@ -326,7 +345,7 @@ void remove_from_process_queue(process_queue& queue, pid_t pid) {
         cur_pcb->prev = cur_pcb->next = nullptr;
         return;
     }
-    
+
     if (prev_pcb) prev_pcb->next = next_pcb;
     if (next_pcb) next_pcb->prev = prev_pcb;
 

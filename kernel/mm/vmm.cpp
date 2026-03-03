@@ -2,11 +2,14 @@
 #include <string.h>
 #include <kernel/mm.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.hpp>
 
 extern uint8_t page_directory[];
 uintptr_t pd_addr = (uintptr_t)page_directory - 0xC0000000;
 constexpr uintptr_t pd_vaddr = 0xFFFFF000;
 uintptr_t continuous_addr_begin;
+
+static spinlock vmm_lock;
 
 // Page Table Entry (4KB page)
 typedef struct PTE {
@@ -53,48 +56,7 @@ static inline void invlpg(uintptr_t addr) {
     asm volatile("invlpg (%0)" :: "r"(addr) : "memory");
 }
 
-void vmm_cleanup_low_identity_mapping() {
-    PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
-    for (int i = 0; i < 768; i++) {
-        if (pde_list[i].present) {
-            pde_list[i] = {0};
-        }
-    }
-    flush_tlb();
-}
-
-void vmm_init() {
-    PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
-    pde_list[1023] = {0};
-    pde_list[1023].frame = pd_addr >> 12;
-    pde_list[1023].read_write = 1;
-    pde_list[1023].present = 1;
-    continuous_addr_begin = 0xC0800000;
-    flush_tlb();
-}
-
-uintptr_t vmm_create_page_directory() {
-    constexpr uint32_t TEMP_PD_ADDR = 0xCF000000;
-    uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
-
-    vmm_map_page(p_addr, TEMP_PD_ADDR, 3);
-
-    PDE* kernel_pde_list = reinterpret_cast<PDE*>(page_directory);
-    PDE* cur_pde_list = reinterpret_cast<PDE*>(TEMP_PD_ADDR);
-    memset(cur_pde_list, 0, sizeof(PDE) * 1024);
-    for (uint16_t i = 768; i < 1023; ++i) {
-        cur_pde_list[i] = kernel_pde_list[i];
-    }
-    cur_pde_list[1023] = {0};
-    cur_pde_list[1023].frame = p_addr >> 12;
-    cur_pde_list[1023].read_write = 1;
-    cur_pde_list[1023].present = 1;
-
-    vmm_unmap_page(TEMP_PD_ADDR);
-    return p_addr;
-}
-
-void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
+static void vmm_map_page_nolock(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
     if (p_addr & 0xFFF) panic("p_addr not aligned!");
     if (v_addr & 0xFFF) panic("v_addr not aligned!");
     uintptr_t pde = v_addr >> 22;
@@ -117,7 +79,7 @@ void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
     PTE* cur_pte = reinterpret_cast<PTE*>(0xFFC00000 | pde << 12 | pte << 2);
     if (cur_pte->present) panic("v_addr mapping already exist!");
     *cur_pte = {0};
-    
+
     cur_pte->read_write = (flag >> 1) & 1;
     cur_pte->user_super = (flag >> 2) & 1;
     cur_pte->present = 1;
@@ -126,7 +88,7 @@ void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
     invlpg(v_addr);
 }
 
-void vmm_unmap_page(uintptr_t v_addr) {
+static void vmm_unmap_page_nolock(uintptr_t v_addr) {
     if (v_addr & 0xFFF) panic("v_addr not aligned!");
 
     uintptr_t pde = v_addr >> 22;
@@ -142,12 +104,66 @@ void vmm_unmap_page(uintptr_t v_addr) {
     invlpg(v_addr);
 }
 
+void vmm_cleanup_low_identity_mapping() {
+    PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
+    for (int i = 0; i < 768; i++) {
+        if (pde_list[i].present) {
+            pde_list[i] = {0};
+        }
+    }
+    flush_tlb();
+}
+
+void vmm_init() {
+    PDE* pde_list = reinterpret_cast<PDE*>(page_directory);
+    pde_list[1023] = {0};
+    pde_list[1023].frame = pd_addr >> 12;
+    pde_list[1023].read_write = 1;
+    pde_list[1023].present = 1;
+    continuous_addr_begin = 0xC0800000;
+    flush_tlb();
+}
+
+uintptr_t vmm_create_page_directory() {
+    constexpr uint32_t TEMP_PD_ADDR = 0xCF000000;
+    SpinlockGuard guard(vmm_lock);
+
+    uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
+
+    vmm_map_page_nolock(p_addr, TEMP_PD_ADDR, 3);
+
+    PDE* kernel_pde_list = reinterpret_cast<PDE*>(page_directory);
+    PDE* cur_pde_list = reinterpret_cast<PDE*>(TEMP_PD_ADDR);
+    memset(cur_pde_list, 0, sizeof(PDE) * 1024);
+    for (uint16_t i = 768; i < 1023; ++i) {
+        cur_pde_list[i] = kernel_pde_list[i];
+    }
+    cur_pde_list[1023] = {0};
+    cur_pde_list[1023].frame = p_addr >> 12;
+    cur_pde_list[1023].read_write = 1;
+    cur_pde_list[1023].present = 1;
+
+    vmm_unmap_page_nolock(TEMP_PD_ADDR);
+    return p_addr;
+}
+
+void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag) {
+    SpinlockGuard guard(vmm_lock);
+    vmm_map_page_nolock(p_addr, v_addr, flag);
+}
+
+void vmm_unmap_page(uintptr_t v_addr) {
+    SpinlockGuard guard(vmm_lock);
+    vmm_unmap_page_nolock(v_addr);
+}
+
 uintptr_t vmm_alloc_pages(uint32_t size, uint32_t flag) {
+    SpinlockGuard guard(vmm_lock);
     uintptr_t ret = continuous_addr_begin;
     for (uint32_t i = 0; i < size; i++) {
         if (vmm_get_mapping(continuous_addr_begin) != 0) panic("oom when vmm_alloc_pages!");
         uintptr_t p_addr = reinterpret_cast<uintptr_t>(pmm_alloc(1 << 12));
-        vmm_map_page(p_addr, continuous_addr_begin, flag);
+        vmm_map_page_nolock(p_addr, continuous_addr_begin, flag);
         continuous_addr_begin += (1 << 12);
     }
     return ret;

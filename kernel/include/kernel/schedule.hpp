@@ -2,7 +2,7 @@
 #define _KERNEL_SCHEDULE_H
 
 #include <stdint.h>
-#include <kernel/process.h>
+#include <kernel/process.hpp>
 #ifdef __cplusplus
 extern "C" {
 #endif

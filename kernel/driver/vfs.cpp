@@ -1,14 +1,17 @@
-#include <driver/vfs.h>
+#include <driver/vfs.hpp>
 #include <kernel/panic.h>
 #include <kernel/mm.h>
-#include <kernel/mm.h>
+#include <kernel/spinlock.hpp>
 #include <string.h>
 #include <format.h>
 #include <stdio.h>
 
+static spinlock vfs_lock;
+
 fs_operation* fs_operations[MAX_DRIVER_NUM];
 
 int register_fs_operation(FS_DRIVER driver, fs_operation* operations) {
+    SpinlockGuard guard(vfs_lock);
     uint8_t driver_index = (uint8_t)driver;
     if (fs_operations[driver_index]) return -1;
     fs_operations[driver_index] = operations;
@@ -77,6 +80,7 @@ void init_vfs() {
 }
 
 int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data) {
+    SpinlockGuard guard(vfs_lock);
     mount_list[mount_num] = reinterpret_cast<mounting_point*>(kmalloc(sizeof(mounting_point)));
     mount_list[mount_num]->operations = get_fs_operation(driver);
     mount_list[mount_num]->index = mount_num;
@@ -94,6 +98,7 @@ int v_mount(FS_DRIVER driver, const char* mount_path, void* device_data) {
 }
 
 int v_unmount(const char* mount_path) {
+    SpinlockGuard guard(vfs_lock);
     for (uint32_t i = 0; i < mount_num; i++) {
         if (strcmp(mount_list[i]->mount_path, mount_path) == 0) { // 精确匹配
             int ret = mount_list[i]->operations->unmount(mount_list[i]);
@@ -115,6 +120,7 @@ int alloc_fd(PCB* proc) {
 }
 
 int v_open(PCB* proc, const char* path, uint8_t mode) {
+    SpinlockGuard guard(vfs_lock);
     mounting_point* mp = get_mounting_point(path);
     if (!mp) return -1;
     uint32_t handle_id = mp->operations->open(mp, get_mounting_relative_path(mp, path), mode);
@@ -134,6 +140,7 @@ int v_open(PCB* proc, const char* path, uint8_t mode) {
 }
 
 int v_read(PCB* proc, int fd, char* buffer, uint32_t size) {
+    SpinlockGuard guard(vfs_lock);
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
@@ -141,6 +148,7 @@ int v_read(PCB* proc, int fd, char* buffer, uint32_t size) {
 }
 
 int v_write(PCB* proc, int fd, const char* buffer, uint32_t size) {
+    SpinlockGuard guard(vfs_lock);
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
@@ -148,6 +156,7 @@ int v_write(PCB* proc, int fd, const char* buffer, uint32_t size) {
 }
 
 int v_close(PCB* proc, int fd) {
+    SpinlockGuard guard(vfs_lock);
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
@@ -160,6 +169,7 @@ int v_close(PCB* proc, int fd) {
 }
 
 int v_opendir(PCB* proc, const char* path) {
+    SpinlockGuard guard(vfs_lock);
     mounting_point* mp = get_mounting_point(path);
     if (!mp) return -1;
     uint32_t handle_id = mp->operations->opendir(mp, get_mounting_relative_path(mp, path));
@@ -167,6 +177,7 @@ int v_opendir(PCB* proc, const char* path) {
     
     if (proc->fd_num >= MAX_FD_NUM) {
         mp->operations->close(mp, handle_id);
+        return -1;
     }
     file_description& fd = proc->fd[proc->fd_num++];
     strcpy(fd.path, path);
@@ -176,6 +187,7 @@ int v_opendir(PCB* proc, const char* path) {
 }
 
 int v_readdir(PCB* proc, int fd, dirent* out) {
+    SpinlockGuard guard(vfs_lock);
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
@@ -184,6 +196,7 @@ int v_readdir(PCB* proc, int fd, dirent* out) {
 }
 
 int v_closedir(PCB* proc, int fd) {
+    SpinlockGuard guard(vfs_lock);
     if (fd < 0 || fd >= MAX_FD_NUM) return -1;
     mounting_point* mp = proc->fd[fd].mp;
     if (!mp) return -1;
@@ -191,6 +204,7 @@ int v_closedir(PCB* proc, int fd) {
 }
 
 int v_stat(const char* path, file_stat* out) {
+    SpinlockGuard guard(vfs_lock);
     mounting_point* mp = get_mounting_point(path);
     if (!mp) return -1;
     return mp->operations->stat(mp, get_mounting_relative_path(mp, path), out);
