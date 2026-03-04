@@ -31,6 +31,15 @@ typedef struct pipe_data {
     uint32_t pipe_cnt = 0;
 } pipe_data;
 
+static inline bool is_read_mode(uint8_t mode) {
+    return !(mode & O_WRONLY);  // 不是写就是读
+}
+
+static inline bool is_write_mode(uint8_t mode) {
+    return (mode & O_WRONLY);
+}
+
+
 pipe_entry* alloc_entry(pipe_data* data) {
     for (int i = 0; i < MAX_PIPE_NUM; ++i) {
         if (!data->entry[i]) {
@@ -47,7 +56,7 @@ pipe_entry* alloc_entry(pipe_data* data) {
 int kpipe(int fds[2]) {
     PCB* proc = process_list[cur_process_id];
 
-    fds[0] = v_open(proc, "/pipe/create", O_CREATE | O_RDONLY); // 有点像RESTful
+    fds[0] = v_open(proc, "/pipe/create", O_RDONLY); // 有点像RESTful
     if (fds[0] < 0) return -1;
     int pipe_idx = proc->fd[fds[0]]->inode_id;
     char path[32];
@@ -78,18 +87,18 @@ static int open(mounting_point* mp, const char* path,  uint8_t mode) {
     if (strcmp("create", path) == 0) {
         pipe_entry* new_pipe = alloc_entry(data);
         if (!new_pipe) return -1;
-        if (mode & O_RDONLY) {
+        if (is_read_mode(mode)) {
             new_pipe->read_open = true;
         }
-        if (mode & O_WRONLY) {
+        if (is_write_mode(mode)) {
             new_pipe->write_open = true;
         }
         return new_pipe->entry_id;
     } else {
         int idx = atoi(path);
         if (idx < 0 || idx >= MAX_PIPE_NUM || !data->entry[idx]) return -1;
-        if (mode & O_RDONLY) data->entry[idx]->read_open = true;
-        if (mode & O_WRONLY) data->entry[idx]->write_open = true;
+        if (is_read_mode(mode)) data->entry[idx]->read_open = true;
+        if (is_write_mode(mode)) data->entry[idx]->write_open = true;
         return idx;
     }
     return -1;
@@ -100,7 +109,7 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
     pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
     if (!data->entry[inode_id]) return -1;
     pipe_entry* pipe = data->entry[inode_id];
-    if (mode & O_RDONLY) {
+    if (is_read_mode(mode)) {
         pipe->read_open = false;
         PCB* proc;
         while (proc = pipe->writer) {
@@ -109,7 +118,7 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
             insert_into_scheduling_queue(proc->pid);
         }
     }
-    if (mode & O_WRONLY) {
+    if (is_write_mode(mode)) {
         pipe->write_open = false;
         PCB* proc;
         while (proc = pipe->reader) {
@@ -135,7 +144,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     uint32_t read_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == pipe->write_pos) { // 当前没有可读的字节
-            if (!pipe->write_open) break;
+            if (!pipe->write_open) return read_cnt;
             PCB* proc;
             while (proc = pipe->writer) {
                 proc->state = process_state::READY;
@@ -161,7 +170,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     uint32_t write_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
-            if (!pipe->read_open) break;
+            if (!pipe->read_open) return write_cnt;
             PCB* proc;
             while (proc = pipe->reader) {
                 proc->state = process_state::READY;
@@ -198,27 +207,26 @@ static int stat(mounting_point* mp, const char* path, file_stat* out) {
     }
 
     pipe_data* item = reinterpret_cast<pipe_data*>(mp->data);
-    for (uint32_t i = 0; i < item->pipe_cnt; ++i) {
-        if (item->entry[atoi(path)]) {
-            strcpy(out->name, path);
-            out->type = 1;
-            out->size = 0;
-            out->owner_id = 0;
-            out->group_id = 0;
-            strcpy(out->owner_name, "root");
-            strcpy(out->group_name, "root");
-            strcpy(out->link_name, "");
-            out->last_modified = 0;
+    if (item->entry[atoi(path)]) {
+        strcpy(out->name, path);
+        out->type = 1;
+        out->size = 0;
+        out->owner_id = 0;
+        out->group_id = 0;
+        strcpy(out->owner_name, "root");
+        strcpy(out->group_name, "root");
+        strcpy(out->link_name, "");
+        out->last_modified = 0;
 
-            // 根据设备实际能力设置权限
-            bool can_read  = (item->entry[i]->read_open);
-            bool can_write = (item->entry[i]->write_open);
-            out->mode = 0;
-            if (can_read)  out->mode |= 0444;  // r--r--r--
-            if (can_write) out->mode |= 0222;  // -w--w--w-
-            return 0;
-        }
+        // 根据设备实际能力设置权限
+        bool can_read  = (item->entry[atoi(path)]->read_open);
+        bool can_write = (item->entry[atoi(path)]->write_open);
+        out->mode = 0;
+        if (can_read)  out->mode |= 0444;  // r--r--r--
+        if (can_write) out->mode |= 0222;  // -w--w--w-
+        return 0;
     }
+    return -1;
 }
 
 static int opendir(mounting_point*, const char*) {
@@ -227,12 +235,18 @@ static int opendir(mounting_point*, const char*) {
 
 static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
     if (inode_id != 0) return 0;
-    if (!mp->data || (reinterpret_cast<pipe_data*>(mp->data)->pipe_cnt <= inode_id)) return 0;
+    if (!mp->data) return 0;
     pipe_data* item = reinterpret_cast<pipe_data*>(mp->data);
-    if (offset >= item->pipe_cnt || !item->entry[offset]) return 0;
+
+    while (offset < MAX_PIPE_NUM && !item->entry[offset]) {
+        ++offset;
+    }
+
+    if (offset >= MAX_PIPE_NUM) return 0;
+
     out->inode = offset;
-    strcpy(out->name, "PIPE");
-    out->type = '?';
+    sprintf(out->name, "pipe_%d", offset);
+    out->type = 'p';
     return 1;
 }
 
