@@ -241,7 +241,7 @@ static int open(mounting_point* mp, const char* path, uint8_t) {
     return file_inode->child_inodes["."];
 }
 
-static int close(mounting_point*, uint32_t) {
+static int close(mounting_point*, uint32_t, uint32_t) {
     return 0;
 }
 
@@ -341,7 +341,7 @@ static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, diren
 }
 
 static int closedir(mounting_point* mp, uint32_t inode_id) {
-    return close(mp, inode_id);
+    return close(mp, inode_id, 0);
 }
 
 static int stat(mounting_point* mp, const char* path, file_stat* out) {

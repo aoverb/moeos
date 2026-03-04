@@ -23,7 +23,8 @@ driver/pit.o \
 driver/vfs.o \
 driver/tarfs.o \
 driver/devfs.o \
-driver/console.o
+driver/console.o \
+driver/pipefs.o
 
 MM_OBJS=\
 mm/pmm_core.o \

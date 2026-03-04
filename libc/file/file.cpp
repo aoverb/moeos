@@ -49,11 +49,12 @@ int chdir(const char* path) {
     return syscall1((uint32_t)SYSCALL::CHDIR, (uint32_t)path);
 }
 
-int exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
-    return (uint32_t)syscall5((uint32_t)SYSCALL::EXEC,
+int exec(void* code, uint32_t code_size, int argc, char** argv, fd_remap* remaps, int remap_cnt) {
+    return (uint32_t)syscall6((uint32_t)SYSCALL::EXEC,
                               (uint32_t)code,
                               code_size,
-                              (uint32_t)priority,
                               (uint32_t)argc,
-                              (uint32_t)argv);
+                              (uint32_t)argv,
+                              (uint32_t)remaps,
+                              (uint32_t)remap_cnt);
 }

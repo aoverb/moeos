@@ -2,6 +2,7 @@
 #define _KERNEL_PROCESS_H
 
 #include <stdint.h>
+#include <pipe.h>
 #include <kernel/spinlock.hpp>
 #ifdef __cplusplus
 extern "C" {
@@ -77,7 +78,8 @@ void process_init();
 void print_process();
 pid_t create_process(void* entry, void* args);
 uint32_t exit_process(pid_t pid, int exit_code);
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
+pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
+    fd_remap* remaps = nullptr, int remap_cnt = 0);
 
 int waitpid(pid_t child);
 

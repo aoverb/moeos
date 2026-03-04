@@ -3,6 +3,7 @@
 #include <syscall_def.h>
 #include <kernel/process.hpp>
 #include <driver/vfs.hpp>
+#include <driver/pipefs.hpp>
 #include <kernel/tty.h>
 #include <kernel/spinlock.hpp>
 #include <string.h>
@@ -141,14 +142,15 @@ int sys_getcwd(interrupt_frame* reg) {
     return 0;
 }
 
-// EXEC(ebx = code, ecx = code_size, edx = priority, esi = argc, ebp = argv)
+// EXEC(ebx = code, ecx = code_size, edx = argc, esi = argv, ebp = remaps, edi = remap_cnt)
 int sys_exec(interrupt_frame* reg) {
-    void*    code      = reinterpret_cast<void*>(reg->ebx);
-    uint32_t code_size = reg->ecx;
-    uint8_t  priority  = static_cast<uint8_t>(reg->edx);
-    int      argc      = static_cast<int>(reg->esi);
-    char**   argv      = reinterpret_cast<char**>(reg->ebp);
-    return static_cast<int>(exec(code, code_size, priority, argc, argv));
+    void*      code      = reinterpret_cast<void*>(reg->ebx);
+    uint32_t   code_size = reg->ecx;
+    int        argc      = static_cast<int>(reg->edx);
+    char**     argv      = reinterpret_cast<char**>(reg->esi);
+    fd_remap*  remaps    = reinterpret_cast<fd_remap*>(reg->ebp);
+    int        remap_cnt = int(reg->edi);
+    return static_cast<int>(exec(code, code_size, 4, argc, argv, remaps, remap_cnt));
 }
 
 // WAITPID(ebx = pid)
@@ -183,6 +185,12 @@ int sys_sbrk(interrupt_frame* reg) {
     return old_break;
 }
 
+// PIPE(ebx = fds[2])
+int sys_pipe(interrupt_frame* reg) {
+    int* fds = reinterpret_cast<int*>(reg->ebx);
+    return kpipe(fds);
+}
+
 void syscall_init() {
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
@@ -201,6 +209,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::CLOSEDIR), sys_closedir);
     register_syscall(uint32_t(SYSCALL::CHDIR),    sys_chdir);
     register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
+    register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
 }

@@ -21,6 +21,7 @@
 #include <driver/vfs.hpp>
 #include <driver/tarfs.hpp>
 #include <driver/devfs.hpp>
+#include <driver/pipefs.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -224,6 +225,8 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     init_vfs();
     init_tarfs();
     init_devfs();
+    init_pipefs();
+
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
         tarmeta.data = saved[i].data;
@@ -236,22 +239,27 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
         }
     }
 
-    mounting_point* ret = v_mount(FS_DRIVER::DEVFS, "/dev", nullptr);
-    if (ret == nullptr) {
+    mounting_point* dev_ret = v_mount(FS_DRIVER::DEVFS, "/dev", nullptr);
+    if (dev_ret == nullptr) {
         panic("failed to mount devfs to /dev!");
     } else {
         printf("/dev mounted!\n\n");
     }
-    init_console_dev(ret);
+    init_console_dev(dev_ret);
+
+    mounting_point* pipe_ret = v_mount(FS_DRIVER::PIPEFS, "/pipe", nullptr);
+    if (pipe_ret == nullptr) {
+        panic("failed to mount pipefs to /pipe!");
+    } else {
+        printf("/pipe mounted!\n\n");
+    }
+
     printf("OK\n");
-    
+
     printf("process initializing...");
     process_init();
     asm volatile ("sti");
     printf("OK\n");
-
-    // test_unordered_map();
-
 
     printf("Welcome, aoverb!\n\n");
     printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);

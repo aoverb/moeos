@@ -7,7 +7,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <elf.h>
-#include <file.h>
 
 PCB* process_list[MAX_PROCESSES_NUM] = {};
 pid_t cur_process_id = 0;
@@ -198,7 +197,8 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
     new_process->esp -= 40;
 }
 
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv) {
+pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
+    fd_remap* remaps, int remap_cnt) {
     if (!verify_elf(code, code_size)) {
         return 0;
     }

@@ -2,7 +2,7 @@
 #define _DRIVER_DEVFS_H
 
 #include <stdint.h>
-#include <driver/vfs.h>
+#include <driver/vfs.hpp>
 
 #ifdef __cplusplus
 extern "C" {

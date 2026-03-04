@@ -52,7 +52,7 @@ static int open(mounting_point* mp, const char* path,  uint8_t) {
     return -1;
 }
 
-static int close(mounting_point*, uint32_t) {
+static int close(mounting_point*, uint32_t, uint32_t) {
     return 0;
 }
 

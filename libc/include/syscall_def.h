@@ -24,6 +24,7 @@ enum class SYSCALL {
     CLOSEDIR = 108,
     CHDIR = 109,
     GETCWD = 110,
+    PIPE = 199,
     EXEC = 200,
     WAITPID = 201
 };
@@ -78,6 +79,21 @@ static inline int syscall5(uint32_t num, uint32_t arg1, uint32_t arg2,
                  : "=a"(ret)
                  : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3),
                    "S"(arg4), [a5]"m"(arg5)
+                 : "memory");
+    return ret;
+}
+
+static inline int syscall6(uint32_t num, uint32_t arg1, uint32_t arg2,
+                           uint32_t arg3, uint32_t arg4, uint32_t arg5,
+                           uint32_t arg6) {
+    int ret;
+    asm volatile("push %%ebp\n\t"
+                 "mov %[a5], %%ebp\n\t"
+                 "int $0x80\n\t"
+                 "pop %%ebp"
+                 : "=a"(ret)
+                 : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3),
+                   "S"(arg4), "D"(arg6), [a5]"m"(arg5)
                  : "memory");
     return ret;
 }

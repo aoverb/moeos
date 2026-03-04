@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     if (argc > 1 && strcmp(argv[1], "-a") == 0) {
         showall = true;
     }
-
+    
     dirent my_dirent;
     file_stat fst;
     char full_path[512];
@@ -120,7 +120,6 @@ int main(int argc, char** argv) {
     int max_width = 1;
     int fd = opendir(path);
     if (fd == -1) return -1;
-
     while (readdir(fd, &my_dirent) == 1) {
         if (!showall && (strcmp(my_dirent.name, ".") == 0 ||
                          strcmp(my_dirent.name, "..") == 0))

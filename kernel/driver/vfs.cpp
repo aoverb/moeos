@@ -142,12 +142,12 @@ int v_open(PCB* proc, const char* path, uint8_t mode) {
     
     int fd_pos = alloc_fd_for_proc(proc);
     if (fd_pos == -1) {
-        mp->operations->close(mp, inode_id);
+        mp->operations->close(mp, inode_id, mode);
         return -1;
     }
     int handle_id = get_empty_handle();
     if (handle_id == -1) {
-        mp->operations->close(mp, inode_id);
+        mp->operations->close(mp, inode_id, mode);
         return -1;
     }
     file_description*& fd = proc->fd[fd_pos];
@@ -218,7 +218,7 @@ int v_close(PCB* proc, int fd_pos) {
     if (!fd) return -1;
     mounting_point* mp = fd->mp;
     if (!mp) return -1;
-    int ret = mp->operations->close(mp, fd->inode_id);
+    int ret = mp->operations->close(mp, fd->inode_id, fd->mode);
     if (ret == 0 && --(fd->refcnt) == 0) {
         uint32_t handle_id = fd->handle_id;
         kfree(file_handle[handle_id]);
@@ -248,6 +248,7 @@ int v_opendir(PCB* proc, const char* path) {
         return -1;
     }
     file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
     fd = file_handle[handle_id] = (file_description*)kmalloc(sizeof(file_description));
     fd->mp = mp;
     fd->handle_id = handle_id;

@@ -12,7 +12,8 @@ constexpr uint32_t MAX_DRIVER_NUM = 32;
 constexpr uint32_t MAX_PATH_LEN = 256;
 enum class FS_DRIVER {
     TARFS = 0,
-    DEVFS = 1
+    DEVFS = 1,
+    PIPEFS = 2
 };
 
 struct dirent {
@@ -38,7 +39,7 @@ struct fs_operation {
     int (*mount)(mounting_point* mp);
     int (*unmount)(mounting_point* mp);
     int (*open)(mounting_point* mp, const char* path, uint8_t mode);
-    int (*close)(mounting_point* mp, uint32_t inode_id);
+    int (*close)(mounting_point* mp, uint32_t inode_id, uint32_t mode);
     int (*read)(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size);
     int (*write)(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size);
     int (*opendir)(mounting_point* mp, const char* path);

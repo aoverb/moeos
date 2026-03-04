@@ -1,6 +1,7 @@
 #ifndef _FILE_H
 #define _FILE_H 1
 #include <stdint.h>
+#include <pipe.h>
 #define EOF (-1)
 
 #ifdef __cplusplus
@@ -32,7 +33,8 @@ int open(const char* path, uint8_t mode);
 int read(int fd, char* buffer, uint32_t size);
 int write(int fd, const char* buffer, uint32_t size);
 int close(int fd);
-int exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv);
+int exec(void* code, uint32_t code_size, int argc, char** argv,
+    fd_remap* remaps = nullptr, int remap_cnt = 0);
 
 typedef struct {
     char     name[256];
