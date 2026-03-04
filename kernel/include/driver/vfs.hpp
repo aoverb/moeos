@@ -69,6 +69,14 @@ int v_opendir(PCB* proc, const char* path);
 int v_readdir(PCB* proc, int fd_pos, dirent* out);
 int v_closedir(PCB* proc, int fd_pos);
 int v_stat(const char* path, file_stat* out);
+int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
+int v_dup(PCB* src_proc, int fd_src, PCB* dst_proc);
+
+// 调用者必须已持有 vfs_lock
+int _v_close(PCB* proc, int fd_pos);
+
+// 调用者必须已持有 vfs_lock
+int _v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
 
 void resolve_path(const char* cwd, const char* input, char* output);
 

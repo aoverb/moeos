@@ -211,23 +211,54 @@ int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size) {
     return mp->operations->write(mp, inode_id, buffer, size);
 }
 
+// 调用者必须已持有 vfs_lock
+int _v_close(PCB* proc, int fd_pos) {
+    file_description* fd = proc->fd[fd_pos];
+    if (!fd) return -1;
+    proc->fd[fd_pos] = nullptr;
+    proc->fd_num--;
+    if (--(fd->refcnt) == 0) {
+        printf("proc %d: fd: %d closed.\n", proc->pid, fd_pos);
+        fd->mp->operations->close(fd->mp, fd->inode_id, fd->mode);
+        file_handle[fd->handle_id] = nullptr;
+        --file_handle_num;
+        kfree(fd);
+    }
+    return 0;
+}
+
 int v_close(PCB* proc, int fd_pos) {
     SpinlockGuard guard(vfs_lock);
     if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
-    file_description*& fd = proc->fd[fd_pos];
-    if (!fd) return -1;
-    mounting_point* mp = fd->mp;
-    if (!mp) return -1;
-    int ret = mp->operations->close(mp, fd->inode_id, fd->mode);
-    if (ret == 0 && --(fd->refcnt) == 0) {
-        uint32_t handle_id = fd->handle_id;
-        kfree(file_handle[handle_id]);
-        file_handle[handle_id] = nullptr;
-        --file_handle_num;
-        fd = nullptr;
-        proc->fd_num--;
+    return _v_close(proc, fd_pos);
+}
+
+int _v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst) {
+    // 调用者必须已持有 vfs_lock
+    if (fd_src < 0 || fd_src >= MAX_FD_NUM || fd_dst < 0 || fd_dst >= MAX_FD_NUM) return -1;
+    file_description* fd_s = src_proc->fd[fd_src];
+    if (!fd_s) return -1;
+    if (dst_proc->fd[fd_dst]) {
+        printf("due to dup proc %d: fd: %d is being closed. ref: %d\n", dst_proc->pid, fd_dst, dst_proc->fd[fd_dst]->refcnt);
+        _v_close(dst_proc, fd_dst);
     }
-    return ret;
+    dst_proc->fd[fd_dst] = fd_s;
+    fd_s->refcnt++;
+    dst_proc->fd_num++;
+    return 0;
+}
+
+int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst) {
+    SpinlockGuard guard(vfs_lock);
+    return _v_dup_to(src_proc, fd_src, dst_proc, fd_dst);
+}
+
+int v_dup(PCB* src_proc, int fd_src, PCB* dst_proc) {
+    SpinlockGuard guard(vfs_lock);
+    int fd_dst = alloc_fd_for_proc(dst_proc);
+    if (fd_dst == -1) return -1;
+    _v_dup_to(src_proc, fd_src, dst_proc, fd_dst);
+    return fd_dst;
 }
 
 int v_opendir(PCB* proc, const char* path) {

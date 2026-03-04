@@ -136,6 +136,7 @@ bool exec_pipeline(stage stages[], int stage_count) {
             }
             return false;
         }
+        printf("pipe created! reader fd: %d, writer fd: %d\n", pipes[i][0], pipes[i][1]);
     }
 
     // 2. 逐个加载并 exec

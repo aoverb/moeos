@@ -113,20 +113,21 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
         pipe->read_open = false;
         PCB* proc;
         while (proc = pipe->writer) {
-            proc->state = process_state::READY;
-            remove_from_process_queue(pipe->writer, proc->pid);
-            insert_into_scheduling_queue(proc->pid);
+                proc->state = process_state::READY;
+                remove_from_process_queue(pipe->writer, proc->pid);
+                insert_into_scheduling_queue(proc->pid);
+            }
         }
-    }
     if (is_write_mode(mode)) {
+        printf("writer close!");
         pipe->write_open = false;
         PCB* proc;
         while (proc = pipe->reader) {
-            proc->state = process_state::READY;
-            remove_from_process_queue(pipe->reader, proc->pid);
-            insert_into_scheduling_queue(proc->pid);
+                proc->state = process_state::READY;
+                remove_from_process_queue(pipe->reader, proc->pid);
+                insert_into_scheduling_queue(proc->pid);
+            }
         }
-    }
     if (!pipe->read_open && !pipe->write_open) {
         kfree(data->entry[inode_id]);
         data->entry[inode_id] = nullptr;
@@ -140,11 +141,15 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     if (!mp->data) return -1;
     pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
     if (!data->entry[inode_id]) return -1;
+    printf("reader in!");
     pipe_entry* pipe = data->entry[inode_id];
     uint32_t read_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == pipe->write_pos) { // 当前没有可读的字节
-            if (!pipe->write_open) return read_cnt;
+            if (!pipe->write_open) {
+                printf("reader out!");
+                return read_cnt;
+            }
             PCB* proc;
             while (proc = pipe->writer) {
                 proc->state = process_state::READY;
@@ -152,13 +157,18 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
                 insert_into_scheduling_queue(proc->pid);
             }
             process_list[cur_process_id]->state = process_state::WAITING;
+            printf("reader is going to rest!");
             insert_into_process_queue(pipe->reader, process_list[cur_process_id]);
+            printf("reader now in reader queue!");
             yield();
+            printf("reader is back!");
         }
         buffer[i] = pipe->buffer[(pipe->read_pos++)];
         pipe->read_pos = pipe->read_pos % PIPE_BUF_SIZE;
         ++read_cnt;
+        printf("read!");
     }
+    printf("reader out!");
     return read_cnt;
 }
 
@@ -168,9 +178,13 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     if (!data->entry[inode_id]) return -1;
     pipe_entry* pipe = data->entry[inode_id];
     uint32_t write_cnt = 0;
+    printf("writer in!");
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
-            if (!pipe->read_open) return write_cnt;
+            if (!pipe->read_open) {
+                printf("writer out!");
+                return write_cnt;
+            }
             PCB* proc;
             while (proc = pipe->reader) {
                 proc->state = process_state::READY;
@@ -178,13 +192,18 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
                 insert_into_scheduling_queue(proc->pid);
             }
             process_list[cur_process_id]->state = process_state::WAITING;
+            printf("writer is going to rest!");
             insert_into_process_queue(pipe->writer, process_list[cur_process_id]);
+            printf("writer now in reader queue!");
             yield();
+            printf("writer is back!");
         }
         pipe->buffer[(pipe->write_pos++)] = buffer[i];
         pipe->write_pos = pipe->write_pos % PIPE_BUF_SIZE;
+        printf("write!");
         ++write_cnt;
     }
+    printf("writer out!");
     return write_cnt;
 }
 
@@ -207,26 +226,26 @@ static int stat(mounting_point* mp, const char* path, file_stat* out) {
     }
 
     pipe_data* item = reinterpret_cast<pipe_data*>(mp->data);
-    if (item->entry[atoi(path)]) {
-        strcpy(out->name, path);
-        out->type = 1;
-        out->size = 0;
-        out->owner_id = 0;
-        out->group_id = 0;
-        strcpy(out->owner_name, "root");
-        strcpy(out->group_name, "root");
-        strcpy(out->link_name, "");
-        out->last_modified = 0;
+    int idx = atoi(path);
+    if (idx < 0 || idx >= MAX_PIPE_NUM || !item->entry[idx]) return -1;
 
-        // 根据设备实际能力设置权限
-        bool can_read  = (item->entry[atoi(path)]->read_open);
-        bool can_write = (item->entry[atoi(path)]->write_open);
-        out->mode = 0;
+    strcpy(out->name, path);
+    out->type = 1;
+    out->size = 0;
+    out->owner_id = 0;
+    out->group_id = 0;
+    strcpy(out->owner_name, "root");
+    strcpy(out->group_name, "root");
+    strcpy(out->link_name, "");
+    out->last_modified = 0;
+
+    // 根据设备实际能力设置权限
+    bool can_read  = (item->entry[idx]->read_open);
+    bool can_write = (item->entry[idx]->write_open);
+    out->mode = 0;
         if (can_read)  out->mode |= 0444;  // r--r--r--
         if (can_write) out->mode |= 0222;  // -w--w--w-
-        return 0;
-    }
-    return -1;
+    return 0;
 }
 
 static int opendir(mounting_point*, const char*) {

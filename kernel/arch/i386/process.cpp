@@ -13,6 +13,8 @@ pid_t cur_process_id = 0;
 spinlock process_list_lock;
 
 extern "C" int v_open(PCB* proc, const char* path, uint8_t mode);
+extern "C" int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
+extern "C" int v_close(PCB* proc, int fd_pos);
 
 extern "C" void ret_to_user_mode();
 extern uintptr_t stack_bottom;
@@ -32,6 +34,10 @@ void print_process() {
 
 void free_pcb(PCB*& process) {
     // 调用者必须持有 process_list_lock
+    for (int i = 0; i < MAX_FD_NUM; ++i) {
+        v_close(process, i);
+    } 
+    
     kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
     kfree(reinterpret_cast<void*>(process));
     // todo：如果是用户态进程，需要销毁用户空间（CR3）
@@ -91,7 +97,6 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     new_process->plock.locked = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
     v_open(new_process, "/dev/console", O_RDONLY);
-    v_open(new_process, "/dev/console", O_WRONLY);
     v_open(new_process, "/dev/console", O_WRONLY);
 }
 
@@ -192,7 +197,10 @@ uintptr_t create_user_stack(uint32_t page_size) {
 void remap_fd(pid_t newpid, fd_remap* remaps, int remap_cnt) {
     if (!remaps || !remap_cnt) return;
     for (int i = 0; i < remap_cnt; ++i) {
-        process_list[newpid]->fd[remaps[i].child_fd] = process_list[cur_process_id]->fd[remaps[i].parent_fd];
+        printf("dup pid:%d fd %d to pid:%d fd %d.\n", cur_process_id, remaps[i].parent_fd,
+                  newpid, remaps[i].child_fd);
+        v_dup_to(process_list[cur_process_id], remaps[i].parent_fd,
+                  process_list[newpid], remaps[i].child_fd);
     }
 }
 
