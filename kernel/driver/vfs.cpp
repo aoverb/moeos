@@ -248,7 +248,6 @@ int v_opendir(PCB* proc, const char* path) {
         return -1;
     }
     file_description*& fd = proc->fd[fd_pos];
-    if (!fd) return -1;
     fd = file_handle[handle_id] = (file_description*)kmalloc(sizeof(file_description));
     fd->mp = mp;
     fd->handle_id = handle_id;

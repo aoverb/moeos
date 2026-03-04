@@ -180,6 +180,13 @@ uintptr_t create_user_stack(uint32_t page_size) {
     return stack_top_addr;
 }
 
+void remap_fd(pid_t newpid, fd_remap* remaps, int remap_cnt) {
+    if (!remaps || !remap_cnt) return;
+    for (int i = 0; i < remap_cnt; ++i) {
+        process_list[newpid]->fd[remaps[i].child_fd] = process_list[cur_process_id]->fd[remaps[i].parent_fd];
+    }
+}
+
 void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_pointer, uintptr_t entry) {
     new_process->kernel_stack_bottom = kmalloc(size);
     new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + size;
@@ -244,6 +251,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         new_pcb->cr3 = pd_addr;
         new_pcb->heap_start = heap_addr;
         new_pcb->heap_break = heap_addr;
+        // remap_fd(newpid, remaps, remap_cnt);
         init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, entry);
         insert_into_scheduling_queue(newpid, priority);
     }
