@@ -4,6 +4,39 @@
 #include <string.h>
 #include <file.h>
 
+// ─── 路径解析：将相对路径拼接到 cwd 上 ───
+
+static char resolved[1024];
+
+const char* resolve_path(const char* path) {
+    // 绝对路径直接返回
+    if (path[0] == '/')
+        return path;
+
+    char cwd[512];
+    if (getcwd(cwd, sizeof(cwd)) == -1) {
+        printf("cat: cannot get current directory\n");
+        return path; // fallback
+    }
+
+    int cwd_len = strlen(cwd);
+    int path_len = strlen(path);
+
+    // 确保 cwd 以 '/' 结尾
+    bool need_slash = (cwd_len > 0 && cwd[cwd_len - 1] != '/');
+
+    if (cwd_len + need_slash + path_len >= (int)sizeof(resolved)) {
+        printf("cat: path too long\n");
+        return path;
+    }
+
+    memcpy(resolved, cwd, cwd_len);
+    if (need_slash)
+        resolved[cwd_len++] = '/';
+    memcpy(resolved + cwd_len, path, path_len + 1);
+    return resolved;
+}
+
 // ─── 从 fd 读取并输出到 stdout ───
 
 void cat_fd(int fd) {
@@ -18,13 +51,15 @@ void cat_fd(int fd) {
 // ─── 读取整个文件并输出 ───
 
 bool cat_file(const char* path) {
+    const char* full = resolve_path(path);
+
     file_stat fst;
-    if (stat(path, &fst) == -1) {
+    if (stat(full, &fst) == -1) {
         printf("cat: cannot stat '%s'\n", path);
         return false;
     }
 
-    int fd = open(path, 1);
+    int fd = open(full, 1);
     if (fd == -1) {
         printf("cat: cannot open '%s'\n", path);
         return false;
@@ -50,19 +85,16 @@ bool cat_file(const char* path) {
 // ─── main ───
 
 int main(int argc, char** argv) {
-    // 无参数 → 等同于 cat -
     if (argc <= 1) {
         cat_fd(0);
         return 0;
     }
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-") == 0) {
-            // "-" → 从 stdin(fd 0) 读取
+        if (strcmp(argv[i], "-") == 0)
             cat_fd(0);
-        } else {
+        else
             cat_file(argv[i]);
-        }
     }
 
     return 0;

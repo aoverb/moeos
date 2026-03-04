@@ -4,6 +4,36 @@
 #include <string.h>
 #include <file.h>
 
+// ─── 路径解析 ───
+
+static char resolved[1024];
+
+const char* resolve_path(const char* path) {
+    if (path[0] == '/')
+        return path;
+
+    char cwd[512];
+    if (getcwd(cwd, sizeof(cwd)) == -1) {
+        printf("grep: cannot get current directory\n");
+        return path;
+    }
+
+    int cwd_len = strlen(cwd);
+    int path_len = strlen(path);
+    bool need_slash = (cwd_len > 0 && cwd[cwd_len - 1] != '/');
+
+    if (cwd_len + need_slash + path_len >= (int)sizeof(resolved)) {
+        printf("grep: path too long\n");
+        return path;
+    }
+
+    memcpy(resolved, cwd, cwd_len);
+    if (need_slash)
+        resolved[cwd_len++] = '/';
+    memcpy(resolved + cwd_len, path, path_len + 1);
+    return resolved;
+}
+
 // ─── 子串匹配 ───
 
 bool strstr_match(const char* haystack, const char* needle, int needle_len) {
@@ -27,9 +57,7 @@ void grep_buffer(const char* buf, int size, const char* pattern,
 
     for (int i = 0; i <= size; i++) {
         if (i == size || buf[i] == '\n') {
-            // 提取当前行（不含换行符）
             int line_len = i - line_start;
-            // 临时 null-terminate：拷贝到栈上
             char line[1024];
             int copy_len = line_len < 1023 ? line_len : 1023;
             for (int k = 0; k < copy_len; k++)
@@ -51,7 +79,7 @@ void grep_buffer(const char* buf, int size, const char* pattern,
     }
 }
 
-// ─── 从 fd 逐块读取并按行匹配（用于 stdin 管道）───
+// ─── 从 fd 逐块读取并按行匹配 ───
 
 void grep_fd(int fd, const char* pattern, int pattern_len,
              const char* prefix, bool show_linenum, bool invert) {
@@ -83,7 +111,6 @@ void grep_fd(int fd, const char* pattern, int pattern_len,
         }
     }
 
-    // 处理末尾没有换行的最后一行
     if (line_pos > 0) {
         line[line_pos] = '\0';
         bool matched = strstr_match(line, pattern, pattern_len);
@@ -101,13 +128,15 @@ void grep_fd(int fd, const char* pattern, int pattern_len,
 
 bool grep_file(const char* path, const char* pattern, int pattern_len,
                bool show_filename, bool show_linenum, bool invert) {
+    const char* full = resolve_path(path);
+
     file_stat fst;
-    if (stat(path, &fst) == -1) {
+    if (stat(full, &fst) == -1) {
         printf("grep: cannot stat '%s'\n", path);
         return false;
     }
 
-    int fd = open(path, 1);
+    int fd = open(full, 1);
     if (fd == -1) {
         printf("grep: cannot open '%s'\n", path);
         return false;
@@ -128,6 +157,7 @@ bool grep_file(const char* path, const char* pattern, int pattern_len,
         return false;
     }
 
+    // 输出时仍用用户输入的原始路径（更友好）
     grep_buffer(buffer, size, pattern, pattern_len,
                 path, show_filename, show_linenum, invert);
     free(buffer);
@@ -140,7 +170,6 @@ int main(int argc, char** argv) {
     bool show_linenum = false;
     bool invert = false;
 
-    // 解析选项
     int argi = 1;
     while (argi < argc && argv[argi][0] == '-') {
         char* flag = argv[argi] + 1;
@@ -156,7 +185,6 @@ int main(int argc, char** argv) {
         argi++;
     }
 
-    // pattern 是第一个非选项参数
     if (argi >= argc) {
         printf("Usage: grep [-nv] PATTERN [FILE...]\n");
         printf("  -n  show line numbers\n");
@@ -166,10 +194,8 @@ int main(int argc, char** argv) {
 
     const char* pattern = argv[argi++];
     int pattern_len = strlen(pattern);
-
     int file_count = argc - argi;
 
-    // 没有文件参数 → 从 stdin(fd 0) 读取，支持管道
     if (file_count == 0) {
         grep_fd(0, pattern, pattern_len, nullptr, show_linenum, invert);
         return 0;
@@ -179,7 +205,6 @@ int main(int argc, char** argv) {
 
     for (int i = argi; i < argc; i++) {
         if (strcmp(argv[i], "-") == 0) {
-            // "-" → 从 stdin 读取
             const char* prefix = show_filename ? "(stdin)" : nullptr;
             grep_fd(0, pattern, pattern_len, prefix, show_linenum, invert);
         } else {
