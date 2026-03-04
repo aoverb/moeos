@@ -135,6 +135,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     uint32_t read_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == pipe->write_pos) { // 当前没有可读的字节
+            if (!pipe->write_open) break;
             PCB* proc;
             while (proc = pipe->writer) {
                 proc->state = process_state::READY;
@@ -160,6 +161,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     uint32_t write_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
+            if (!pipe->read_open) break;
             PCB* proc;
             while (proc = pipe->reader) {
                 proc->state = process_state::READY;
