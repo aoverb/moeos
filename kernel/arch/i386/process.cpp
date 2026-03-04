@@ -134,6 +134,15 @@ void copy_args_to_kernel_buffer(int argc, char** argv, uint32_t*& arg_lens, char
     }
 }
 
+void copy_remaps_to_kernel_buffer(fd_remap* remaps, int remap_cnt, fd_remap*& remaps_buf) {
+    if (!remaps || !remap_cnt) return;
+    remaps_buf = (fd_remap*)(kmalloc(sizeof(fd_remap) * remap_cnt));
+    for (int i = 0; i < remap_cnt; ++i) {
+        remaps_buf[i].child_fd = remaps[i].child_fd;
+        remaps_buf[i].parent_fd = remaps[i].parent_fd;
+    }
+}
+
 void construct_args_for_user_stack(int argc, uint32_t* arg_lens, char** arg_bufs,
     uintptr_t& user_stack_pointer) {
     uintptr_t* user_argv_ptrs = (uintptr_t*)kmalloc(argc * sizeof(uintptr_t));
@@ -216,6 +225,8 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     char** arg_bufs;
     copy_args_to_kernel_buffer(argc, argv, arg_lens, arg_bufs);
 
+    fd_remap* remaps_buf = nullptr;
+    copy_remaps_to_kernel_buffer(remaps, remap_cnt, remaps_buf);
     pid_t newpid;
     PCB* new_pcb;
     {
@@ -223,6 +234,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         newpid = get_new_pid();
         if (newpid == 0) {
             kfree(code_buf);
+            if(remaps_buf) kfree(remaps_buf);
             return 0;
         }
         new_pcb = init_pcb(newpid);
@@ -239,6 +251,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         vmm_switch(pd_addr_old);
         SpinlockGuard guard(process_list_lock);
         free_pcb(process_list[newpid]);
+        if(remaps_buf) kfree(remaps_buf);
         return 0;
     }
     kfree(code_buf);
@@ -251,7 +264,9 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         new_pcb->cr3 = pd_addr;
         new_pcb->heap_start = heap_addr;
         new_pcb->heap_break = heap_addr;
-        // remap_fd(newpid, remaps, remap_cnt);
+        remap_fd(newpid, remaps_buf, remap_cnt);
+        if(remaps_buf) kfree(remaps_buf);
+
         init_kernel_stack(new_pcb, KERNEL_STACK_SIZE, sp, entry);
         insert_into_scheduling_queue(newpid, priority);
     }

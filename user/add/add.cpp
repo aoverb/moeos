@@ -15,8 +15,10 @@ int main(int argc, char** argv) {
     if (argc > 2) {
         int a = my_atoi(argv[1]);
         int b = my_atoi(argv[2]);
+        printf("%d", a + b);
         return a + b;
     } else {
+        printf("-1");
         return -1;
     }
 }

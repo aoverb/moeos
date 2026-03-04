@@ -48,13 +48,11 @@ int kpipe(int fds[2]) {
     PCB* proc = process_list[cur_process_id];
 
     fds[0] = v_open(proc, "/pipe/create", O_CREATE | O_RDONLY); // 有点像RESTful
-    printf("fds[0]: %d\n", fds[0]);
     if (fds[0] < 0) return -1;
     int pipe_idx = proc->fd[fds[0]]->inode_id;
     char path[32];
     sprintf(path, "/pipe/%d", pipe_idx);
     fds[1] = v_open(proc, path, O_WRONLY);
-    printf("fds[1]: %d\n", fds[1]);
     if (fds[1] < 0) {
         v_close(proc, fds[0]);
         return -1;
@@ -75,10 +73,8 @@ static int unmount(mounting_point*) {
 
 static int open(mounting_point* mp, const char* path,  uint8_t mode) {
     ++path; // 第一位是斜线
-    printf("pipe_open: %s\n", path);
     if (!mp->data) return -1;
     pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
-    printf("pipe_open: %s\n", path);
     if (strcmp("create", path) == 0) {
         pipe_entry* new_pipe = alloc_entry(data);
         if (!new_pipe) return -1;
@@ -91,7 +87,9 @@ static int open(mounting_point* mp, const char* path,  uint8_t mode) {
         return new_pipe->entry_id;
     } else {
         int idx = atoi(path);
-        if (idx < 0 || !data->entry[idx]) return -1;
+        if (idx < 0 || idx >= MAX_PIPE_NUM || !data->entry[idx]) return -1;
+        if (mode & O_RDONLY) data->entry[idx]->read_open = true;
+        if (mode & O_WRONLY) data->entry[idx]->write_open = true;
         return idx;
     }
     return -1;
@@ -159,8 +157,9 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
     if (!data->entry[inode_id]) return -1;
     pipe_entry* pipe = data->entry[inode_id];
+    uint32_t write_cnt = 0;
     for (int i = 0; i < size; ++i) {
-        while (pipe->write_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
+        while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
             PCB* proc;
             while (proc = pipe->reader) {
                 proc->state = process_state::READY;
@@ -172,9 +171,10 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
             yield();
         }
         pipe->buffer[(pipe->write_pos++)] = buffer[i];
-        pipe->read_pos = pipe->read_pos % PIPE_BUF_SIZE;
+        pipe->write_pos = pipe->write_pos % PIPE_BUF_SIZE;
+        ++write_cnt;
     }
-    return 0;
+    return write_cnt;
 }
 
 static int stat(mounting_point*, const char*, file_stat*) {
