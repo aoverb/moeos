@@ -240,6 +240,9 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         new_pcb = init_pcb(newpid);
     }
 
+    spinlock pd_lock;
+    SpinlockGuard pdGuard(pd_lock);
+
     uint32_t pd_addr_old = vmm_get_cr3();
     uint32_t pd_addr = vmm_create_page_directory();
     vmm_switch(pd_addr);

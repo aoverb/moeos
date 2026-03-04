@@ -26,10 +26,10 @@ struct pipe_entry {
     process_queue writer;
 };
 
-struct pipe_data {
+typedef struct pipe_data {
     pipe_entry* entry[MAX_PIPE_NUM];
     uint32_t pipe_cnt = 0;
-};
+} pipe_data;
 
 pipe_entry* alloc_entry(pipe_data* data) {
     for (int i = 0; i < MAX_PIPE_NUM; ++i) {
@@ -179,16 +179,61 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     return write_cnt;
 }
 
-static int stat(mounting_point*, const char*, file_stat*) {
-    return -1;
+static int stat(mounting_point* mp, const char* path, file_stat* out) {
+    if (!mp->data) return -1;
+    if (path[0] == '/') path++;
+
+    if (path[0] == '\0') {
+        strcpy(out->name, "dev");
+        out->type = 0;
+        out->mode = 0755;
+        out->size = 0;
+        out->owner_id = 0;
+        out->group_id = 0;
+        strcpy(out->owner_name, "root");
+        strcpy(out->group_name, "root");
+        strcpy(out->link_name, "");
+        out->last_modified = 0;
+        return 0;
+    }
+
+    pipe_data* item = reinterpret_cast<pipe_data*>(mp->data);
+    for (uint32_t i = 0; i < item->pipe_cnt; ++i) {
+        if (item->entry[atoi(path)]) {
+            strcpy(out->name, path);
+            out->type = 1;
+            out->size = 0;
+            out->owner_id = 0;
+            out->group_id = 0;
+            strcpy(out->owner_name, "root");
+            strcpy(out->group_name, "root");
+            strcpy(out->link_name, "");
+            out->last_modified = 0;
+
+            // 根据设备实际能力设置权限
+            bool can_read  = (item->entry[i]->read_open);
+            bool can_write = (item->entry[i]->write_open);
+            out->mode = 0;
+            if (can_read)  out->mode |= 0444;  // r--r--r--
+            if (can_write) out->mode |= 0222;  // -w--w--w-
+            return 0;
+        }
+    }
 }
 
 static int opendir(mounting_point*, const char*) {
     return 0;
 }
 
-static int readdir(mounting_point*, uint32_t, uint32_t, dirent*) {
-    return 0;
+static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
+    if (inode_id != 0) return 0;
+    if (!mp->data || (reinterpret_cast<pipe_data*>(mp->data)->pipe_cnt <= inode_id)) return 0;
+    pipe_data* item = reinterpret_cast<pipe_data*>(mp->data);
+    if (offset >= item->pipe_cnt || !item->entry[offset]) return 0;
+    out->inode = offset;
+    strcpy(out->name, "PIPE");
+    out->type = '?';
+    return 1;
 }
 
 static int closedir(mounting_point*, uint32_t) {
