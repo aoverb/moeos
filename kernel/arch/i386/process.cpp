@@ -197,8 +197,6 @@ uintptr_t create_user_stack(uint32_t page_size) {
 void remap_fd(pid_t newpid, fd_remap* remaps, int remap_cnt) {
     if (!remaps || !remap_cnt) return;
     for (int i = 0; i < remap_cnt; ++i) {
-        printf("dup pid:%d fd %d to pid:%d fd %d.\n", cur_process_id, remaps[i].parent_fd,
-                  newpid, remaps[i].child_fd);
         v_dup_to(process_list[cur_process_id], remaps[i].parent_fd,
                   process_list[newpid], remaps[i].child_fd);
     }

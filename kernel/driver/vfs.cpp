@@ -218,7 +218,6 @@ int _v_close(PCB* proc, int fd_pos) {
     proc->fd[fd_pos] = nullptr;
     proc->fd_num--;
     if (--(fd->refcnt) == 0) {
-        printf("proc %d: fd: %d closed.\n", proc->pid, fd_pos);
         fd->mp->operations->close(fd->mp, fd->inode_id, fd->mode);
         file_handle[fd->handle_id] = nullptr;
         --file_handle_num;
@@ -239,7 +238,6 @@ int _v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst) {
     file_description* fd_s = src_proc->fd[fd_src];
     if (!fd_s) return -1;
     if (dst_proc->fd[fd_dst]) {
-        printf("due to dup proc %d: fd: %d is being closed. ref: %d\n", dst_proc->pid, fd_dst, dst_proc->fd[fd_dst]->refcnt);
         _v_close(dst_proc, fd_dst);
     }
     dst_proc->fd[fd_dst] = fd_s;
