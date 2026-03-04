@@ -150,3 +150,10 @@ void terminal_write(const char* data, size_t size) {
         terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
     }
 }
+
+void terminal_clear() {
+    SpinlockGuard guard(tty_lock);
+    terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
+    terminal_row = 0;
+    terminal_col = 0;
+}

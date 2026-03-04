@@ -253,7 +253,7 @@ int main(int argc_main, char** argv_main) {
     char* tokens[MAX_ARGS];
     stage stages[MAX_PIPELINE];
 
-    printf("Shell is running in user addr: %x\n", &main);
+    // printf("Shell is running in user addr: %x\n", &main);
 
     while (1) {
         set_color(0x39C5BB);

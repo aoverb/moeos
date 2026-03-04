@@ -1,12 +1,20 @@
 #include <stdint.h>
 #include <stdio.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 #if defined(__is_libk)
 #include <driver/keyboard.h>
+#include <kernel/tty.h>
 #else
 #include <file.h>
 #endif
 
+void cls() {
+    #if defined(__is_libk)
+        terminal_clear();
+    #else
+        syscall0((uint32_t)SYSCALL::TERMINAL_CLEAR);
+    #endif
+}
 
 void getline(char* buf, uint32_t size) {
 #if defined(__is_libk)

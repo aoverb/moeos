@@ -14,7 +14,7 @@
 #include <kernel/process.h>
 #include <kernel/syscall.h>
 #include <kernel/panic.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 
 #include <driver/keyboard.h>
 #include <driver/pit.h>
@@ -192,36 +192,8 @@ void test_unordered_map() {
 
 extern void init_console_dev(mounting_point* mp);
 
-extern "C" void kernel_main(multiboot_info_t* mbi) {
-    pmm_prepare(mbi);
-    vmm_init();
-    terminal_initialize(mbi);
-    kheap_init();
-    uint32_t mod_count = 0;
-    saved_module* saved;
-    save_module(mbi, saved, mod_count);
-    pmm_migrate_to_high();
-    vmm_cleanup_low_identity_mapping();
-    mbi = NULL;
-    print_rumia();
-
-    printf("HAL initializing...");
-    hal_init();
-    printf("OK\n");
-
-    printf("Keyboard initializing...");
-    keyboard_init();
-    printf("OK\n");
-
-    printf("pit initializing...");
-    pit_init();
-    printf("OK\n");
-
-    printf("syscall initializing...");
-    syscall_init();
-    printf("OK\n");
-
-    printf("filesystem initializing...");
+void fs_init(saved_module* saved, uint32_t mod_count) {
+    printf("filesystem initializing...\n");
     init_vfs();
     init_tarfs();
     init_devfs();
@@ -235,7 +207,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
         if (ret == nullptr) {
             panic("failed to mount root!");
         } else {
-            printf("Root mounted!\n\n");
+            printf("Root mounted!\n");
         }
     }
 
@@ -243,7 +215,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     if (dev_ret == nullptr) {
         panic("failed to mount devfs to /dev!");
     } else {
-        printf("/dev mounted!\n\n");
+        printf("/dev mounted!\n");
     }
     init_console_dev(dev_ret);
 
@@ -251,28 +223,40 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     if (pipe_ret == nullptr) {
         panic("failed to mount pipefs to /pipe!");
     } else {
-        printf("/pipe mounted!\n\n");
-    }
+        printf("/pipe mounted!\n");
+        }
+    printf("filesystem initialized!\n");
+}
 
-    printf("OK\n");
+extern "C" void kernel_main(multiboot_info_t* mbi) {
+    pmm_prepare(mbi);
+    vmm_init();
+    terminal_initialize(mbi);
+    kheap_init();
+    uint32_t mod_count = 0;
+    saved_module* saved;
+    save_module(mbi, saved, mod_count);
+    pmm_migrate_to_high();
+    vmm_cleanup_low_identity_mapping();
+    mbi = NULL;
+    print_rumia();
 
-    printf("process initializing...");
+    hal_init();
+    keyboard_init();
+    pit_init();
+    syscall_init();
+    fs_init(saved, mod_count);
     process_init();
     asm volatile ("sti");
-    printf("OK\n");
-
-    printf("Welcome, aoverb!\n\n");
-    printf("The kernel_main lies in %X, sounds great!\n", &kernel_main);
-
+    
     PCB* cur_pcb = process_list[cur_process_id];
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
     if (fd == -1) {
         panic("failed to open shell!");
     }
-    char* buffer = (char*)kmalloc(65536);
-    int size = v_read(cur_pcb, fd, buffer, 65536);
-    printf("Executing shell: %d bytes loaded\n", size);
-
+    char* buffer = (char*)kmalloc(131072);
+    int size = v_read(cur_pcb, fd, buffer, 131072);
+    cls();
     pid_t shell_pid = exec(buffer, size, 1, 0, nullptr);
     if (shell_pid == 0) panic("Loading shell failed!");
     waitpid(shell_pid);

@@ -2,13 +2,16 @@
 #include "idt.h"
 #include "pic.h"
 #include <kernel/hal.h>
+#include <stdio.h>
 
 void hal_init() {
+    printf("HAL initializing...");
     asm volatile ("cli");
     gdt_init();
     pic_init();
     idt_init();
     io_init();
+    printf("OK\n");
 }
 
 uint8_t hal_inb(uint16_t port) {

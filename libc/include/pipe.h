@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 
 #define O_RDONLY  0x01
 #define O_WRONLY  0x02

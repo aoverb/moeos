@@ -12,6 +12,7 @@ int printf(const char* __restrict, ...) __attribute__((format(printf, 1, 2)));
 int putchar(int);
 int puts(const char*);
 void getline(char* buf, uint32_t size);
+void cls();
 
 #ifdef __cplusplus
 }

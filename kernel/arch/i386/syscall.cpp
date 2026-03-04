@@ -1,6 +1,6 @@
 #include <kernel/syscall.h>
 #include <kernel/mm.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 #include <kernel/process.hpp>
 #include <driver/vfs.hpp>
 #include <driver/pipefs.hpp>
@@ -26,6 +26,11 @@ int sys_terminal_write(interrupt_frame* reg) {
 
 int sys_terminal_set_text_color(interrupt_frame* reg) {
     terminal_setcolor(reg->ebx);
+    return 0;
+}
+
+int sys_terminal_clear(interrupt_frame*) {
+    terminal_clear();
     return 0;
 }
 
@@ -192,10 +197,12 @@ int sys_pipe(interrupt_frame* reg) {
 }
 
 void syscall_init() {
+    printf("syscall initializing...");
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);
+    register_syscall(uint32_t(SYSCALL::TERMINAL_CLEAR), sys_terminal_clear);
     register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
@@ -212,6 +219,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
+    printf("OK\n");
 }
 
 void register_syscall(uint8_t n, syscall_handler_t handler) {

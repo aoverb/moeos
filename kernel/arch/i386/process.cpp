@@ -101,6 +101,7 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
 }
 
 void process_init() {
+    printf("process initializing...");
     init_scheduler();
     PCB* new_process = init_pcb(0);
     cur_process_id = 0;
@@ -112,6 +113,7 @@ void process_init() {
     // 调度到别的进程的时候会把这个esp自动刷新
     // kernel_bottom 同样不需要刷新，调用free_pcb销毁内核栈用
     // 但是引导程序的内核栈是不会也不应该被销毁的
+    printf("OK\n");
 }
 
 constexpr uint32_t CODE_SPACE_ADDR = 0x04000000;

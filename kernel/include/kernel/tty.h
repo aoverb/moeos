@@ -14,6 +14,7 @@ struct multiboot_info_t;
 void terminal_initialize(struct multiboot_info_t* mbi);
 void terminal_setcolor(uint32_t color);
 void terminal_write(const char* data, size_t size);
+void terminal_clear();
 #ifdef __cplusplus
 }
 #endif

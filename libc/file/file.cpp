@@ -1,5 +1,5 @@
 #include <file.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 
 int stat(const char* path, file_stat* stat) {
     return syscall2((uint32_t)SYSCALL::STAT, (uint32_t)path, (uint32_t)stat);

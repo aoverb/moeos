@@ -69,6 +69,7 @@ void keyboard_interrupt_handler(registers* /* regs */) {
 }
 
 void keyboard_init() {
+    printf("Keyboard initializing...");
     rb_flush();
     register_interrupt_handler(33, keyboard_interrupt_handler);
     while (hal_inb(0x64) & 0x01) {
@@ -76,6 +77,7 @@ void keyboard_init() {
     }
 
     hal_enable_irq(1);
+    printf("OK\n");
 }
 
 void keyboard_flush() {

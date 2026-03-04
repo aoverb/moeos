@@ -15,6 +15,7 @@ void timer_interrupt_handler(registers* /* regs */) {
 }
 
 void pit_init() {
+    printf("pit initializing...");
     asm volatile ("cli");
     ticks = 0;
     register_interrupt_handler(32, timer_interrupt_handler);
@@ -23,6 +24,7 @@ void pit_init() {
     hal_outb(0x40, 0x2e);
 
     hal_enable_irq(0);
+    printf("OK\n");
 }
 
 void pit_sleep(uint32_t ms) {

@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 #if defined(__is_libk)
 #include <kernel/tty.h>
 #endif

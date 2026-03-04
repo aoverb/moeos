@@ -6,7 +6,7 @@
 #include <file.h>
 #endif
 
-#include <syscall_def.h>
+#include <syscall_def.hpp>
 
 int putchar(int ic) {
 #if defined(__is_libk)
