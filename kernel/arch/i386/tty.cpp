@@ -1,7 +1,7 @@
 /* kernel/arch/i386/tty.cpp */
 #include <kernel/tty.h>
 #include <kernel/font.h>
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <kernel/spinlock.hpp>
 #include <string.h>
 #include <boot/multiboot.h>

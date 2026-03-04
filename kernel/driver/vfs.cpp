@@ -1,6 +1,6 @@
 #include <driver/vfs.hpp>
 #include <kernel/panic.h>
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <kernel/spinlock.hpp>
 #include <string.h>
 #include <format.h>

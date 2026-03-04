@@ -9,7 +9,7 @@
 #include <string.h>
 #include <kernel/tty.h>
 #include <kernel/hal.h>
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <kernel/schedule.hpp>
 #include <kernel/process.h>
 #include <kernel/syscall.h>
@@ -22,6 +22,7 @@
 #include <driver/tarfs.hpp>
 #include <driver/devfs.hpp>
 #include <driver/pipefs.hpp>
+#include <driver/rtl8139.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -191,6 +192,7 @@ void test_unordered_map() {
 }
 
 extern void init_console_dev(mounting_point* mp);
+extern void init_nic_dev_file(mounting_point* mp);
 
 void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initializing...\n");
@@ -218,6 +220,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
         printf("/dev mounted!\n");
     }
     init_console_dev(dev_ret);
+    init_nic_dev_file(dev_ret);
 
     mounting_point* pipe_ret = v_mount(FS_DRIVER::PIPEFS, "/pipe", nullptr);
     if (pipe_ret == nullptr) {
@@ -244,19 +247,31 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     hal_init();
     keyboard_init();
     pit_init();
+    rtl8139_init();
     syscall_init();
     fs_init(saved, mod_count);
     process_init();
     asm volatile ("sti");
-    
+
     PCB* cur_pcb = process_list[cur_process_id];
+    int nic_fd = v_open(cur_pcb, "/dev/nic", O_RDONLY);
+    if (nic_fd == -1) {
+        printf("failed to open NIC dev!\n");
+    }
+    char* buf = (char*)kmalloc(1024 * sizeof(char));
+    if ((v_read(cur_pcb, nic_fd, buf, 1024)) != -1) {
+        printf("do nic_read successfully! %.8s\n", buf);
+    } else {
+        printf("failed to read NIC dev!\n");
+    }
+
+    
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
     if (fd == -1) {
         panic("failed to open shell!");
     }
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
-    cls();
     pid_t shell_pid = exec(buffer, size, 1, 0, nullptr);
     if (shell_pid == 0) panic("Loading shell failed!");
     waitpid(shell_pid);

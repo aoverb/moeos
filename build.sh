@@ -21,4 +21,4 @@ EOF
 
 # 生成 ISO 文件
 grub-mkrescue -o lolios.iso isodir
-qemu-system-i386 -cdrom lolios.iso
+qemu-system-i386 -device rtl8139,netdev=net0 -netdev user,id=net0 -cdrom lolios.iso

@@ -1,6 +1,6 @@
 #include <elf.h>
 #if defined(__is_libk)
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #else
 #include <stdlib.h>
 #endif

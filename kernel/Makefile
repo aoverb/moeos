@@ -24,7 +24,8 @@ driver/vfs.o \
 driver/tarfs.o \
 driver/devfs.o \
 driver/console.o \
-driver/pipefs.o
+driver/pipefs.o \
+driver/rtl8139.o
 
 MM_OBJS=\
 mm/pmm_core.o \

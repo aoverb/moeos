@@ -1,5 +1,5 @@
 #include <kernel/process.hpp>
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <kernel/panic.h>
 #include <kernel/schedule.hpp>
 #include <kernel/spinlock.hpp>

@@ -44,6 +44,12 @@ void pmm_probe();
 
 void pmm_migrate_to_high();
 
+constexpr uint32_t VMM_PRESENT       = (1 << 0);
+constexpr uint32_t VMM_WRITABLE      = (1 << 1);
+constexpr uint32_t VMM_USER          = (1 << 2);
+constexpr uint32_t VMM_WRITE_THROUGH = (1 << 3);
+constexpr uint32_t VMM_CACHE_DISABLE = (1 << 4);
+
 void vmm_init();
 
 void vmm_map_page(uintptr_t p_addr, uintptr_t v_addr, uint32_t flag);

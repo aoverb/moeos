@@ -3,7 +3,7 @@
 #include <kernel/schedule.h>
 #include <unordered_map>
 
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <string.h>
 #include <stdio.h>
 #include <format.h>

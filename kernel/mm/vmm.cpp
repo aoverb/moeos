@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <string.h>
-#include <kernel/mm.h>
+#include <kernel/mm.hpp>
 #include <kernel/panic.h>
 #include <kernel/spinlock.hpp>
 
@@ -68,9 +68,9 @@ static void vmm_map_page_nolock(uintptr_t p_addr, uintptr_t v_addr, uint32_t fla
         if (!new_pt) panic("oom when trying to allocate new page for page table");
         pde_list[pde] = {0};
         pde_list[pde].user_super = (flag >> 2) & 1;
-        pde_list[pde].frame = new_pt >> 12;
+        pde_list[pde].frame      = new_pt >> 12;
         pde_list[pde].read_write = 1;
-        pde_list[pde].present = 1;
+        pde_list[pde].present    = 1;
         invlpg(0xFFC00000 | pde << 12);
 
         PTE* pte_list = reinterpret_cast<PTE*>(0xFFC00000 | pde << 12);
@@ -80,10 +80,12 @@ static void vmm_map_page_nolock(uintptr_t p_addr, uintptr_t v_addr, uint32_t fla
     if (cur_pte->present) panic("v_addr mapping already exist!");
     *cur_pte = {0};
 
-    cur_pte->read_write = (flag >> 1) & 1;
-    cur_pte->user_super = (flag >> 2) & 1;
-    cur_pte->present = 1;
-    cur_pte->frame = p_addr >> 12;
+    cur_pte->present       = 1;
+    cur_pte->read_write    = (flag >> 1) & 1;
+    cur_pte->user_super    = (flag >> 2) & 1;
+    cur_pte->write_through = (flag >> 3) & 1;
+    cur_pte->cache_disable = (flag >> 4) & 1;
+    cur_pte->frame         = p_addr >> 12;
 
     invlpg(v_addr);
 }
