@@ -12,6 +12,7 @@ constexpr uint16_t REG_CHIPCMD  = 0x37;
 constexpr uint16_t REG_RBSTART  = 0x30;
 constexpr uint16_t REG_RXCONFIG = 0x44;
 constexpr uint16_t REG_TXCONFIG = 0x40;
+constexpr uint16_t REG_CAPR = 0x38;
 
 constexpr uint32_t RBUFFER_SIZE = 0x10000;
 constexpr uint32_t RBUFFER_ADDR_START = 0xE1000000;
@@ -137,8 +138,39 @@ void rtl8139_init() {
     return;
 }
 
-static int nic_read(char* buffer, uint32_t offset, uint32_t size) {
-    return -1;
+static int rx_cur = 0;
+
+static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
+    // 确认是否有新数据写入到环形缓冲区中
+    if (inb(io_addr + REG_CHIPCMD) & (1 << 0x0)) return -1;   // BUFE 位，bit 0，缓冲区空标记
+
+    uint32_t* header = reinterpret_cast<uint32_t*>(RBUFFER_ADDR_START + rx_cur);
+    uint16_t length = (*header) >> 16; // 这里的长度包含尾部4字节的CRC
+    uint16_t status = (*header) & 0xFFFF;
+
+    int old_rx_cur = rx_cur;
+    rx_cur += length + 4; // 把头部4字节长度算上
+    rx_cur = (rx_cur + 3) & (~3); // 四字节对齐
+    rx_cur %= RBUFFER_SIZE; // 当前指针的位置正常移动
+
+    if (!(status & 0x01)) return -1; // ROK 位，bit 0
+
+    int data_cur = (old_rx_cur + 4) % RBUFFER_SIZE; // 忽略前4字节的头部，直接从old_rx_cur + 4开始读起
+    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了
+
+    int readcnt = 0;
+
+    for (int i = 0; i < size; ++i) {
+        if (((data_cur + i) % RBUFFER_SIZE) == data_end_cur) break;
+        buffer[i] = ((char*)(RBUFFER_ADDR_START))[(data_cur + i) % RBUFFER_SIZE];
+        ++readcnt;
+    }
+
+    // 告诉网卡我们当前的读取地址，减去16字节是硬件要求
+    // 要注意寄存器的长度，尤其是写的时候...
+    outw(io_addr + REG_CAPR, (rx_cur - 0x10 + RBUFFER_SIZE) % RBUFFER_SIZE);
+    
+    return readcnt;
 }
 
 constexpr uint16_t REG_TSAD[4] = {0x20, 0x24, 0x28, 0x2C}; // 发送缓冲区物理地址
