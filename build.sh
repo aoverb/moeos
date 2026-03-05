@@ -23,4 +23,4 @@ EOF
 grub-mkrescue -o lolios.iso isodir
 qemu-system-i386 -cdrom lolios.iso \
     -netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
-    -device rtl8139,netdev=net0
+    -device rtl8139,netdev=net0,mac=CA:FE:BA:BE:13:37

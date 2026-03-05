@@ -140,7 +140,7 @@ void rtl8139_init() {
 
 static int rx_cur = 0;
 
-static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
+int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
     // 确认是否有新数据写入到环形缓冲区中
     if (inb(io_addr + REG_CHIPCMD) & (1 << 0x0)) return -1;   // BUFE 位，bit 0，缓冲区空标记
 
@@ -156,7 +156,7 @@ static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
     if (!(status & 0x01)) return -1; // ROK 位，bit 0
 
     int data_cur = (old_rx_cur + 4) % RBUFFER_SIZE; // 忽略前4字节的头部，直接从old_rx_cur + 4开始读起
-    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了
+    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了，后面四个字节是CRC
 
     int readcnt = 0;
 
@@ -177,7 +177,7 @@ constexpr uint16_t REG_TSAD[4] = {0x20, 0x24, 0x28, 0x2C}; // 发送缓冲区物
 constexpr uint16_t REG_TSD[4]  = {0x10, 0x14, 0x18, 0x1C}; // 发送状态/控制
 static int tx_cur = 0;
 
-static int nic_write(const char* buffer, uint32_t size) {
+int nic_write(const char* buffer, uint32_t size) {
     if (size > SEND_BUFFER_SIZE) return -1;
 
     // todo: 需要一个超时机制
@@ -192,9 +192,29 @@ static int nic_write(const char* buffer, uint32_t size) {
     return size;
 }
 
+void get_mac(uint8_t mac[6]) {
+    for (int i = 0; i < 6; ++i)
+        mac[i] = inb(io_addr + i);
+}
+
+static int nic_mac_read(char* buffer, uint32_t, uint32_t size) {
+    uint8_t mac[6];
+    get_mac(mac);
+    uint32_t len = size < 6 ? size : 6;
+    memcpy(buffer, mac, len);
+    return len;
+}
+
+static int nic_mac_write(const char*, uint32_t) { return -1; } // 不支持写MAC
+
 void init_nic_dev_file(mounting_point* mp) {
     static dev_operation nic_opr;
     nic_opr.read = &nic_read;
     nic_opr.write = &nic_write;
     register_in_devfs(mp, "nic", &nic_opr);
+
+    static dev_operation nic_mac_opr;
+    nic_mac_opr.read = &nic_mac_read;
+    nic_mac_opr.write = &nic_mac_write;
+    register_in_devfs(mp, "nic_mac", &nic_mac_opr);
 };

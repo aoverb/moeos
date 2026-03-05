@@ -27,6 +27,9 @@ driver/console.o \
 driver/pipefs.o \
 driver/rtl8139.o
 
+NET_OBJS=\
+net/arp.o \
+
 MM_OBJS=\
 mm/pmm_core.o \
 mm/vmm.o \
@@ -38,6 +41,7 @@ KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 $(DRIVER_OBJS) \
 $(MM_OBJS) \
+$(NET_OBJS) \
 kernel/kernel.o \
 kernel/isr.o \
 kernel/panic.o

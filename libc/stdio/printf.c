@@ -94,15 +94,11 @@ int printf(const char* restrict format, ...) {
                 break;
             }
             case 'x': {
-                putchar('0');
-                putchar('x');
                 uint32_t num = va_arg(args, uint32_t);
                 print_int_hex(num, true);
                 break;
             }
             case 'X': {
-                putchar('0');
-                putchar('x');
                 uint32_t num = va_arg(args, uint32_t);
                 print_int_hex(num, false);
                 break;

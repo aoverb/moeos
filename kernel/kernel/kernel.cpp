@@ -259,9 +259,19 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
         printf("failed to open NIC dev!\n");
     }
 
+    int nic_mac_fd = v_open(cur_pcb, "/dev/nic_mac", O_RDONLY);
+    if (nic_mac_fd == -1) {
+        printf("failed to open NIC dev!\n");
+    }
+
+    uint8_t mac[6];
+    if (v_read(cur_pcb, nic_mac_fd, reinterpret_cast<char*>(mac), 6)) {
+        printf("mac: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+
     char* buf = (char*)kmalloc(1024 * sizeof(char));
     memset(buf, 0xFF, 6); // 目标mac地址，FF:FF:FF:FF:FF:FF 表示广播
-    // 跳过6 - 11字节
+    memcpy(buf + 6, mac, 6);
     buf[12] = 0x88; // 0x88B5（IEEE保留的本地实验用途类型）
     buf[13] = 0xB5;
     memset(buf + 14, 0, 45);
