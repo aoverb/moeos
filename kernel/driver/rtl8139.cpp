@@ -5,6 +5,7 @@
 #include <kernel/mm.hpp>
 
 #include <stdio.h>
+#include <string.h>
 
 constexpr uint16_t REG_CONFIG1  = 0x52;
 constexpr uint16_t REG_CHIPCMD  = 0x37;
@@ -15,6 +16,8 @@ constexpr uint16_t REG_TXCONFIG = 0x40;
 constexpr uint32_t RBUFFER_SIZE = 0x10000;
 constexpr uint32_t RBUFFER_ADDR_START = 0xE1000000;
 constexpr uint32_t RBUFFER_ADDR_END = 0xE1000000 + 0x10000 + 0x10; // 64kb缓冲区映射 + 16字节的余量
+constexpr uint32_t SEND_BUFFER_ADDR_START = 0xE1012000;
+constexpr uint32_t SEND_BUFFER_SIZE_TOTAL = 0x2000;
 static uint32_t p_addr = 0;
 
 void round_buffer_init() {
@@ -67,6 +70,24 @@ int search_for_rtl8139() {
     return -1;
 }
 
+constexpr uint8_t SEND_BUFFER_NUM = 4;
+constexpr uint32_t SEND_BUFFER_SIZE = SEND_BUFFER_SIZE_TOTAL / SEND_BUFFER_NUM;
+
+uint32_t send_buffer_paddr[4];
+uint32_t send_buffer_vaddr[4];
+
+void init_send_buffer() {
+    uint8_t total_pages = SEND_BUFFER_SIZE_TOTAL / (1 << 12);
+    uint32_t p_addr = (uint32_t)pmm_alloc(total_pages * 4096); // 4 * 2048
+
+    for (int i = 0; i < SEND_BUFFER_NUM; ++i) {
+        send_buffer_paddr[i] = p_addr + SEND_BUFFER_SIZE * i;
+        send_buffer_vaddr[i] = SEND_BUFFER_ADDR_START + SEND_BUFFER_SIZE * i;
+        if (i % (((1 << 12) / SEND_BUFFER_SIZE)) == 0) vmm_map_page(send_buffer_paddr[i], send_buffer_vaddr[i],
+        VMM_WRITABLE | VMM_CACHE_DISABLE); // 以每页为单位映射虚拟地址
+    }
+}
+
 void rtl8139_init() {
     if (search_for_rtl8139() == -1) return;
     printf("rtl8139 found! bus: %d, dev: %d, func: %d\n", pci_bus, pci_dev, pci_func);
@@ -112,6 +133,7 @@ void rtl8139_init() {
     // define TCR_MXDMA_2048 (7 << 8)
     outl(io_addr + REG_TXCONFIG, 0x03000700); // TCR_IFG_STANDARD, TCR_MXDMA_2048
 
+    init_send_buffer();
     return;
 }
 
@@ -119,8 +141,23 @@ static int nic_read(char* buffer, uint32_t offset, uint32_t size) {
     return -1;
 }
 
+constexpr uint16_t REG_TSAD[4] = {0x20, 0x24, 0x28, 0x2C}; // 发送缓冲区物理地址
+constexpr uint16_t REG_TSD[4]  = {0x10, 0x14, 0x18, 0x1C}; // 发送状态/控制
+static int tx_cur = 0;
+
 static int nic_write(const char* buffer, uint32_t size) {
-    return -1;
+    if (size > SEND_BUFFER_SIZE) return -1;
+
+    // todo: 需要一个超时机制
+    while(!(inl(io_addr + REG_TSD[tx_cur]) & (1 << 13))); // TSD寄存器第13位是own位，设置为1代表DMA已完成
+
+    memcpy((void*)send_buffer_vaddr[tx_cur], buffer, size);
+
+    outl(io_addr + REG_TSAD[tx_cur], send_buffer_paddr[tx_cur]); // 物理地址
+    outl(io_addr + REG_TSD[tx_cur], size & 0x1FFF); // 前13位代表发送长度，第13位置零代表发送
+
+    tx_cur = (tx_cur + 1) % 4;
+    return size;
 }
 
 void init_nic_dev_file(mounting_point* mp) {

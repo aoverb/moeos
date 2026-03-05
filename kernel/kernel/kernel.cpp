@@ -258,13 +258,19 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     if (nic_fd == -1) {
         printf("failed to open NIC dev!\n");
     }
-    char* buf = (char*)kmalloc(1024 * sizeof(char));
-    if ((v_read(cur_pcb, nic_fd, buf, 1024)) != -1) {
-        printf("do nic_read successfully! %.8s\n", buf);
-    } else {
-        printf("failed to read NIC dev!\n");
-    }
 
+    char* buf = (char*)kmalloc(1024 * sizeof(char));
+    memset(buf, 0xFF, 6); // 目标mac地址，FF:FF:FF:FF:FF:FF 表示广播
+    // 跳过6 - 11字节
+    buf[12] = 0x88; // 0x88B5（IEEE保留的本地实验用途类型）
+    buf[13] = 0xB5;
+    memset(buf + 14, 0, 45);
+    strcpy(buf + 14, "Hello world from LoliOS!");
+    if ((v_write(cur_pcb, nic_fd, buf, 60)) != -1) { // 最小的以太帧长为60字节
+        printf("/dev/nic do v_write successfully!\n");
+    } else {
+        printf("failed to write to /dev/nic!\n");
+    }
     
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
     if (fd == -1) {
