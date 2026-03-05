@@ -34,7 +34,7 @@ void round_buffer_init() {
         VMM_WRITABLE | VMM_CACHE_DISABLE);
     }
 }
-
+static uint8_t irq = 0; // 网卡的IRQ号
 static uint16_t io_addr = 0;
 static uint8_t pci_bus = 0;
 static uint8_t pci_dev = 0;
@@ -99,23 +99,25 @@ void ethernet_handler(char* buffer, uint16_t size);
 
 void rtl8139_interrupt_handler(registers*) {
     uint16_t status = inw(io_addr + REG_ISR);
-    printf("rtl8139_interrupt_handler: status: %d\n", status);
     if (status & 0x0001) { // 收到了包
         while (!(inb(io_addr + REG_CHIPCMD) & 0x01)) {  // 缓冲区不为空
             int len = nic_read(recv_buff, 0, sizeof(recv_buff));
-            printf("nic_read returned: %d\n", len);
             if (len > 0)
                 ethernet_handler(recv_buff, len);
         }
     }
 
     outw(io_addr + REG_ISR, status);  // 写回清除
+    if (irq + 0x20 >= 0x28) {
+        outb(0xA0, 0x20);  // slave EOI
+    }
+    outb(0x20, 0x20);      // master EOI
     return;
 }
 
 void reg_isr() {
     // 读取网卡的中断号
-    uint8_t irq = read_pci_by_32bits(pci_bus, pci_dev, pci_func, 15) & 0xFF;
+    irq = read_pci_by_32bits(pci_bus, pci_dev, pci_func, 15) & 0xFF;
     register_interrupt_handler(irq + 0x20, rtl8139_interrupt_handler); // 加上从片偏移 减去在主片的7个设备
 
     hal_enable_irq(2);   // 打开从片

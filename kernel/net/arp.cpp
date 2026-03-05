@@ -106,7 +106,6 @@ int send_arp(uint16_t opcode, const uint8_t* target_mac, const uint8_t* target_i
 }
 
 void arp_handler(char* buffer, uint16_t size) {
-    printf("arp_handler called! size=%d\n", size);
     arp_packet* header = reinterpret_cast<arp_packet*>(buffer);
     // 仅接受<ip, 以太网>的映射
     if (header->hw_type != htons(0x0001) || header->proto_type != htons(0x0800)) return;

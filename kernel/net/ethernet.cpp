@@ -13,8 +13,6 @@ typedef struct {
 void arp_handler(char* buffer, uint16_t size);
 
 void ethernet_handler(char* buffer, uint16_t size) {
-    printf("ethernet_handler: size=%d, type=%X %X\n",
-        size, (uint8_t)buffer[12], (uint8_t)buffer[13]);
     if (size < sizeof(ethernet_head)) return;
     char* type = reinterpret_cast<ethernet_head*>(buffer)->type;
     // 注意网络传输用的是大端，但是这里我们逐个字节判断，没问题
