@@ -29,6 +29,7 @@ driver/rtl8139.o
 
 NET_OBJS=\
 net/arp.o \
+net/ethernet.o
 
 MM_OBJS=\
 mm/pmm_core.o \

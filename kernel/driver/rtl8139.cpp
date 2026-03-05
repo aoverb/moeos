@@ -1,12 +1,14 @@
 #include <driver/devfs.hpp>
 #include <driver/rtl8139.hpp>
-
+#include <kernel/isr.h>
 #include <kernel/io.h>
 #include <kernel/mm.hpp>
 
 #include <stdio.h>
 #include <string.h>
 
+constexpr uint16_t REG_IMR = 0x3C;
+constexpr uint16_t REG_ISR = 0x3E;
 constexpr uint16_t REG_CONFIG1  = 0x52;
 constexpr uint16_t REG_CHIPCMD  = 0x37;
 constexpr uint16_t REG_RBSTART  = 0x30;
@@ -19,6 +21,8 @@ constexpr uint32_t RBUFFER_ADDR_START = 0xE1000000;
 constexpr uint32_t RBUFFER_ADDR_END = 0xE1000000 + 0x10000 + 0x10; // 64kb缓冲区映射 + 16字节的余量
 constexpr uint32_t SEND_BUFFER_ADDR_START = 0xE1012000;
 constexpr uint32_t SEND_BUFFER_SIZE_TOTAL = 0x2000;
+
+
 static uint32_t p_addr = 0;
 
 void round_buffer_init() {
@@ -89,6 +93,33 @@ void init_send_buffer() {
     }
 }
 
+static char recv_buff[1800];
+void ethernet_handler(char* buffer, uint16_t size);
+
+void rtl8139_interrupt_handler(registers*) {
+    uint16_t status = inw(io_addr + REG_ISR);
+
+    if (status & 0x0001) { // 收到了包
+        while (!(inb(io_addr + REG_CHIPCMD) & 0x01)) {  // 缓冲区不为空
+            int len = nic_read(recv_buff, 0, sizeof(recv_buff));
+            if (len > 0)
+                ethernet_handler(recv_buff, len);
+        }
+    }
+
+    outw(io_addr + REG_ISR, status);  // 写回清除
+    return;
+}
+
+void reg_isr() {
+    // 读取网卡的中断号
+    uint8_t irq = read_pci_by_32bits(pci_bus, pci_dev, pci_func, 15) & 0xFF;
+    register_interrupt_handler(irq, rtl8139_interrupt_handler);
+
+    // 开启接收OK和接收错误的中断
+    outw(io_addr + REG_IMR, 0x0001 | 0x0004);  // ROK | RXErr
+}
+
 void rtl8139_init() {
     if (search_for_rtl8139() == -1) return;
     printf("rtl8139 found! bus: %d, dev: %d, func: %d\n", pci_bus, pci_dev, pci_func);
@@ -135,6 +166,7 @@ void rtl8139_init() {
     outl(io_addr + REG_TXCONFIG, 0x03000700); // TCR_IFG_STANDARD, TCR_MXDMA_2048
 
     init_send_buffer();
+    reg_isr();
     return;
 }
 
