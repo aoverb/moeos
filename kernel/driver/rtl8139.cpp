@@ -94,6 +94,41 @@ void init_send_buffer() {
     }
 }
 
+static int rx_cur = 0;
+
+static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
+    // 确认是否有新数据写入到环形缓冲区中
+    if (inb(io_addr + REG_CHIPCMD) & (1 << 0x0)) return -1;   // BUFE 位，bit 0，缓冲区空标记
+
+    uint32_t* header = reinterpret_cast<uint32_t*>(RBUFFER_ADDR_START + rx_cur);
+    uint16_t length = (*header) >> 16; // 这里的长度包含尾部4字节的CRC
+    uint16_t status = (*header) & 0xFFFF;
+
+    int old_rx_cur = rx_cur;
+    rx_cur += length + 4; // 把头部4字节长度算上
+    rx_cur = (rx_cur + 3) & (~3); // 四字节对齐
+    rx_cur %= RBUFFER_SIZE; // 当前指针的位置正常移动
+
+    if (!(status & 0x01)) return -1; // ROK 位，bit 0
+
+    int data_cur = (old_rx_cur + 4) % RBUFFER_SIZE; // 忽略前4字节的头部，直接从old_rx_cur + 4开始读起
+    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了，后面四个字节是CRC
+
+    int readcnt = 0;
+
+    for (int i = 0; i < size; ++i) {
+        if (((data_cur + i) % RBUFFER_SIZE) == data_end_cur) break;
+        buffer[i] = ((char*)(RBUFFER_ADDR_START))[(data_cur + i) % RBUFFER_SIZE];
+        ++readcnt;
+    }
+
+    // 告诉网卡我们当前的读取地址，减去16字节是硬件要求
+    // 要注意寄存器的长度，尤其是写的时候...
+    outw(io_addr + REG_CAPR, (rx_cur - 0x10 + RBUFFER_SIZE) % RBUFFER_SIZE);
+    
+    return readcnt;
+}
+
 static char recv_buff[1800];
 void ethernet_handler(char* buffer, uint16_t size);
 
@@ -177,41 +212,6 @@ void rtl8139_init() {
     return;
 }
 
-static int rx_cur = 0;
-
-int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
-    // 确认是否有新数据写入到环形缓冲区中
-    if (inb(io_addr + REG_CHIPCMD) & (1 << 0x0)) return -1;   // BUFE 位，bit 0，缓冲区空标记
-
-    uint32_t* header = reinterpret_cast<uint32_t*>(RBUFFER_ADDR_START + rx_cur);
-    uint16_t length = (*header) >> 16; // 这里的长度包含尾部4字节的CRC
-    uint16_t status = (*header) & 0xFFFF;
-
-    int old_rx_cur = rx_cur;
-    rx_cur += length + 4; // 把头部4字节长度算上
-    rx_cur = (rx_cur + 3) & (~3); // 四字节对齐
-    rx_cur %= RBUFFER_SIZE; // 当前指针的位置正常移动
-
-    if (!(status & 0x01)) return -1; // ROK 位，bit 0
-
-    int data_cur = (old_rx_cur + 4) % RBUFFER_SIZE; // 忽略前4字节的头部，直接从old_rx_cur + 4开始读起
-    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了，后面四个字节是CRC
-
-    int readcnt = 0;
-
-    for (int i = 0; i < size; ++i) {
-        if (((data_cur + i) % RBUFFER_SIZE) == data_end_cur) break;
-        buffer[i] = ((char*)(RBUFFER_ADDR_START))[(data_cur + i) % RBUFFER_SIZE];
-        ++readcnt;
-    }
-
-    // 告诉网卡我们当前的读取地址，减去16字节是硬件要求
-    // 要注意寄存器的长度，尤其是写的时候...
-    outw(io_addr + REG_CAPR, (rx_cur - 0x10 + RBUFFER_SIZE) % RBUFFER_SIZE);
-    
-    return readcnt;
-}
-
 constexpr uint16_t REG_TSAD[4] = {0x20, 0x24, 0x28, 0x2C}; // 发送缓冲区物理地址
 constexpr uint16_t REG_TSD[4]  = {0x10, 0x14, 0x18, 0x1C}; // 发送状态/控制
 static int tx_cur = 0;
@@ -247,11 +247,6 @@ static int nic_mac_read(char* buffer, uint32_t, uint32_t size) {
 static int nic_mac_write(const char*, uint32_t) { return -1; } // 不支持写MAC
 
 void init_nic_dev_file(mounting_point* mp) {
-    static dev_operation nic_opr;
-    nic_opr.read = &nic_read;
-    nic_opr.write = &nic_write;
-    register_in_devfs(mp, "nic", &nic_opr);
-
     static dev_operation nic_mac_opr;
     nic_mac_opr.read = &nic_mac_read;
     nic_mac_opr.write = &nic_mac_write;

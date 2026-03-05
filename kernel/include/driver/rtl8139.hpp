@@ -9,7 +9,6 @@ extern "C" {
 
 void rtl8139_init();
 
-int nic_read(char* buffer, uint32_t /* offset */, uint32_t size);
 int nic_write(const char* buffer, uint32_t size);
 void get_mac(uint8_t mac[6]);
 

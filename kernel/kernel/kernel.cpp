@@ -256,37 +256,19 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     asm volatile ("sti");
 
     PCB* cur_pcb = process_list[cur_process_id];
-    int nic_fd = v_open(cur_pcb, "/dev/nic", O_RDONLY);
-    if (nic_fd == -1) {
-        printf("failed to open NIC dev!\n");
-    }
-
     int nic_mac_fd = v_open(cur_pcb, "/dev/nic_mac", O_RDONLY);
     if (nic_mac_fd == -1) {
         printf("failed to open NIC dev!\n");
-    }
-
-    uint8_t mac[6];
-    if (v_read(cur_pcb, nic_mac_fd, reinterpret_cast<char*>(mac), 6)) {
-        printf("local mac: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    } else {
+        uint8_t mac[6];
+        if (v_read(cur_pcb, nic_mac_fd, reinterpret_cast<char*>(mac), 6)) {
+            printf("MAC Addr: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        }
     }
 
     uint8_t ip[4] = {10, 0, 1, 0};
     printf("ip to get: %d:%d:%d:%d\n", ip[0], ip[1], ip[2], ip[3]);
     to_print_mac(ip);
-
-    char* buf = (char*)kmalloc(1024 * sizeof(char));
-    memset(buf, 0xFF, 6); // 目标mac地址，FF:FF:FF:FF:FF:FF 表示广播
-    memcpy(buf + 6, mac, 6);
-    buf[12] = 0x88; // 0x88B5（IEEE保留的本地实验用途类型）
-    buf[13] = 0xB5;
-    memset(buf + 14, 0, 45);
-    strcpy(buf + 14, "Hello world from LoliOS!");
-    if ((v_write(cur_pcb, nic_fd, buf, 60)) != -1) { // 最小的以太帧长为60字节
-        printf("/dev/nic do v_write successfully!\n");
-    } else {
-        printf("failed to write to /dev/nic!\n");
-    }
 
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
     if (fd == -1) {
