@@ -1,5 +1,6 @@
 #include <driver/devfs.hpp>
 #include <driver/rtl8139.hpp>
+#include <kernel/hal.h>
 #include <kernel/isr.h>
 #include <kernel/io.h>
 #include <kernel/mm.hpp>
@@ -98,10 +99,11 @@ void ethernet_handler(char* buffer, uint16_t size);
 
 void rtl8139_interrupt_handler(registers*) {
     uint16_t status = inw(io_addr + REG_ISR);
-
+    printf("rtl8139_interrupt_handler: status: %d\n", status);
     if (status & 0x0001) { // 收到了包
         while (!(inb(io_addr + REG_CHIPCMD) & 0x01)) {  // 缓冲区不为空
             int len = nic_read(recv_buff, 0, sizeof(recv_buff));
+            printf("nic_read returned: %d\n", len);
             if (len > 0)
                 ethernet_handler(recv_buff, len);
         }
@@ -114,10 +116,13 @@ void rtl8139_interrupt_handler(registers*) {
 void reg_isr() {
     // 读取网卡的中断号
     uint8_t irq = read_pci_by_32bits(pci_bus, pci_dev, pci_func, 15) & 0xFF;
-    register_interrupt_handler(irq, rtl8139_interrupt_handler);
+    register_interrupt_handler(irq + 0x20, rtl8139_interrupt_handler); // 加上从片偏移 减去在主片的7个设备
 
-    // 开启接收OK和接收错误的中断
-    outw(io_addr + REG_IMR, 0x0001 | 0x0004);  // ROK | RXErr
+    hal_enable_irq(2);   // 打开从片
+    hal_enable_irq(irq); // 打开IRQ 11 本身
+
+    // 开启接收OK和发送OK的中断
+    outw(io_addr + REG_IMR, 0x0001 | 0x0004);  // ROK | TOK
 }
 
 void rtl8139_init() {

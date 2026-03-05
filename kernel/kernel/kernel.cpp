@@ -231,6 +231,8 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initialized!\n");
 }
 
+extern void to_print_mac(uint8_t* ip);
+
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
     vmm_init();
@@ -266,8 +268,12 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
 
     uint8_t mac[6];
     if (v_read(cur_pcb, nic_mac_fd, reinterpret_cast<char*>(mac), 6)) {
-        printf("mac: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        printf("local mac: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
+
+    uint8_t ip[4] = {10, 0, 1, 0};
+    printf("ip to get: %d:%d:%d:%d\n", ip[0], ip[1], ip[2], ip[3]);
+    to_print_mac(ip);
 
     char* buf = (char*)kmalloc(1024 * sizeof(char));
     memset(buf, 0xFF, 6); // 目标mac地址，FF:FF:FF:FF:FF:FF 表示广播
@@ -281,7 +287,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     } else {
         printf("failed to write to /dev/nic!\n");
     }
-    
+
     int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
     if (fd == -1) {
         panic("failed to open shell!");
