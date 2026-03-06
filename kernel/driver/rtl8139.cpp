@@ -4,6 +4,7 @@
 #include <kernel/isr.h>
 #include <kernel/io.h>
 #include <kernel/mm.hpp>
+#include <kernel/spinlock.hpp>
 
 #include <stdio.h>
 #include <string.h>
@@ -17,13 +18,14 @@ constexpr uint16_t REG_RXCONFIG = 0x44;
 constexpr uint16_t REG_TXCONFIG = 0x40;
 constexpr uint16_t REG_CAPR = 0x38;
 
+spinlock rbuffer_lock;
 constexpr uint32_t RBUFFER_SIZE = 0x10000;
 constexpr uint32_t RBUFFER_ADDR_START = 0xE1000000;
 constexpr uint32_t RBUFFER_ADDR_END = 0xE1000000 + 0x10000 + 0x10; // 64kb缓冲区映射 + 16字节的余量
 constexpr uint32_t SEND_BUFFER_ADDR_START = 0xE1012000;
 constexpr uint32_t SEND_BUFFER_SIZE_TOTAL = 0x2000;
 
-
+static uint32_t is_initialized = 0;
 static uint32_t p_addr = 0;
 
 void round_buffer_init() {
@@ -81,6 +83,7 @@ constexpr uint32_t SEND_BUFFER_SIZE = SEND_BUFFER_SIZE_TOTAL / SEND_BUFFER_NUM;
 
 uint32_t send_buffer_paddr[4];
 uint32_t send_buffer_vaddr[4];
+spinlock send_buffer_lock;
 
 void init_send_buffer() {
     uint8_t total_pages = SEND_BUFFER_SIZE_TOTAL / (1 << 12);
@@ -99,7 +102,7 @@ static int rx_cur = 0;
 static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
     // 确认是否有新数据写入到环形缓冲区中
     if (inb(io_addr + REG_CHIPCMD) & (1 << 0x0)) return -1;   // BUFE 位，bit 0，缓冲区空标记
-
+    SpinlockGuard guard(rbuffer_lock);
     uint32_t* header = reinterpret_cast<uint32_t*>(RBUFFER_ADDR_START + rx_cur);
     uint16_t length = (*header) >> 16; // 这里的长度包含尾部4字节的CRC
     uint16_t status = (*header) & 0xFFFF;
@@ -209,6 +212,7 @@ void rtl8139_init() {
 
     init_send_buffer();
     reg_isr();
+    is_initialized = 1;
     return;
 }
 
@@ -217,8 +221,9 @@ constexpr uint16_t REG_TSD[4]  = {0x10, 0x14, 0x18, 0x1C}; // 发送状态/控�
 static int tx_cur = 0;
 
 int nic_write(const char* buffer, uint32_t size) {
-    if (size > SEND_BUFFER_SIZE) return -1;
+    if (size > SEND_BUFFER_SIZE || !is_initialized) return -1;
 
+    SpinlockGuard guard(send_buffer_lock);
     // todo: 需要一个超时机制
     while(!(inl(io_addr + REG_TSD[tx_cur]) & (1 << 13))); // TSD寄存器第13位是own位，设置为1代表DMA已完成
 
@@ -232,6 +237,7 @@ int nic_write(const char* buffer, uint32_t size) {
 }
 
 void get_mac(uint8_t mac[6]) {
+    if (!is_initialized) return;
     for (int i = 0; i < 6; ++i)
         mac[i] = inb(io_addr + i);
 }
