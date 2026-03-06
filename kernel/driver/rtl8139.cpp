@@ -27,8 +27,8 @@ constexpr uint32_t SEND_BUFFER_SIZE_TOTAL = 0x2000;
 static uint32_t p_addr = 0;
 
 void round_buffer_init() {
-    int total_pages = 0x10000 / (1 << 12) + 1; // 多出的一页是为了16字节的余量
-    p_addr = (uint32_t)pmm_alloc(total_pages);
+    int total_pages = RBUFFER_SIZE / (1 << 12) + 1; // 多出的一页是为了16字节的余量
+    p_addr = (uint32_t)pmm_alloc(RBUFFER_SIZE);
     for (int i = 0; i < total_pages; ++i) {
         vmm_map_page(p_addr + (1 << 12) * i, RBUFFER_ADDR_START + (1 << 12) * i,
         VMM_WRITABLE | VMM_CACHE_DISABLE);
