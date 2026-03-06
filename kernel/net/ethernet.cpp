@@ -7,7 +7,7 @@
 typedef struct {
     uint8_t target_mac[6];
     uint8_t source_mac[6];
-    char type[2];
+    uint8_t type[2];
 } __attribute__((packed)) ethernet_head;
 
 void arp_handler(char* buffer, uint16_t size);
@@ -15,7 +15,7 @@ void ip_handler(char* buffer, uint16_t size);
 
 void ethernet_handler(char* buffer, uint16_t size) {
     if (size < sizeof(ethernet_head)) return;
-    char* type = reinterpret_cast<ethernet_head*>(buffer)->type;
+    uint8_t* type = reinterpret_cast<ethernet_head*>(buffer)->type;
     // 注意网络传输用的是大端，但是这里我们逐个字节判断，没问题
     if (type[0] == 0x08 && type[1] == 0x06) { // ARP
         arp_handler(buffer + sizeof(ethernet_head), size - sizeof(ethernet_head));
@@ -25,7 +25,7 @@ void ethernet_handler(char* buffer, uint16_t size) {
     return;
 }
 
-int send_ethernet_frame(const uint8_t target_mac[6], const uint8_t source_mac[6], const char type[2],
+int send_ethernet_frame(const uint8_t target_mac[6], const uint8_t source_mac[6], const uint8_t type[2],
     void* buffer, uint16_t size) {
     if (size > 1536 - sizeof(ethernet_head)) return -1;
     // todo: 逐级包装又逐级销毁，时空开销不小！！！这里后面一定要改掉
