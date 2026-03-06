@@ -24,6 +24,62 @@ inline uint32_t ntohl(uint32_t v) {
     return htonl(v);
 }
 
+extern "C++" {
+typedef struct macaddr {
+    uint64_t addr; // 使用网络字节序存储
+    macaddr(const char* s) {
+        *this = s;
+    }
+    macaddr(const uint8_t* s) {
+        *this = s;
+    }
+    macaddr(const char* a, const char* b, const char* c, const char* d, const char* e, const char* f) {
+        uint8_t octets[6] = {
+            (uint8_t)atoi(a), (uint8_t)atoi(b),
+            (uint8_t)atoi(c), (uint8_t)atoi(d),
+            (uint8_t)atoi(e), (uint8_t)atoi(f)
+        };
+        memcpy(&addr, octets, 6);
+    }
+    bool operator == (macaddr& rhs) const {
+        return addr == rhs.addr;
+    }
+    
+    bool operator == (const uint8_t* rhs) const {
+        return memcmp(&addr, rhs, 6) == 0;
+    }
+    friend bool operator==(const uint8_t* lhs, const macaddr& rhs) {
+        return rhs == lhs;
+    }
+
+    bool operator != (const uint8_t* rhs) const {
+        return memcmp(&addr, rhs, 6) != 0;
+    }
+    friend bool operator!=(const uint8_t* lhs, const macaddr& rhs) {
+        return rhs != lhs;
+    }
+    
+    operator uint64_t() const {
+        return addr;
+    }
+
+    macaddr operator =(const char* s) {
+        addr = 0;
+        const unsigned char* u = reinterpret_cast<const unsigned char*>(s);
+        uint8_t octets[6] = {u[0], u[1], u[2], u[3], u[4], u[5]};
+        memcpy(&addr, octets, 6);
+        return *this;
+    }
+    macaddr operator =(const uint8_t* u) {
+        addr = 0;
+        memcpy(&addr, u, 6);
+        return *this;
+    }
+    void to_bytes(uint8_t out[6]) const {
+        memcpy(out, &addr, 6);
+    }
+} macaddr;
+
 typedef struct ipv4addr {
     uint32_t addr; // 使用网络字节序存储
     ipv4addr(const char* s) {
@@ -68,13 +124,14 @@ typedef struct ipv4addr {
         memcpy(out, &addr, 4);
     }
 } ipv4addr;
-
+}
 
 uint16_t checksum(void* data, uint32_t size);
 
 struct netconf {
     ipv4addr ip;
     ipv4addr mask;
+    macaddr mac;
 };
 
 void init_netconf();

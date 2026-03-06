@@ -14,6 +14,7 @@
 #include <kernel/process.h>
 #include <kernel/syscall.h>
 #include <kernel/panic.h>
+#include <kernel/net/net.hpp>
 #include <syscall_def.hpp>
 
 #include <driver/keyboard.h>
@@ -250,6 +251,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     keyboard_init();
     pit_init();
     rtl8139_init();
+    init_netconf();
     syscall_init();
     fs_init(saved, mod_count);
     process_init();

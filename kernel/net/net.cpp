@@ -16,11 +16,16 @@ uint16_t checksum(void* data, uint32_t size) {
 
 static netconf net_conf = {
     {"10", "0", "1", "1"},
-    {"255", "255", "255", "0"}
+    {"255", "255", "255", "0"},
+    {"0", "0", "0", "0", "0", "0"}
 };
 
+extern "C" void get_mac(uint8_t mac[6]);
+
 void init_netconf() {
-    
+    uint8_t mac[6];
+    get_mac(mac);
+    net_conf.mac = mac;
 }
 
 const netconf* getLocalNetconf() {
