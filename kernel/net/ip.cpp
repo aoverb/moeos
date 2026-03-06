@@ -28,7 +28,7 @@ int send_ipv4(uint32_t dst_ip, uint8_t protocol,
     head->header_len = sizeof(ip_header) / 4;
     head->id = 0;
     head->protocol = protocol;
-    head->src_ip = my_ip;
+    head->src_ip = getLocalNetconf()->ip;
     head->total_len = htons(total_len);
     head->ttl = ttl;
     head->type_of_svc = 0;
@@ -65,7 +65,7 @@ void ip_handler(char* buffer, uint16_t size) {
         return;
     }
     uint16_t ip_total_len = ntohs(header->total_len);
-    if (reinterpret_cast<uint8_t*>(&(header->dst_ip)) != my_ip) {
+    if (reinterpret_cast<uint8_t*>(&(header->dst_ip)) != getLocalNetconf()->ip) {
         return;
     }
     if (header->version != 4) { // 仅支持IPV4

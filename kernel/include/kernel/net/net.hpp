@@ -70,11 +70,16 @@ typedef struct ipv4addr {
 } ipv4addr;
 
 
-static ipv4addr my_ip = {"10", "0", "1", "1"};
-
 uint16_t checksum(void* data, uint32_t size);
 
-bool is_same_ip(const uint8_t* ip1, const uint8_t* ip2);
+struct netconf {
+    ipv4addr ip;
+    ipv4addr mask;
+};
+
+void init_netconf();
+
+const netconf* getLocalNetconf();
 
 #ifdef __cplusplus
 }

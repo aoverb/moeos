@@ -14,9 +14,15 @@ uint16_t checksum(void* data, uint32_t size) {
     return ~(uint16_t)res;
 }
 
-bool is_same_ip(const uint8_t* ip1, const uint8_t* ip2) {
-    for (int i = 0; i < 4; ++i) {
-        if (ip1[i] != ip2[i]) return false;
-    }
-    return true;
+static netconf net_conf = {
+    {"10", "0", "1", "1"},
+    {"255", "255", "255", "0"}
+};
+
+void init_netconf() {
+    
+}
+
+const netconf* getLocalNetconf() {
+     return &net_conf; 
 }
