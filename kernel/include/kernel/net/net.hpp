@@ -26,104 +26,127 @@ inline uint32_t ntohl(uint32_t v) {
 
 extern "C++" {
 typedef struct macaddr {
-    uint64_t addr; // 使用网络字节序存储
+    static constexpr uint64_t MASK = 0x0000FFFFFFFFFFFF; // 低6字节有效
+
+    uint64_t addr; // 网络字节序存储，仅低6字节有效
+
+    macaddr(uint64_t input_addr = 0) : addr(input_addr & MASK) {}
+
     macaddr(const char* s) {
-        *this = s;
+        addr = 0;
+        memcpy(&addr, s, 6);
     }
+
     macaddr(const uint8_t* s) {
-        *this = s;
+        addr = 0;
+        memcpy(&addr, s, 6);
     }
-    macaddr(const char* a, const char* b, const char* c, const char* d, const char* e, const char* f) {
-        uint8_t octets[6] = {
-            (uint8_t)atoi(a), (uint8_t)atoi(b),
-            (uint8_t)atoi(c), (uint8_t)atoi(d),
-            (uint8_t)atoi(e), (uint8_t)atoi(f)
-        };
+
+    macaddr(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e, uint8_t f) {
+        addr = 0;
+        uint8_t octets[6] = {a, b, c, d, e, f};
         memcpy(&addr, octets, 6);
     }
-    bool operator == (macaddr& rhs) const {
+
+    bool operator==(const macaddr& rhs) const {
         return addr == rhs.addr;
     }
-    
-    bool operator == (const uint8_t* rhs) const {
+
+    bool operator!=(const macaddr& rhs) const {
+        return addr != rhs.addr;
+    }
+
+    bool operator==(const uint8_t* rhs) const {
         return memcmp(&addr, rhs, 6) == 0;
     }
+
+    bool operator!=(const uint8_t* rhs) const {
+        return memcmp(&addr, rhs, 6) != 0;
+    }
+
     friend bool operator==(const uint8_t* lhs, const macaddr& rhs) {
         return rhs == lhs;
     }
 
-    bool operator != (const uint8_t* rhs) const {
-        return memcmp(&addr, rhs, 6) != 0;
-    }
     friend bool operator!=(const uint8_t* lhs, const macaddr& rhs) {
         return rhs != lhs;
     }
-    
-    operator uint64_t() const {
+
+    explicit operator uint64_t() const {
         return addr;
     }
 
-    macaddr operator =(const char* s) {
+    macaddr& operator=(const char* s) {
         addr = 0;
-        const unsigned char* u = reinterpret_cast<const unsigned char*>(s);
-        uint8_t octets[6] = {u[0], u[1], u[2], u[3], u[4], u[5]};
-        memcpy(&addr, octets, 6);
+        memcpy(&addr, s, 6);
         return *this;
     }
-    macaddr operator =(const uint8_t* u) {
+
+    macaddr& operator=(const uint8_t* s) {
         addr = 0;
-        memcpy(&addr, u, 6);
+        memcpy(&addr, s, 6);
         return *this;
     }
+
+    macaddr& operator=(uint64_t u) {
+        addr = u & MASK;
+        return *this;
+    }
+
     void to_bytes(uint8_t out[6]) const {
         memcpy(out, &addr, 6);
     }
 } macaddr;
 
-typedef struct ipv4addr {
-    uint32_t addr; // 使用网络字节序存储
-    ipv4addr(const char* s) {
-        *this = s;
+struct ipv4addr {
+    uint32_t addr = 0; // 网络字节序
+
+    ipv4addr() = default;
+    ipv4addr(const ipv4addr&) = default;
+
+    explicit ipv4addr(uint32_t raw) : addr(raw) {}
+
+    explicit ipv4addr(const char* s) {
+        const uint8_t* u = reinterpret_cast<const uint8_t*>(s);
+        memcpy(&addr, u, 4);
     }
-    ipv4addr(const char* a, const char* b, const char* c, const char* d) {
+
+    explicit ipv4addr(const uint8_t* u) {
+        memcpy(&addr, u, 4);
+    }
+
+    explicit ipv4addr(const char* a, const char* b,
+                      const char* c, const char* d) {
         uint8_t octets[4] = {
             (uint8_t)atoi(a), (uint8_t)atoi(b),
             (uint8_t)atoi(c), (uint8_t)atoi(d)
         };
         memcpy(&addr, octets, 4);
     }
-    bool operator == (ipv4addr& rhs) const {
-        return addr == rhs.addr;
-    }
-    
-    bool operator == (const uint8_t* rhs) const {
-        return addr == htonl((rhs[0] << 24) | (rhs[1] << 16) | (rhs[2] << 8) | rhs[3]);
-    }
-    friend bool operator==(const uint8_t* lhs, const ipv4addr& rhs) {
-        return rhs == lhs; // 复用上面的实现
-    }
 
-    bool operator != (const uint8_t* rhs) const {
-        return addr != htonl((rhs[0] << 24) | (rhs[1] << 16) | (rhs[2] << 8) | rhs[3]);
-    }
-    friend bool operator!=(const uint8_t* lhs, const ipv4addr& rhs) {
-        return rhs != lhs; // 复用上面的实现
-    }
-    
-    operator uint32_t() const {
-        return addr;
-    }
+    ipv4addr& operator=(const ipv4addr&) = default;
 
-    ipv4addr operator =(const char* s) {
-        const unsigned char* u = reinterpret_cast<const unsigned char*>(s);
-        uint8_t octets[4] = {u[0], u[1], u[2], u[3]};
-        memcpy(&addr, octets, 4);
+    ipv4addr& operator=(const uint8_t* u) {
+        memcpy(&addr, u, 4);
         return *this;
     }
-    void to_bytes(uint8_t out[4]) const {
-        memcpy(out, &addr, 4);
+
+    ipv4addr& operator=(const char* s) {
+        const uint8_t* u = reinterpret_cast<const uint8_t*>(s);
+        memcpy(&addr, u, 4);
+        return *this;
     }
-} ipv4addr;
+
+    bool operator==(const ipv4addr& rhs) const { return addr == rhs.addr; }
+    bool operator!=(const ipv4addr& rhs) const { return addr != rhs.addr; }
+
+    bool operator==(const uint8_t* rhs) const { return memcmp(&addr, rhs, 4) == 0; }
+    bool operator!=(const uint8_t* rhs) const { return memcmp(&addr, rhs, 4) != 0; }
+
+    explicit operator uint32_t() const { return addr; }
+
+    void to_bytes(uint8_t out[4]) const { memcpy(out, &addr, 4); }
+};
 }
 
 uint16_t checksum(void* data, uint32_t size);

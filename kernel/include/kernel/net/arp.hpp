@@ -2,6 +2,7 @@
 #define _KERNEL_NET_ARP_HPP
 
 #include <stdint.h>
+#include <kernel/net/net.hpp>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,9 +11,8 @@ extern "C" {
 constexpr uint16_t APR_OPCODE_REQ = 1;
 constexpr uint16_t APR_OPCODE_REPLY = 2;
 
-uint8_t* my_mac();
-bool arp_table_lookup(uint8_t* ip, uint8_t* mac);
-int send_arp(uint16_t opcode, const uint8_t* target_mac, const uint8_t* target_ip);
+bool arp_table_lookup(const ipv4addr& ip, macaddr& mac);
+int send_arp(uint16_t opcode, const macaddr target_mac, const ipv4addr target_ip);
 
 #ifdef __cplusplus
 }

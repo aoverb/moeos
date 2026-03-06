@@ -4,6 +4,7 @@
 #include <kernel/hal.h>
 #include <kernel/isr.h>
 #include <kernel/io.h>
+#include <kernel/net/net.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/spinlock.hpp>
 
@@ -249,10 +250,8 @@ void get_mac(uint8_t mac[6]) {
 }
 
 static int nic_mac_read(char* buffer, uint32_t, uint32_t size) {
-    uint8_t mac[6];
-    get_mac(mac);
     uint32_t len = size < 6 ? size : 6;
-    memcpy(buffer, mac, len);
+    memcpy(buffer, &(getLocalNetconf()->mac), len);
     return len;
 }
 
@@ -263,4 +262,5 @@ void init_nic_dev_file(mounting_point* mp) {
     nic_mac_opr.read = &nic_mac_read;
     nic_mac_opr.write = &nic_mac_write;
     register_in_devfs(mp, "nic_mac", &nic_mac_opr);
-};
+}
+

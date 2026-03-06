@@ -14,11 +14,7 @@ uint16_t checksum(void* data, uint32_t size) {
     return ~(uint16_t)res;
 }
 
-static netconf net_conf = {
-    {"10", "0", "1", "1"},
-    {"255", "255", "255", "0"},
-    {"0", "0", "0", "0", "0", "0"}
-};
+static netconf net_conf;
 
 extern "C" void get_mac(uint8_t mac[6]);
 
@@ -26,6 +22,8 @@ void init_netconf() {
     uint8_t mac[6];
     get_mac(mac);
     net_conf.mac = mac;
+    net_conf.ip = ipv4addr("10", "0", "1", "1");
+    net_conf.mask = ipv4addr("255", "255", "255", "0");
 }
 
 const netconf* getLocalNetconf() {

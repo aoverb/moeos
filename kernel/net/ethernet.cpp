@@ -1,4 +1,5 @@
 #include <kernel/net/ethernet.hpp>
+#include <kernel/net/net.hpp>
 #include <driver/rtl8139.hpp>
 #include <kernel/mm.hpp>
 #include <string.h>
@@ -25,14 +26,14 @@ void ethernet_handler(char* buffer, uint16_t size) {
     return;
 }
 
-int send_ethernet_frame(const uint8_t target_mac[6], const uint8_t source_mac[6], const uint8_t type[2],
+int send_ethernet_frame(const macaddr target_mac, const macaddr source_mac, const uint8_t type[2],
     void* buffer, uint16_t size) {
     if (size > 1536 - sizeof(ethernet_head)) return -1;
     // todo: 逐级包装又逐级销毁，时空开销不小！！！这里后面一定要改掉
     void* buf = kmalloc(sizeof(ethernet_head) + size);
     ethernet_head* head = (ethernet_head*)buf;
-    memcpy(head->target_mac, target_mac, 6);
-    memcpy(head->source_mac, source_mac, 6);
+    target_mac.to_bytes(head->target_mac);
+    source_mac.to_bytes(head->source_mac);
     memcpy(head->type, type, 2);
     memcpy(buf + sizeof(ethernet_head), buffer, size);
     int ret = nic_write((const char*)buf, sizeof(ethernet_head) + size);

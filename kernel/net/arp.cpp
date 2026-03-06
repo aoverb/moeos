@@ -13,33 +13,14 @@ extern "C" int __cxa_atexit(void (*)(void*), void*, void*) {
 
 std::unordered_map<uint32_t, uint64_t> ip_to_mac;
 
-bool arp_table_lookup(uint8_t* ip, uint8_t* mac) {
-    uint32_t t_ip = 0;
-    for (int i = 0; i < 4; ++i) {
-        t_ip = (t_ip << 8) + ip[4 - i - 1];
-    }
-    if (ip_to_mac.find(t_ip) == ip_to_mac.end()) return false;
-    uint64_t t_mac = ip_to_mac[t_ip];
-    for (int i = 0; i < 6; ++i) {
-        mac[i] = t_mac & 0xff;
-        t_mac >>= 8;
-    }
+bool arp_table_lookup(const ipv4addr& ip, macaddr& mac) {
+    if (ip_to_mac.find((uint32_t)ip) == ip_to_mac.end()) return false;
+    mac = ip_to_mac[(uint32_t)ip];
     return true;
 }
 
-void arp_table_insert(uint8_t* ip, uint8_t* mac) {
-    uint32_t t_ip = 0;
-    for (int i = 0; i < 4; ++i) {
-        t_ip = (t_ip << 8) + ip[4 - i - 1];
-    }
-    uint64_t t_mac = 0;
-    for (int i = 0; i < 6; ++i) {
-        t_mac = (t_mac << 8) + mac[6 - i - 1];
-    }
-    ip_to_mac[t_ip] = t_mac;
-    printf("new arp record:\n");
-    printf("ip: %d:%d:%d:%d\n", ip[0], ip[1], ip[2], ip[3]);
-    printf("mac: %X:%X:%X:%X:%X:%X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+void arp_table_insert(const ipv4addr& ip, const macaddr& mac) {
+    ip_to_mac[(uint32_t)ip] = (uint64_t)mac;
 }
 
 typedef struct {
@@ -54,21 +35,12 @@ typedef struct {
     uint8_t  target_ip[4];
 } __attribute__((packed)) arp_packet;
 
-const uint8_t broadcast_mac[] = {
+const macaddr broadcast_mac = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
 
 void to_print_mac(uint8_t* ip) {
-    send_arp(htons(APR_OPCODE_REQ), broadcast_mac, ip);
-}
-
-uint8_t* my_mac() {
-    static uint8_t flag = 0;
-    static uint8_t mac[6];
-    if (flag) return mac;
-    get_mac(mac);
-    flag = 1;
-    return mac;
+    send_arp(htons(APR_OPCODE_REQ), broadcast_mac, ipv4addr(ip));
 }
 
 bool is_same_mac(const uint8_t* mac1, const uint8_t* mac2) {
@@ -80,22 +52,20 @@ bool is_same_mac(const uint8_t* mac1, const uint8_t* mac2) {
 
 // 场景1.我要问别人MAC
 // 或者响应别人对本机IP->MAC的询问
-int send_arp(uint16_t opcode, const uint8_t* target_mac, const uint8_t* target_ip) {
+int send_arp(uint16_t opcode, const macaddr target_mac, const ipv4addr target_ip) {
     arp_packet header;
     header.hw_type = htons(0x0001);
     header.proto_type = htons(0x0800);
     header.hw_len = 6;
     header.proto_len = 4;
     header.opcode = opcode;
-    memcpy(header.sender_mac, my_mac(), 6);
+    getLocalNetconf()->mac.to_bytes(header.sender_mac);
     getLocalNetconf()->ip.to_bytes(header.sender_ip);
-    memcpy(header.target_mac, target_mac, 6);
-    memcpy(header.target_ip, target_ip, 4);
+    target_mac.to_bytes(header.target_mac);
+    target_ip.to_bytes(header.target_ip);
     // 以太帧目标：request 用广播，reply 用对方 MAC
-    const uint8_t* eth_dst = (opcode == htons(APR_OPCODE_REQ))
-        ? (uint8_t*)broadcast_mac
-        : target_mac;
-    return send_ethernet_frame(eth_dst, my_mac(), TYPE_ARP, &header, sizeof(header));
+    const macaddr eth_dst = (opcode == htons(APR_OPCODE_REQ)) ? broadcast_mac : target_mac;
+    return send_ethernet_frame(eth_dst, getLocalNetconf()->mac, TYPE_ARP, &header, sizeof(header));
 }
 
 void arp_handler(char* buffer, uint16_t size) {
@@ -104,10 +74,10 @@ void arp_handler(char* buffer, uint16_t size) {
     if (header->hw_type != htons(0x0001) || header->proto_type != htons(0x0800)) return;
     if (header->opcode == htons(APR_OPCODE_REQ)) { // 请求
         if (getLocalNetconf()->ip == header->target_ip) { // 场景3：别人问mac，如果目标ip就是我
-                send_arp(htons(APR_OPCODE_REPLY), header->sender_mac, header->sender_ip); // 我来响应
+                send_arp(htons(APR_OPCODE_REPLY), header->sender_mac, ipv4addr(header->sender_ip)); // 我来响应
             }
-    } else if (header->opcode == htons(APR_OPCODE_REPLY) && is_same_mac(my_mac(), header->target_mac)) {
+    } else if (header->opcode == htons(APR_OPCODE_REPLY) && getLocalNetconf()->mac == header->target_mac) {
         // 场景2：别人给我回复它的MAC
-        arp_table_insert(header->sender_ip, header->sender_mac);
+        arp_table_insert(ipv4addr(header->sender_ip), macaddr(header->sender_mac));
     }
 }
