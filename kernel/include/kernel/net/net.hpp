@@ -18,6 +18,15 @@ inline uint16_t ntohs(uint16_t v) {
     return htons(v);
 }
 
+inline uint32_t htonl(uint32_t v) {
+    return ((uint32_t)htons(v & 0xFFFF) << 16) |
+           (uint32_t)htons(v >> 16);
+}
+
+inline uint32_t ntohl(uint32_t v) {
+    return htonl(v);
+}
+
 const uint8_t my_ip[] = {
     10, 0, 1, 1
 };

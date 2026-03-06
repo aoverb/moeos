@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 constexpr char TYPE_ARP[] = {0x08, 0x06};
+constexpr char TYPE_IP[] = {0x08, 0x00};
 
 int send_ethernet_frame(const uint8_t target_mac[6], const uint8_t source_mac[6], const char type[2],
     void* buffer, uint16_t size);

@@ -7,6 +7,8 @@
 extern "C" {
 #endif
 
+constexpr uint8_t IP_PROTOCOL_ICMP = 0x01;
+
 typedef struct {
     uint8_t header_len : 4;
     uint8_t version : 4; // 这里有坑，version和header_len构成一个字节，但是要转成大端的所以位置要调换
@@ -21,7 +23,7 @@ typedef struct {
     uint32_t dst_ip;
 } __attribute__((packed)) ip_header;
 
-int send_ipv4(uint16_t id, uint8_t protocol, uint32_t src_ip, uint32_t dst_ip,
+int send_ipv4(uint32_t dst_ip, uint8_t protocol,
     void* payload, uint32_t payload_len, uint8_t ttl = 120);
 
 #ifdef __cplusplus
