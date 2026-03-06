@@ -112,7 +112,7 @@ static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
     if (!(status & 0x01)) return -1; // ROK 位，bit 0
 
     int data_cur = (old_rx_cur + 4) % RBUFFER_SIZE; // 忽略前4字节的头部，直接从old_rx_cur + 4开始读起
-    int data_end_cur = (old_rx_cur + length - 4) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了，后面四个字节是CRC
+    int data_end_cur = (old_rx_cur + length) % RBUFFER_SIZE;  // 读到尾部倒数第四个字节不读了，后面四个字节是CRC
 
     int readcnt = 0;
 
