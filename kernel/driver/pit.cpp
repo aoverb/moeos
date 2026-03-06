@@ -31,7 +31,7 @@ void pit_sleep(uint32_t ms) {
     uint32_t saved_ticks = ticks;
     uint32_t ceiling_10ms = (ms + 9) / 10;
     while (ticks - saved_ticks < ceiling_10ms) {
-        asm volatile ("hlt");
+        asm volatile ("pause");
     }
 }
 

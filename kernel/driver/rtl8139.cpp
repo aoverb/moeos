@@ -1,5 +1,6 @@
 #include <driver/devfs.hpp>
 #include <driver/rtl8139.hpp>
+#include <driver/pit.h>
 #include <kernel/hal.h>
 #include <kernel/isr.h>
 #include <kernel/io.h>
@@ -224,8 +225,13 @@ int nic_write(const char* buffer, uint32_t size) {
     if (size > SEND_BUFFER_SIZE || !is_initialized) return -1;
 
     SpinlockGuard guard(send_buffer_lock);
-    // todo: 需要一个超时机制
-    while(!(inl(io_addr + REG_TSD[tx_cur]) & (1 << 13))); // TSD寄存器第13位是own位，设置为1代表DMA已完成
+
+    uint32_t old_ticks = pit_get_ticks();
+    while(!(inl(io_addr + REG_TSD[tx_cur]) & (1 << 13))) {
+        if (pit_get_ticks() - old_ticks > 100) { // 1秒的时间上限
+            return -1;
+        }
+    }
 
     memcpy((void*)send_buffer_vaddr[tx_cur], buffer, size);
 
