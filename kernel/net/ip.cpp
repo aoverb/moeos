@@ -28,7 +28,7 @@ int send_ipv4(uint32_t dst_ip, uint8_t protocol,
     head->header_len = sizeof(ip_header) / 4;
     head->id = 0;
     head->protocol = protocol;
-    head->src_ip = htonl((my_ip[0] << 24) | (my_ip[1] << 16) | (my_ip[2] << 8) | my_ip[3]);
+    head->src_ip = my_ip;
     head->total_len = htons(total_len);
     head->ttl = ttl;
     head->type_of_svc = 0;
@@ -65,7 +65,7 @@ void ip_handler(char* buffer, uint16_t size) {
         return;
     }
     uint16_t ip_total_len = ntohs(header->total_len);
-    if (!is_same_ip(reinterpret_cast<uint8_t*>(&(header->dst_ip)), my_ip)) {
+    if (reinterpret_cast<uint8_t*>(&(header->dst_ip)) != my_ip) {
         return;
     }
     if (header->version != 4) { // 仅支持IPV4

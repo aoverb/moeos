@@ -1,14 +1,11 @@
 #ifndef _KERNEL_NET_NET_HPP
 #define _KERNEL_NET_NET_HPP
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-uint16_t checksum(void* data, uint32_t size);
-
-bool is_same_ip(const uint8_t* ip1, const uint8_t* ip2);
 
 inline uint16_t htons(uint16_t v) {
     return (v >> 8) | (v << 8);
@@ -27,9 +24,57 @@ inline uint32_t ntohl(uint32_t v) {
     return htonl(v);
 }
 
-const uint8_t my_ip[] = {
-    10, 0, 1, 1
-};
+typedef struct ipv4addr {
+    uint32_t addr; // 使用网络字节序存储
+    ipv4addr(const char* s) {
+        *this = s;
+    }
+    ipv4addr(const char* a, const char* b, const char* c, const char* d) {
+        uint8_t octets[4] = {
+            (uint8_t)atoi(a), (uint8_t)atoi(b),
+            (uint8_t)atoi(c), (uint8_t)atoi(d)
+        };
+        memcpy(&addr, octets, 4);
+    }
+    bool operator == (ipv4addr& rhs) const {
+        return addr == rhs.addr;
+    }
+    
+    bool operator == (const uint8_t* rhs) const {
+        return addr == htonl((rhs[0] << 24) | (rhs[1] << 16) | (rhs[2] << 8) | rhs[3]);
+    }
+    friend bool operator==(const uint8_t* lhs, const ipv4addr& rhs) {
+        return rhs == lhs; // 复用上面的实现
+    }
+
+    bool operator != (const uint8_t* rhs) const {
+        return addr != htonl((rhs[0] << 24) | (rhs[1] << 16) | (rhs[2] << 8) | rhs[3]);
+    }
+    friend bool operator!=(const uint8_t* lhs, const ipv4addr& rhs) {
+        return rhs != lhs; // 复用上面的实现
+    }
+    
+    operator uint32_t() const {
+        return addr;
+    }
+
+    ipv4addr operator =(const char* s) {
+        const unsigned char* u = reinterpret_cast<const unsigned char*>(s);
+        uint8_t octets[4] = {u[0], u[1], u[2], u[3]};
+        memcpy(&addr, octets, 4);
+        return *this;
+    }
+    void to_bytes(uint8_t out[4]) const {
+        memcpy(out, &addr, 4);
+    }
+} ipv4addr;
+
+
+static ipv4addr my_ip = {"10", "0", "1", "1"};
+
+uint16_t checksum(void* data, uint32_t size);
+
+bool is_same_ip(const uint8_t* ip1, const uint8_t* ip2);
 
 #ifdef __cplusplus
 }

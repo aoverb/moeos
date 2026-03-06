@@ -88,7 +88,7 @@ int send_arp(uint16_t opcode, const uint8_t* target_mac, const uint8_t* target_i
     header.proto_len = 4;
     header.opcode = opcode;
     memcpy(header.sender_mac, my_mac(), 6);
-    memcpy(header.sender_ip, my_ip, 4);
+    my_ip.to_bytes(header.sender_ip);
     memcpy(header.target_mac, target_mac, 6);
     memcpy(header.target_ip, target_ip, 4);
     // 以太帧目标：request 用广播，reply 用对方 MAC
@@ -103,7 +103,7 @@ void arp_handler(char* buffer, uint16_t size) {
     // 仅接受<ip, 以太网>的映射
     if (header->hw_type != htons(0x0001) || header->proto_type != htons(0x0800)) return;
     if (header->opcode == htons(APR_OPCODE_REQ)) { // 请求
-        if (is_same_ip(my_ip, header->target_ip)) { // 场景3：别人问mac，如果目标ip就是我
+        if (my_ip == header->target_ip) { // 场景3：别人问mac，如果目标ip就是我
                 send_arp(htons(APR_OPCODE_REPLY), header->sender_mac, header->sender_ip); // 我来响应
             }
     } else if (header->opcode == htons(APR_OPCODE_REPLY) && is_same_mac(my_mac(), header->target_mac)) {

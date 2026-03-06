@@ -20,7 +20,7 @@ void icmp_handler(uint32_t src_ip, char* buffer, uint16_t size) {
     }
     // 根据类型做分类
     uint8_t type = *(reinterpret_cast<uint8_t*>(buffer));
-    if (type == ICMP_ECHO_REQUEST) { // Echo Request
+    if (type == ICMP_ECHO_REQUEST) {
         handle_echo_request(src_ip, buffer, size);
     }
 }
