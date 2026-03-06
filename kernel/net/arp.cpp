@@ -21,7 +21,7 @@ bool arp_table_lookup(uint8_t* ip, uint8_t* mac) {
     if (ip_to_mac.find(t_ip) == ip_to_mac.end()) return false;
     uint64_t t_mac = ip_to_mac[t_ip];
     for (int i = 0; i < 6; ++i) {
-        mac[6 - i - 1] = t_mac & 0xff;
+        mac[i] = t_mac & 0xff;
         t_mac >>= 8;
     }
     return true;
