@@ -11,6 +11,7 @@ typedef struct {
 } __attribute__((packed)) ethernet_head;
 
 void arp_handler(char* buffer, uint16_t size);
+void ip_handler(char* buffer, uint16_t size);
 
 void ethernet_handler(char* buffer, uint16_t size) {
     if (size < sizeof(ethernet_head)) return;
@@ -18,6 +19,8 @@ void ethernet_handler(char* buffer, uint16_t size) {
     // 注意网络传输用的是大端，但是这里我们逐个字节判断，没问题
     if (type[0] == 0x08 && type[1] == 0x06) { // ARP
         arp_handler(buffer + sizeof(ethernet_head), size - sizeof(ethernet_head));
+    } else if (type[0] == 0x08 && type[1] == 0x0) { // IP
+        ip_handler(buffer + sizeof(ethernet_head), size - sizeof(ethernet_head));
     }
     return;
 }

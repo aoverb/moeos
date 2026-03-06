@@ -78,13 +78,6 @@ bool is_same_mac(const uint8_t* mac1, const uint8_t* mac2) {
     return true;
 }
 
-bool is_same_ip(const uint8_t* ip1, const uint8_t* ip2) {
-    for (int i = 0; i < 4; ++i) {
-        if (ip1[i] != ip2[i]) return false;
-    }
-    return true;
-}
-
 // 场景1.我要问别人MAC
 // 或者响应别人对本机IP->MAC的询问
 int send_arp(uint16_t opcode, const uint8_t* target_mac, const uint8_t* target_ip) {
