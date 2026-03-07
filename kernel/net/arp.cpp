@@ -1,5 +1,7 @@
 #include <kernel/net/arp.hpp>
 #include <kernel/net/net.hpp>
+#include <kernel/timer.hpp>
+#include <kernel/spinlock.hpp>
 #include <driver/rtl8139.hpp>
 #include <kernel/net/ethernet.hpp>
 #include <stdio.h>
@@ -11,15 +13,28 @@ extern "C" int __cxa_atexit(void (*)(void*), void*, void*) {
     return 0; // 内核不需要析构全局对象
 }
 
+spinlock ip_to_mac_lock;
 std::unordered_map<uint32_t, uint64_t> ip_to_mac;
 
 bool arp_table_lookup(const ipv4addr& ip, macaddr& mac) {
-    if (ip_to_mac.find((uint32_t)ip) == ip_to_mac.end()) return false;
-    mac = ip_to_mac[(uint32_t)ip];
-    return true;
+    for (int attempt = 0; attempt <= 3; ++attempt) {
+        {
+            SpinlockGuard guard(ip_to_mac_lock);
+            auto itr = ip_to_mac.find((uint32_t)ip);
+            if (itr != ip_to_mac.end()) {
+                mac = itr->second;
+                return true;
+            }
+        }
+        if (attempt == 3) break;
+        send_arp(htons(APR_OPCODE_REQ), broadcast_mac, ipv4addr(ip));
+        sleep(500);
+    }
+    return false;
 }
 
 void arp_table_insert(const ipv4addr& ip, const macaddr& mac) {
+    SpinlockGuard guard(ip_to_mac_lock);
     ip_to_mac[(uint32_t)ip] = (uint64_t)mac;
 }
 
@@ -34,10 +49,6 @@ typedef struct {
     uint8_t  target_mac[6];
     uint8_t  target_ip[4];
 } __attribute__((packed)) arp_packet;
-
-const macaddr broadcast_mac = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-};
 
 void to_print_mac(uint8_t* ip) {
     send_arp(htons(APR_OPCODE_REQ), broadcast_mac, ipv4addr(ip));

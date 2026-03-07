@@ -149,6 +149,10 @@ struct ipv4addr {
 };
 }
 
+const macaddr broadcast_mac = {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+};
+
 uint16_t checksum(void* data, uint32_t size);
 
 struct netconf {
