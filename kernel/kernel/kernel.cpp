@@ -15,6 +15,7 @@
 #include <kernel/syscall.h>
 #include <kernel/panic.h>
 #include <kernel/net/net.hpp>
+#include <kernel/timer.hpp>
 #include <syscall_def.hpp>
 
 #include <driver/keyboard.h>
@@ -255,6 +256,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     syscall_init();
     fs_init(saved, mod_count);
     process_init();
+    init_kernel_timer();
     asm volatile ("sti");
 
     PCB* cur_pcb = process_list[cur_process_id];
@@ -278,7 +280,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     }
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
-    pid_t shell_pid = exec(buffer, size, 1, 0, nullptr);
+    pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
     if (shell_pid == 0) panic("Loading shell failed!");
     waitpid(shell_pid);
     while (1) {

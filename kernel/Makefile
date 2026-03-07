@@ -48,7 +48,8 @@ $(MM_OBJS) \
 $(NET_OBJS) \
 kernel/kernel.o \
 kernel/isr.o \
-kernel/panic.o
+kernel/panic.o \
+kernel/timer.o
 
 # 4. 构建规则
 

@@ -7,9 +7,12 @@
 
 static volatile uint32_t ticks;
 
+void timer_handler(uint32_t current_tick);
+
 void timer_interrupt_handler(registers* /* regs */) {
     ++ticks;
     hal_outb(0x20, 0x20); // EOI
+    timer_handler(ticks);
     schedule();
     return;
 }
