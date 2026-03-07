@@ -1,0 +1,183 @@
+/**
+ * priority_queue.hpp — Freestanding Priority Queue for OS Development
+ *
+ * Binary-heap-based, fixed-capacity, no dynamic allocation.
+ * Depends on the project's freestanding <utility> for move/forward/swap.
+ *
+ * Usage:
+ *   priority_queue<int, 256> max_pq;                      // max-heap
+ *   priority_queue<int, 256, Less<int>> min_pq;            // min-heap
+ *   priority_queue<Task, 64, TaskCmp> ready_queue;          // custom comparator
+ */
+
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>    // project's std::move, std::forward, std::swap
+
+// ============================================================
+//  Comparators
+// ============================================================
+extern "C++" {
+template <typename T>
+struct Less {
+    bool operator()(const T& a, const T& b) const { return a < b; }
+};
+
+template <typename T>
+struct Greater {
+    bool operator()(const T& a, const T& b) const { return a > b; }
+};
+
+// ============================================================
+//  Placement new (freestanding)
+// ============================================================
+
+#ifndef __PLACEMENT_NEW_DEFINED
+#define __PLACEMENT_NEW_DEFINED
+inline void* operator new(size_t, void* ptr) noexcept { return ptr; }
+inline void  operator delete(void*, void*)   noexcept {}
+#endif
+
+// ============================================================
+//  priority_queue<T, Capacity, Compare>
+//
+//  Compare(a, b) == true  →  a has LOWER priority than b.
+//  Default: Greater<T>  →  max-heap
+// ============================================================
+namespace std {
+template <typename T, size_t Capacity, typename Compare = Greater<T>>
+class priority_queue {
+public:
+    priority_queue() noexcept : m_size(0) {}
+
+    ~priority_queue() { clear(); }
+
+    // Non-copyable
+    priority_queue(const priority_queue&)            = delete;
+    priority_queue& operator=(const priority_queue&) = delete;
+
+    // Movable
+    priority_queue(priority_queue&& other) noexcept : m_size(0) {
+        for (size_t i = 0; i < other.m_size; ++i)
+            new (slot(i)) T(std::move(*other.slot(i)));
+        m_size = other.m_size;
+        other.clear();
+    }
+
+    priority_queue& operator=(priority_queue&& other) noexcept {
+        if (this != &other) {
+            clear();
+            for (size_t i = 0; i < other.m_size; ++i)
+                new (slot(i)) T(std::move(*other.slot(i)));
+            m_size = other.m_size;
+            other.clear();
+        }
+        return *this;
+    }
+
+    // ---- Capacity ---------------------------------------------
+
+    [[nodiscard]] bool   empty()    const noexcept { return m_size == 0; }
+    [[nodiscard]] bool   full()     const noexcept { return m_size == Capacity; }
+    [[nodiscard]] size_t size()     const noexcept { return m_size; }
+    [[nodiscard]] static constexpr size_t capacity() noexcept { return Capacity; }
+
+    // ---- Element access ---------------------------------------
+
+    [[nodiscard]] T&       top()       { return *slot(0); }
+    [[nodiscard]] const T& top() const { return *slot(0); }
+
+    // ---- Modifiers --------------------------------------------
+
+    bool push(const T& value) {
+        if (full()) return false;
+        new (slot(m_size)) T(value);
+        sift_up(m_size++);
+        return true;
+    }
+
+    bool push(T&& value) {
+        if (full()) return false;
+        new (slot(m_size)) T(std::move(value));
+        sift_up(m_size++);
+        return true;
+    }
+
+    template <typename... Args>
+    bool emplace(Args&&... args) {
+        if (full()) return false;
+        new (slot(m_size)) T(std::forward<Args>(args)...);
+        sift_up(m_size++);
+        return true;
+    }
+
+    bool pop() {
+        if (empty()) return false;
+        slot(0)->~T();
+        if (--m_size > 0) {
+            new (slot(0)) T(std::move(*slot(m_size)));
+            slot(m_size)->~T();
+            sift_down(0);
+        }
+        return true;
+    }
+
+    bool pop_into(T& out) {
+        if (empty()) return false;
+        out = std::move(*slot(0));
+        slot(0)->~T();
+        if (--m_size > 0) {
+            new (slot(0)) T(std::move(*slot(m_size)));
+            slot(m_size)->~T();
+            sift_down(0);
+        }
+        return true;
+    }
+
+    void clear() noexcept {
+        for (size_t i = 0; i < m_size; ++i)
+            slot(i)->~T();
+        m_size = 0;
+    }
+
+private:
+    alignas(T) uint8_t m_data[Capacity * sizeof(T)];
+    size_t             m_size;
+    Compare            m_cmp;
+
+    T*       slot(size_t i)       { return reinterpret_cast<T*>(m_data) + i; }
+    const T* slot(size_t i) const { return reinterpret_cast<const T*>(m_data) + i; }
+
+    static size_t parent(size_t i)      { return (i - 1) / 2; }
+    static size_t left_child(size_t i)  { return 2 * i + 1; }
+    static size_t right_child(size_t i) { return 2 * i + 2; }
+
+    bool higher_priority(size_t a, size_t b) const {
+        return m_cmp(*slot(a), *slot(b));
+    }
+
+    void sift_up(size_t idx) {
+        while (idx > 0) {
+            size_t p = parent(idx);
+            if (higher_priority(p, idx)) {
+                std::swap(*slot(p), *slot(idx));
+                idx = p;
+            } else break;
+        }
+    }
+
+    void sift_down(size_t idx) {
+        for (;;) {
+            size_t best = idx;
+            size_t l = left_child(idx), r = right_child(idx);
+            if (l < m_size && higher_priority(best, l)) best = l;
+            if (r < m_size && higher_priority(best, r)) best = r;
+            if (best != idx) { std::swap(*slot(idx), *slot(best)); idx = best; }
+            else break;
+        }
+    }
+};
+}
+} // extern "C++"

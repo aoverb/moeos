@@ -1,0 +1,155 @@
+/**
+ * queue.hpp — Freestanding Queue for OS Development
+ *
+ * Circular-buffer-based, fixed-capacity, no dynamic allocation.
+ * Depends on the project's freestanding <utility> for move/forward/swap.
+ *
+ * Usage:
+ *   queue<int, 256> q;
+ *   q.push(42);
+ *   int val = q.front();
+ *   q.pop();
+ */
+
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>    // project's std::move, std::forward
+
+// ============================================================
+//  Placement new (freestanding)
+// ============================================================
+
+#ifndef __PLACEMENT_NEW_DEFINED
+#define __PLACEMENT_NEW_DEFINED
+inline void* operator new(size_t, void* ptr) noexcept { return ptr; }
+inline void  operator delete(void*, void*)   noexcept {}
+#endif
+
+// ============================================================
+//  queue<T, Capacity>
+//
+//  FIFO circular buffer.  Capacity is the maximum number of
+//  elements; the underlying storage holds exactly Capacity slots.
+// ============================================================
+extern "C++" {
+namespace std {
+template <typename T, size_t Capacity>
+class queue {
+    static_assert(Capacity > 0, "Capacity must be > 0");
+
+public:
+    queue() noexcept : m_head(0), m_tail(0), m_size(0) {}
+
+    ~queue() { clear(); }
+
+    // Non-copyable
+    queue(const queue&)            = delete;
+    queue& operator=(const queue&) = delete;
+
+    // Movable
+    queue(queue&& other) noexcept : m_head(0), m_tail(0), m_size(0) {
+        for (size_t i = 0; i < other.m_size; ++i) {
+            size_t src = (other.m_head + i) % Capacity;
+            new (slot(i)) T(std::move(*other.slot(src)));
+        }
+        m_size = other.m_size;
+        m_head = 0;
+        m_tail = m_size % Capacity;
+        other.clear();
+    }
+
+    queue& operator=(queue&& other) noexcept {
+        if (this != &other) {
+            clear();
+            for (size_t i = 0; i < other.m_size; ++i) {
+                size_t src = (other.m_head + i) % Capacity;
+                new (slot(i)) T(std::move(*other.slot(src)));
+            }
+            m_size = other.m_size;
+            m_head = 0;
+            m_tail = m_size % Capacity;
+            other.clear();
+        }
+        return *this;
+    }
+
+    // ---- Capacity ---------------------------------------------
+
+    [[nodiscard]] bool   empty()    const noexcept { return m_size == 0; }
+    [[nodiscard]] bool   full()     const noexcept { return m_size == Capacity; }
+    [[nodiscard]] size_t size()     const noexcept { return m_size; }
+    [[nodiscard]] static constexpr size_t capacity() noexcept { return Capacity; }
+
+    // ---- Element access ---------------------------------------
+
+    [[nodiscard]] T&       front()       { return *slot(m_head); }
+    [[nodiscard]] const T& front() const { return *slot(m_head); }
+
+    [[nodiscard]] T&       back()        { return *slot((m_tail + Capacity - 1) % Capacity); }
+    [[nodiscard]] const T& back()  const { return *slot((m_tail + Capacity - 1) % Capacity); }
+
+    // ---- Modifiers --------------------------------------------
+
+    bool push(const T& value) {
+        if (full()) return false;
+        new (slot(m_tail)) T(value);
+        m_tail = (m_tail + 1) % Capacity;
+        ++m_size;
+        return true;
+    }
+
+    bool push(T&& value) {
+        if (full()) return false;
+        new (slot(m_tail)) T(std::move(value));
+        m_tail = (m_tail + 1) % Capacity;
+        ++m_size;
+        return true;
+    }
+
+    template <typename... Args>
+    bool emplace(Args&&... args) {
+        if (full()) return false;
+        new (slot(m_tail)) T(std::forward<Args>(args)...);
+        m_tail = (m_tail + 1) % Capacity;
+        ++m_size;
+        return true;
+    }
+
+    bool pop() {
+        if (empty()) return false;
+        slot(m_head)->~T();
+        m_head = (m_head + 1) % Capacity;
+        --m_size;
+        return true;
+    }
+
+    bool pop_into(T& out) {
+        if (empty()) return false;
+        out = std::move(*slot(m_head));
+        slot(m_head)->~T();
+        m_head = (m_head + 1) % Capacity;
+        --m_size;
+        return true;
+    }
+
+    void clear() noexcept {
+        for (size_t i = 0; i < m_size; ++i)
+            slot((m_head + i) % Capacity)->~T();
+        m_head = 0;
+        m_tail = 0;
+        m_size = 0;
+    }
+
+private:
+    alignas(T) uint8_t m_data[Capacity * sizeof(T)];
+    size_t             m_head;   // index of first element
+    size_t             m_tail;   // index of next free slot
+    size_t             m_size;
+
+    T*       slot(size_t i)       { return reinterpret_cast<T*>(m_data) + i; }
+    const T* slot(size_t i) const { return reinterpret_cast<const T*>(m_data) + i; }
+};
+}
+} // extern "C++"
