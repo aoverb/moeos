@@ -155,7 +155,7 @@ int sys_exec(interrupt_frame* reg) {
     char**     argv      = reinterpret_cast<char**>(reg->esi);
     fd_remap*  remaps    = reinterpret_cast<fd_remap*>(reg->ebp);
     int        remap_cnt = int(reg->edi);
-    return static_cast<int>(exec(code, code_size, 4, argc, argv, remaps, remap_cnt));
+    return static_cast<int>(exec("user process", code, code_size, 4, argc, argv, remaps, remap_cnt));
 }
 
 // WAITPID(ebx = pid)

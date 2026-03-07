@@ -106,8 +106,9 @@ void process_init() {
     PCB* new_process = init_pcb(0);
     cur_process_id = 0;
     prepare_pcb_for_new_process(new_process);
-    strcpy(process_list[0]->cwd, "/");
-    process_list[0]->cr3 = vmm_get_cr3();
+    strcpy(new_process->name, "idle");
+    strcpy(new_process->cwd, "/");
+    new_process->cr3 = vmm_get_cr3();
     new_process->state = process_state::RUNNING;
     // 0号进程没有用户态，esp为0无所谓
     // 调度到别的进程的时候会把这个esp自动刷新
@@ -221,7 +222,7 @@ void init_kernel_stack(PCB*& new_process, uint32_t size, uintptr_t user_stack_po
     new_process->esp -= 40;
 }
 
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
+pid_t exec(const char* name, void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
     fd_remap* remaps, int remap_cnt) {
     if (!verify_elf(code, code_size)) {
         return 0;
@@ -275,6 +276,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
         new_pcb->cr3 = pd_addr;
         new_pcb->heap_start = heap_addr;
         new_pcb->heap_break = heap_addr;
+        strcpy(new_pcb->name, name);
         remap_fd(newpid, remaps_buf, remap_cnt);
         if(remaps_buf) kfree(remaps_buf);
 
@@ -286,7 +288,7 @@ pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** ar
     return newpid;
 }
 
-pid_t create_process(void* entry, void* args) {
+pid_t create_process(const char* name, void* entry, void* args) {
     SpinlockGuard guard(process_list_lock);
     for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
         if (process_list[nid] == nullptr) {
@@ -311,6 +313,7 @@ pid_t create_process(void* entry, void* args) {
             new_process->to_exit = 0;
             new_process->parent_pid = cur_process_id;
             new_process->waiting_queue = nullptr;
+            strcpy(new_process->name, name);
             strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
             new_process->state = process_state::READY;
 

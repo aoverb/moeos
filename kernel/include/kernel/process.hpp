@@ -18,7 +18,7 @@ struct mounting_point;
 enum class process_state {
     READY = 0,
     RUNNING = 1,
-    BLOCKED = 2,
+    SLEEPING = 2,
     ZOMBIE = 3,
     WAITING = 4
 };
@@ -46,6 +46,7 @@ typedef struct PCB {
     uintptr_t heap_start;  // 堆起始地址（固定不变）
     uintptr_t heap_break;  // 当前堆顶（sbrk 移动这个）
 
+    char name[64];
     uint16_t priority;
     uint16_t quota;
     uint32_t create_time;
@@ -76,9 +77,9 @@ void remove_from_process_queue(process_queue& queue, pid_t pid);
 void process_init();
 
 void print_process();
-pid_t create_process(void* entry, void* args);
+pid_t create_process(const char* name, void* entry, void* args);
 uint32_t exit_process(pid_t pid, int exit_code);
-pid_t exec(void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
+pid_t exec(const char* name, void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
     fd_remap* remaps = nullptr, int remap_cnt = 0);
 
 int waitpid(pid_t child);
