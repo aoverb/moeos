@@ -308,10 +308,15 @@ _fmt_scan_uint(const char *src, int base, int max_chars, int *consumed)
 }
 
 /*
- * vsscanf — 从字符串 input 按格式 fmt 解析数据。
+ * _fmt_vsscanf_impl — 格式化输入的内部实现。
+ *
+ * safe = 0: 标准 vsscanf 行为
+ * safe = 1: 安全模式 (vsscanf_s)
+ *           %s, %c, %[...] 在 char* 参数后要求紧跟一个 size_t 参数，
+ *           表示目标缓冲区大小。写入不会超过该大小（含 '\0'）。
  *
  * 支持的格式符：
- *   %d %i %u %x %X %o %b %s %c %p %n %%
+ *   %d %i %u %x %X %o %b %s %c %p %n %[...] %%
  *   宽度限制：%4d, %10s 等
  *   赋值抑制：%*d 跳过不存储
  *   长度修饰：l, ll
@@ -319,7 +324,8 @@ _fmt_scan_uint(const char *src, int base, int max_chars, int *consumed)
  * 返回成功匹配并赋值的项数（%*x 和 %n 不计入）。
  * 输入耗尽时返回 -1（EOF）。
  */
-static inline int vsscanf(const char *input, const char *fmt, va_list ap)
+static inline int _fmt_vsscanf_impl(const char *input, const char *fmt,
+                                     va_list ap, int safe)
 {
     const char *inp = input;  /* 当前输入位置 */
     int matched = 0;          /* 成功赋值计数 */
@@ -564,14 +570,31 @@ static inline int vsscanf(const char *input, const char *fmt, va_list ap)
             if (!*inp) return matched ? matched : -1;
 
             if (!suppress) {
-                char *dst = va_arg(ap, char *);
+                char  *dst   = va_arg(ap, char *);
+                size_t bufsz = safe ? va_arg(ap, size_t) : 0;
+                /* safe 模式下 bufsz==0 视为错误，写入空串后返回 */
+                if (safe && bufsz == 0) return matched;
+                size_t limit = (size_t)-1; /* 默认无限 */
+                if (safe)      limit = bufsz - 1;
+                if (max_width) limit = (safe && (size_t)max_width < limit)
+                                       ? (size_t)max_width : (max_width && !safe)
+                                       ? (size_t)max_width : limit;
                 int count = 0;
-                while (*inp && !_fmt_isspace(*inp) &&
-                       (max_width == 0 || count < max_width)) {
+                while (*inp && !_fmt_isspace(*inp) && (size_t)count < limit) {
                     *dst++ = *inp++;
                     count++;
                 }
                 *dst = '\0';
+                /* 非 safe 模式下，如果有 max_width，还需跳过剩余字符 */
+                if (!safe && max_width) {
+                    /* 已经写了 count 个, 不需要额外跳过 */
+                } else if (safe && max_width && (size_t)max_width > limit) {
+                    /* safe 模式下缓冲区满了但 max_width 还没到，跳过剩余 */
+                    while (*inp && !_fmt_isspace(*inp) && count < max_width) {
+                        inp++;
+                        count++;
+                    }
+                }
                 matched++;
             } else {
                 int count = 0;
@@ -584,18 +607,26 @@ static inline int vsscanf(const char *input, const char *fmt, va_list ap)
             break;
         }
 
-        /* ---- %c: 单个字符（不跳过空白） ---- */
+        /* ---- %c: 单个/多个字符（不跳过空白） ---- */
         case 'c': {
-            int count = max_width ? max_width : 1;
+            int want = max_width ? max_width : 1;
             if (!*inp) return matched ? matched : -1;
 
             if (!suppress) {
-                char *dst = va_arg(ap, char *);
-                for (int i = 0; i < count && *inp; i++)
+                char  *dst   = va_arg(ap, char *);
+                size_t bufsz = safe ? va_arg(ap, size_t) : 0;
+                if (safe && bufsz == 0) return matched;
+                int limit = safe ? (int)bufsz : want;
+                if (want < limit) limit = want;
+                int i;
+                for (i = 0; i < limit && *inp; i++)
                     *dst++ = *inp++;
+                /* safe 模式下如果还没读够 want 个，继续消耗输入但不写入 */
+                for (; i < want && *inp; i++)
+                    inp++;
                 matched++;
             } else {
-                for (int i = 0; i < count && *inp; i++)
+                for (int i = 0; i < want && *inp; i++)
                     inp++;
             }
             break;
@@ -657,15 +688,37 @@ static inline int vsscanf(const char *input, const char *fmt, va_list ap)
             if (!*inp) { return matched ? matched : -1; }
 
             if (!suppress) {
-                char *dst = va_arg(ap, char *);
+                char  *dst   = va_arg(ap, char *);
+                size_t bufsz = safe ? va_arg(ap, size_t) : 0;
+                if (safe && bufsz == 0) return matched;
+                size_t limit = (size_t)-1;
+                if (safe)      limit = bufsz - 1;
+                if (max_width && (size_t)max_width < limit) limit = (size_t)max_width;
+
                 int count = 0;
-                while (*inp && (max_width == 0 || count < max_width)) {
+                while (*inp && (size_t)count < limit) {
                     int in_set = _SCANSET_HAS(*inp);
                     if (negate ? in_set : !in_set) break;
                     *dst++ = *inp++;
                     count++;
                 }
-                if (count == 0) return matched; /* 一个字符都没匹配 */
+                /* safe 模式下缓冲区满了，继续消耗匹配的输入 */
+                if (safe && max_width) {
+                    while (*inp && count < max_width) {
+                        int in_set = _SCANSET_HAS(*inp);
+                        if (negate ? in_set : !in_set) break;
+                        inp++;
+                        count++;
+                    }
+                } else if (safe) {
+                    while (*inp) {
+                        int in_set = _SCANSET_HAS(*inp);
+                        if (negate ? in_set : !in_set) break;
+                        inp++;
+                        count++;
+                    }
+                }
+                if (count == 0) return matched;
                 *dst = '\0';
                 matched++;
             } else {
@@ -698,6 +751,24 @@ static inline int vsscanf(const char *input, const char *fmt, va_list ap)
     return matched;
 }
 
+/* vsscanf — 标准版 */
+static inline int vsscanf(const char *input, const char *fmt, va_list ap)
+{
+    return _fmt_vsscanf_impl(input, fmt, ap, 0);
+}
+
+/*
+ * vsscanf_s — 安全版：%s, %c, %[...] 在 char* 后需要紧跟 size_t 参数
+ *
+ * 用法：
+ *   char buf[16];
+ *   vsscanf_s(input, "%s", ap);   // ap 中依次取 buf, (size_t)sizeof(buf)
+ */
+static inline int vsscanf_s(const char *input, const char *fmt, va_list ap)
+{
+    return _fmt_vsscanf_impl(input, fmt, ap, 1);
+}
+
 /* ========================================================================= */
 /*  Public API                                                               */
 /* ========================================================================= */
@@ -725,6 +796,34 @@ static inline int sscanf(const char *input, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     int n = vsscanf(input, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+/*
+ * sscanf_s — 安全版 sscanf
+ *
+ * %s, %c, %[...] 的每个 char* 参数后必须紧跟一个 size_t 表示缓冲区大小。
+ * 数值类型（%d, %u, %x 等）用法与普通 sscanf 完全相同。
+ *
+ * 示例：
+ *   char name[8], city[16];
+ *   int age;
+ *   sscanf_s("Alice 30 Tokyo", "%s %d %s",
+ *            name, (size_t)sizeof(name),     // %s → char* + size_t
+ *            &age,                            // %d → int*（无需 size_t）
+ *            city, (size_t)sizeof(city));     // %s → char* + size_t
+ *
+ *   // 即使输入超长也不会溢出：
+ *   char tiny[4];
+ *   sscanf_s("hello", "%s", tiny, (size_t)sizeof(tiny));
+ *   // tiny == "hel"  （3 字符 + '\0'，安全截断）
+ */
+static inline int sscanf_s(const char *input, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsscanf_s(input, fmt, ap);
     va_end(ap);
     return n;
 }
