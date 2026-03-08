@@ -11,6 +11,8 @@ extern "C" {
 void* malloc(size_t size);
 void  free(void* ptr);
 void* sbrk(uintptr_t increment);
+int abs(int n);
+long labs(long n);
 
 #ifdef __cplusplus
 }

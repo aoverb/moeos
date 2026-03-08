@@ -20,6 +20,7 @@ typedef struct  {
 void init_kernel_timer();
 timer_config* register_timer(uint32_t wake_tick, timer_callback_func callback, void* args);
 void sleep(uint32_t ms);
+void cancel_timer(timer_config* conf);
 
 
 #ifdef __cplusplus

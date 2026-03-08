@@ -20,7 +20,10 @@ stdio/setcolor.o \
 stdio/getline.o \
 stdlib/malloc.o \
 elf/elf.o \
-net/net.o
+net/net.o \
+qrcodegen/qrcodegen.o \
+assert/assert.o \
+math/math.o
 
 SYSROOT?=
 

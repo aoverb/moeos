@@ -14,11 +14,10 @@ spinlock tty_lock;
 static uint32_t* fb_addr;
 static uint32_t fb_pitch;
 static uint32_t fb_bpp;
-static uint32_t fb_width;   // 屏幕宽度（像素）
-static uint32_t fb_height;  // 屏幕高度（像素）
 static uint32_t terminal_cols;  // 字符列数
 static uint32_t terminal_rows;  // 字符行数
-
+uint32_t fb_width;   // 屏幕宽度（像素）
+uint32_t fb_height;  // 屏幕高度（像素）
 static uint32_t terminal_row = 0;
 static uint32_t terminal_col = 0;
 

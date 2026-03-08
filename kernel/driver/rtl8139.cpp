@@ -169,9 +169,8 @@ void reg_isr() {
 
 void rtl8139_init() {
     if (search_for_rtl8139() == -1) return;
-    printf("rtl8139 found! bus: %d, dev: %d, func: %d\n", pci_bus, pci_dev, pci_func);
+    printf("rtl8139 found! bus: %d, dev: %d, func: %d...", pci_bus, pci_dev, pci_func);
     io_addr = read_pci_by_32bits(pci_bus, pci_dev, pci_func, 4) & ~0x3;
-    printf("io_addr: %x\n", io_addr);
     outb(io_addr + REG_CONFIG1, 0x00);
 
     // enable bus mastering
@@ -215,6 +214,7 @@ void rtl8139_init() {
     init_send_buffer();
     reg_isr();
     is_initialized = 1;
+    printf("OK\n");
     return;
 }
 
