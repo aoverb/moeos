@@ -32,20 +32,28 @@ int main(int argc, char** argv) {
     memcpy(payload + sizeof(icmp_echo_head), data_str, payload_size - sizeof(icmp_echo_head));
     head->type = ICMP_ECHO_REQUEST;
     head->code = 0;
-    
+
     printf("PING %s %d bytes of data.\n", ip_addr, payload_size);
-    int ping_count = 5;
+
+    int ping_count = 4;
+    int transmitted = 0;
+    int received = 0;
+    int rtt_min = 0x7FFFFFFF;
+    int rtt_max = 0;
+    int rtt_sum = 0;
+
     char* buffer = (char*)malloc(sizeof(char) * 2048);
     for (int i = 0; i < ping_count; ++i) {
         clock_t ticks = clock();
 
         head->id = file;
         head->seq = i;
+        transmitted++;
 
         uint32_t recv_size = 0;
         if (write(file, (char*)payload, sizeof(icmp_echo_head) + strlen(data_str) + 1) == -1) {
             printf("Failed to send icmp request.\n");
-        } else if ((recv_size = read(file, buffer, 2048)) != -1){
+        } else if ((recv_size = read(file, buffer, 2048)) != -1) {
             auto* ip = reinterpret_cast<ip_header*>(buffer);
             if (ip->header_len * 4 + sizeof(icmp_echo_head) > recv_size) {
                 printf("Malformed packet.\n");
@@ -55,14 +63,31 @@ int main(int argc, char** argv) {
                 printf("Packet checksum error.\n");
                 continue;
             }
+            int rtt = (clock() - ticks) * 10;
+            received++;
+            rtt_sum += rtt;
+            if (rtt < rtt_min) rtt_min = rtt;
+            if (rtt > rtt_max) rtt_max = rtt;
+
             printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%dms\n", recv_size, ip_addr,
                 reinterpret_cast<icmp_echo_head*>(buffer + ip->header_len * 4)->seq,
-                ip->ttl, (clock() - ticks) * 10);
+                ip->ttl, rtt);
         } else {
             printf("Request timed out.\n");
         }
-        sleep(1);
+        if (i != ping_count - 1) sleep(1);
     }
+
+    // 统计信息
+    printf("\n--- %s ping statistics ---\n", ip_addr);
+    int loss = ((transmitted - received) * 100) / (transmitted > 0 ? transmitted : 1);
+    printf("%d packets transmitted, %d received, %d%% packet loss\n",
+        transmitted, received, loss);
+    if (received > 0) {
+        printf("rtt min/avg/max = %d/%d/%d ms\n",
+            rtt_min, rtt_sum / received, rtt_max);
+    }
+
     free(buffer);
     free(payload);
     close(file);
