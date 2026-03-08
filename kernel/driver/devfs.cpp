@@ -91,7 +91,7 @@ static int stat(mounting_point* mp, const char* path, file_stat* out) {
         if (item->entry[i].opr && strcmp(path, item->entry[i].name) == 0) {
             strcpy(out->name, item->entry[i].name);
             out->type = 1;
-            out->size = 0;
+            out->size = 256;
             out->owner_id = 0;
             out->group_id = 0;
             strcpy(out->owner_name, "root");
