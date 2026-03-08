@@ -9,35 +9,43 @@
 #include <queue>
 
 constexpr uint16_t MAX_TIMER_NUM = 256;
-typedef struct  {
-    uint32_t wake_tick;
-    timer_callback_func callback_func;
-    void* args;
-} timer_config;
 
 struct TimerCmp {
-    bool operator()(const timer_config& a, const timer_config& b) const {
-        return a.wake_tick > b.wake_tick;  // a > b → a 优先级更低
+    bool operator()(const timer_config* a, const timer_config* b) const {
+        return a->wake_tick > b->wake_tick;  // a > b → a 优先级更低
     }
 };
 
-std::priority_queue<timer_config, MAX_TIMER_NUM, TimerCmp> pq;
-std::queue<timer_config, MAX_TIMER_NUM> due_timer_queue;
+std::priority_queue<timer_config*, MAX_TIMER_NUM, TimerCmp> pq;
+std::queue<timer_config*, MAX_TIMER_NUM> due_timer_queue;
 
-bool register_timer(uint32_t ms_10, timer_callback_func callback, void* args) {
+timer_config* register_timer(uint32_t wake_tick, timer_callback_func callback, void* args) {
     if (pq.size() >= MAX_TIMER_NUM) {
-        return false;
+        return nullptr;
     }
-    pq.emplace(timer_config{ ms_10, callback, args });
-    return true;
+    timer_config* conf = (timer_config*)kmalloc(sizeof(timer_config));
+    if (!conf) return nullptr;
+    conf->wake_tick = wake_tick;
+    conf->callback_func = callback;
+    conf->args = args;
+    conf->cancelled = false;
+    pq.push(conf);
+    return conf;
+}
+
+void cancel_timer(timer_config* conf) {
+    if (conf) conf->cancelled = true;
 }
 
 void kernel_timer_main() {
-    while(1) {
-        while(!due_timer_queue.empty()) {
-            timer_config conf = due_timer_queue.front();
-            conf.callback_func(conf.args);
+    while (1) {
+        while (!due_timer_queue.empty()) {
+            timer_config* conf = due_timer_queue.front();
             due_timer_queue.pop();
+            if (!conf->cancelled) {
+                conf->callback_func(conf->args);
+            }
+            kfree(conf);
         }
         yield();
     }
@@ -48,7 +56,7 @@ void init_kernel_timer() {
 }
 
 void timer_handler(uint32_t current_tick) {
-    if (!pq.empty() && pq.top().wake_tick <= current_tick) {
+    while (!pq.empty() && pq.top()->wake_tick <= current_tick) {
         due_timer_queue.push(pq.top());
         pq.pop();
     }
@@ -64,7 +72,7 @@ void sleep(uint32_t ms) {
         uint32_t flags = spinlock_acquire(&process_list_lock);
         process_list[*pid]->state = process_state::READY;
         spinlock_release(&process_list_lock, flags);
-        
+
         insert_into_scheduling_queue(*pid);
         return;
     };
