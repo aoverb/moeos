@@ -2,15 +2,16 @@
 #define _FORMAT_H
 #include <string.h>
 /*
- * format.h — Freestanding formatted output & string utilities for OS development
+ * format.h — Freestanding formatted I/O & string utilities for OS development
  *
  * No libc dependency. Provides:
  *   - snprintf / sprintf family (subset of standard format specifiers)
+ *   - vsscanf / sscanf (subset of standard scan specifiers)
  *   - strcat / strncat
  *   - strlen
  *   - character/integer/hex/string to buffer helpers
  *
- * Supported format specifiers:
+ * Supported format specifiers (output):
  *   %d / %i   — signed decimal integer
  *   %u        — unsigned decimal integer
  *   %x / %X   — unsigned hexadecimal (lower / upper)
@@ -24,6 +25,22 @@
  *   %%        — literal '%'
  *   Width & zero-padding supported: e.g. %08x, %4d
  *   '-' flag for left-justify: e.g. %-10s
+ *
+ * Supported format specifiers (input / scanf):
+ *   %d / %i   — signed decimal integer (%i also accepts 0x and 0 prefixes)
+ *   %u        — unsigned decimal integer
+ *   %x / %X   — unsigned hexadecimal
+ *   %o        — unsigned octal
+ *   %b        — unsigned binary
+ *   %s        — whitespace-delimited string
+ *   %c        — single character (does NOT skip whitespace)
+ *   %p        — pointer (with optional 0x prefix)
+ *   %n        — number of characters consumed so far
+ *   %[...]    — scanset (e.g. %[abc], %[^/], %[0-9a-f])
+ *   %%        — literal '%'
+ *   Width limit supported: e.g. %4d, %10s
+ *   '*' assignment-suppression: e.g. %*d
+ *   Length modifiers: l, ll
  */
 
 typedef unsigned long  size_t;
@@ -54,6 +71,16 @@ static inline char *strncat(char *dst, const char *src, size_t n)
         *d++ = *src++;
     *d = '\0';
     return dst;
+}
+
+/* ========================================================================= */
+/*  Internal helpers                                                         */
+/* ========================================================================= */
+
+static inline int _fmt_isspace(char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' ||
+           c == '\r' || c == '\f' || c == '\v';
 }
 
 /* ========================================================================= */
@@ -246,6 +273,432 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 }
 
 /* ========================================================================= */
+/*  Core formatted input: vsscanf                                            */
+/* ========================================================================= */
+
+/*
+ * _fmt_scan_uint — 从字符串 *src 中解析一个无符号整数（指定进制）。
+ *
+ * max_chars: 最多读取字符数 (0 = 不限制)
+ * consumed: 输出实际消耗的字符数
+ * 返回解析出的值。如果首字符就不是合法数字，*consumed = 0。
+ */
+static inline unsigned long long
+_fmt_scan_uint(const char *src, int base, int max_chars, int *consumed)
+{
+    unsigned long long val = 0;
+    int i = 0;
+
+    while (src[i] && (max_chars == 0 || i < max_chars)) {
+        char c = src[i];
+        int  digit;
+
+        if      (c >= '0' && c <= '9') digit = c - '0';
+        else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+        else break;
+
+        if (digit >= base) break;
+
+        val = val * (unsigned long long)base + (unsigned long long)digit;
+        i++;
+    }
+    *consumed = i;
+    return val;
+}
+
+/*
+ * vsscanf — 从字符串 input 按格式 fmt 解析数据。
+ *
+ * 支持的格式符：
+ *   %d %i %u %x %X %o %b %s %c %p %n %%
+ *   宽度限制：%4d, %10s 等
+ *   赋值抑制：%*d 跳过不存储
+ *   长度修饰：l, ll
+ *
+ * 返回成功匹配并赋值的项数（%*x 和 %n 不计入）。
+ * 输入耗尽时返回 -1（EOF）。
+ */
+static inline int vsscanf(const char *input, const char *fmt, va_list ap)
+{
+    const char *inp = input;  /* 当前输入位置 */
+    int matched = 0;          /* 成功赋值计数 */
+
+    while (*fmt) {
+
+        /* ---- 格式串中的空白：匹配输入中 0 或多个空白 ---- */
+        if (_fmt_isspace(*fmt)) {
+            while (_fmt_isspace(*fmt)) fmt++;
+            while (_fmt_isspace(*inp)) inp++;
+            continue;
+        }
+
+        /* ---- 非 '%' 的普通字符：必须精确匹配 ---- */
+        if (*fmt != '%') {
+            if (*inp != *fmt) return matched;
+            inp++;
+            fmt++;
+            continue;
+        }
+
+        fmt++; /* skip '%' */
+
+        /* --- %% 字面量 --- */
+        if (*fmt == '%') {
+            if (*inp != '%') return matched;
+            inp++;
+            fmt++;
+            continue;
+        }
+
+        /* --- 赋值抑制 '*' --- */
+        int suppress = 0;
+        if (*fmt == '*') {
+            suppress = 1;
+            fmt++;
+        }
+
+        /* --- 宽度限制 --- */
+        int max_width = 0; /* 0 = 不限 */
+        while (*fmt >= '0' && *fmt <= '9') {
+            max_width = max_width * 10 + (*fmt - '0');
+            fmt++;
+        }
+
+        /* --- 长度修饰符 --- */
+        int length = 0; /* 0=int, 1=long, 2=long long */
+        while (*fmt == 'l') { length++; fmt++; }
+
+        /* --- 说明符 --- */
+        switch (*fmt) {
+
+        /* ---- %d: 有符号十进制 ---- */
+        case 'd': {
+            /* 跳过前导空白 */
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int sign = 1;
+            const char *start = inp;
+
+            if (*inp == '-')      { sign = -1; inp++; }
+            else if (*inp == '+') { inp++; }
+
+            /* 计算数字可用宽度 */
+            int digits_width = max_width ? max_width - (int)(inp - start) : 0;
+            if (max_width && digits_width <= 0) return matched;
+
+            int consumed = 0;
+            unsigned long long uval = _fmt_scan_uint(inp, 10, digits_width, &consumed);
+            if (consumed == 0) return matched; /* 没读到任何数字 */
+            inp += consumed;
+
+            if (!suppress) {
+                long long val = (long long)uval * sign;
+                if      (length >= 2) *va_arg(ap, long long *)      = val;
+                else if (length == 1) *va_arg(ap, long *)           = (long)val;
+                else                  *va_arg(ap, int *)             = (int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %i: 自动检测进制 (0x=16, 0=8, 否则10) ---- */
+        case 'i': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int sign = 1;
+            const char *start = inp;
+
+            if (*inp == '-')      { sign = -1; inp++; }
+            else if (*inp == '+') { inp++; }
+
+            int used_for_sign = (int)(inp - start);
+            int remaining = max_width ? max_width - used_for_sign : 0;
+            if (max_width && remaining <= 0) return matched;
+
+            int base = 10;
+            /* 检测 0x 或 0 前缀 */
+            if (*inp == '0') {
+                if ((inp[1] == 'x' || inp[1] == 'X') &&
+                    (!max_width || remaining > 2)) {
+                    base = 16;
+                    inp += 2;
+                    remaining = remaining > 2 ? remaining - 2 : 0;
+                } else {
+                    base = 8;
+                }
+            }
+
+            int consumed = 0;
+            unsigned long long uval = _fmt_scan_uint(inp, base, remaining, &consumed);
+            /* 对于 0x 前缀：如果 0x 后没有数字，回退只匹配 "0" */
+            if (consumed == 0 && base == 16) {
+                inp -= 2; /* 回退 0x */
+                uval = 0;
+                consumed = 1; /* 匹配那个 '0' */
+            }
+            if (consumed == 0 && base != 16) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                long long val = (long long)uval * sign;
+                if      (length >= 2) *va_arg(ap, long long *)      = val;
+                else if (length == 1) *va_arg(ap, long *)           = (long)val;
+                else                  *va_arg(ap, int *)             = (int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %u: 无符号十进制 ---- */
+        case 'u': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int consumed = 0;
+            unsigned long long val = _fmt_scan_uint(inp, 10, max_width, &consumed);
+            if (consumed == 0) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                if      (length >= 2) *va_arg(ap, unsigned long long *) = val;
+                else if (length == 1) *va_arg(ap, unsigned long *)      = (unsigned long)val;
+                else                  *va_arg(ap, unsigned int *)        = (unsigned int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %x / %X: 十六进制（可选 0x 前缀） ---- */
+        case 'x': case 'X': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int remaining = max_width;
+            /* 跳过可选的 0x/0X 前缀 */
+            if (inp[0] == '0' && (inp[1] == 'x' || inp[1] == 'X')) {
+                if (!max_width || remaining > 2) {
+                    inp += 2;
+                    if (remaining) remaining -= 2;
+                }
+            }
+
+            int consumed = 0;
+            unsigned long long val = _fmt_scan_uint(inp, 16, remaining, &consumed);
+            if (consumed == 0) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                if      (length >= 2) *va_arg(ap, unsigned long long *) = val;
+                else if (length == 1) *va_arg(ap, unsigned long *)      = (unsigned long)val;
+                else                  *va_arg(ap, unsigned int *)        = (unsigned int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %o: 八进制 ---- */
+        case 'o': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int consumed = 0;
+            unsigned long long val = _fmt_scan_uint(inp, 8, max_width, &consumed);
+            if (consumed == 0) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                if      (length >= 2) *va_arg(ap, unsigned long long *) = val;
+                else if (length == 1) *va_arg(ap, unsigned long *)      = (unsigned long)val;
+                else                  *va_arg(ap, unsigned int *)        = (unsigned int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %b: 二进制（非标准，与你的 printf %b 配对） ---- */
+        case 'b': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            int consumed = 0;
+            unsigned long long val = _fmt_scan_uint(inp, 2, max_width, &consumed);
+            if (consumed == 0) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                if      (length >= 2) *va_arg(ap, unsigned long long *) = val;
+                else if (length == 1) *va_arg(ap, unsigned long *)      = (unsigned long)val;
+                else                  *va_arg(ap, unsigned int *)        = (unsigned int)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %p: 指针（与 printf 的 0xHHHH 格式配对） ---- */
+        case 'p': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            /* 跳过可选 0x 前缀 */
+            if (inp[0] == '0' && (inp[1] == 'x' || inp[1] == 'X'))
+                inp += 2;
+
+            int consumed = 0;
+            unsigned long long val = _fmt_scan_uint(inp, 16, 0, &consumed);
+            if (consumed == 0) return matched;
+            inp += consumed;
+
+            if (!suppress) {
+                *va_arg(ap, void **) = (void *)(unsigned long)val;
+                matched++;
+            }
+            break;
+        }
+
+        /* ---- %s: 非空白字符串 ---- */
+        case 's': {
+            while (_fmt_isspace(*inp)) inp++;
+            if (!*inp) return matched ? matched : -1;
+
+            if (!suppress) {
+                char *dst = va_arg(ap, char *);
+                int count = 0;
+                while (*inp && !_fmt_isspace(*inp) &&
+                       (max_width == 0 || count < max_width)) {
+                    *dst++ = *inp++;
+                    count++;
+                }
+                *dst = '\0';
+                matched++;
+            } else {
+                int count = 0;
+                while (*inp && !_fmt_isspace(*inp) &&
+                       (max_width == 0 || count < max_width)) {
+                    inp++;
+                    count++;
+                }
+            }
+            break;
+        }
+
+        /* ---- %c: 单个字符（不跳过空白） ---- */
+        case 'c': {
+            int count = max_width ? max_width : 1;
+            if (!*inp) return matched ? matched : -1;
+
+            if (!suppress) {
+                char *dst = va_arg(ap, char *);
+                for (int i = 0; i < count && *inp; i++)
+                    *dst++ = *inp++;
+                matched++;
+            } else {
+                for (int i = 0; i < count && *inp; i++)
+                    inp++;
+            }
+            break;
+        }
+
+        /* ---- %n: 已消耗字符数（不计入 matched） ---- */
+        case 'n': {
+            if (!suppress) {
+                if      (length >= 2) *va_arg(ap, long long *) = (long long)(inp - input);
+                else if (length == 1) *va_arg(ap, long *)      = (long)(inp - input);
+                else                  *va_arg(ap, int *)        = (int)(inp - input);
+            }
+            break;
+        }
+
+        /* ---- %[...]: scanset ---- */
+        case '[': {
+            /* 构建一个 256-bit 查找表，标记哪些字符在集合中 */
+            unsigned char set[256 / 8]; /* 32 bytes, 每 bit 对应一个 char */
+            for (int i = 0; i < (int)sizeof(set); i++) set[i] = 0;
+
+            int negate = 0;
+            fmt++; /* skip '[' */
+
+            if (*fmt == '^') {
+                negate = 1;
+                fmt++;
+            }
+
+            /* ']' 如果紧跟在 '[' 或 '[^' 后面，视为集合中的普通字符 */
+            if (*fmt == ']') {
+                set[(unsigned char)']' / 8] |= (1 << ((unsigned char)']' % 8));
+                fmt++;
+            }
+
+            /* 解析集合内容直到 ']' 或字符串结束 */
+            while (*fmt && *fmt != ']') {
+                unsigned char c = (unsigned char)*fmt;
+
+                /* 处理范围 a-z */
+                if (fmt[1] == '-' && fmt[2] && fmt[2] != ']') {
+                    unsigned char lo = c;
+                    unsigned char hi = (unsigned char)fmt[2];
+                    if (lo > hi) { unsigned char t = lo; lo = hi; hi = t; }
+                    for (unsigned int ch = lo; ch <= hi; ch++)
+                        set[ch / 8] |= (1 << (ch % 8));
+                    fmt += 3;
+                } else {
+                    set[c / 8] |= (1 << (c % 8));
+                    fmt++;
+                }
+            }
+            /* fmt 现在指向 ']'（或 '\0'）。
+             * 循环末尾的 fmt++ 会跳过 ']'。 */
+
+            #define _SCANSET_HAS(ch) \
+                (!!( set[(unsigned char)(ch) / 8] & (1 << ((unsigned char)(ch) % 8)) ))
+
+            if (!*inp) { return matched ? matched : -1; }
+
+            if (!suppress) {
+                char *dst = va_arg(ap, char *);
+                int count = 0;
+                while (*inp && (max_width == 0 || count < max_width)) {
+                    int in_set = _SCANSET_HAS(*inp);
+                    if (negate ? in_set : !in_set) break;
+                    *dst++ = *inp++;
+                    count++;
+                }
+                if (count == 0) return matched; /* 一个字符都没匹配 */
+                *dst = '\0';
+                matched++;
+            } else {
+                int count = 0;
+                while (*inp && (max_width == 0 || count < max_width)) {
+                    int in_set = _SCANSET_HAS(*inp);
+                    if (negate ? in_set : !in_set) break;
+                    inp++;
+                    count++;
+                }
+                if (count == 0) return matched;
+            }
+
+            #undef _SCANSET_HAS
+            break;
+        }
+
+        default:
+            /* 未知格式符，停止解析 */
+            return matched;
+        }
+
+        fmt++;
+    }
+
+    /* 如果一项都没匹配且输入为空，返回 EOF (-1) */
+    if (matched == 0 && !*input)
+        return -1;
+
+    return matched;
+}
+
+/* ========================================================================= */
 /*  Public API                                                               */
 /* ========================================================================= */
 
@@ -263,6 +716,15 @@ static inline int sprintf(char *buf, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(buf, (size_t)-1, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+static inline int sscanf(const char *input, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsscanf(input, fmt, ap);
     va_end(ap);
     return n;
 }
