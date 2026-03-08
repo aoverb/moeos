@@ -41,7 +41,7 @@ struct icmp_node {
 
 
 void sockfs_icmp_add(int inode_id, char* buffer, size_t size) {
-    if (inode_id < 0 || inode_id >= MAX_SOCK_NUM) return;
+    if (!global_mp || inode_id < 0 || inode_id >= MAX_SOCK_NUM) return;
     socketfs_data* data = (socketfs_data*)global_mp->data;
     socket& cur_sock = data->sock[inode_id];
     {
