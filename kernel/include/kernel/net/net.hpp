@@ -2,27 +2,11 @@
 #define _KERNEL_NET_NET_HPP
 #include <stdint.h>
 #include <string.h>
+#include <net/net.hpp>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-inline uint16_t htons(uint16_t v) {
-    return (v >> 8) | (v << 8);
-}
-
-inline uint16_t ntohs(uint16_t v) {
-    return htons(v);
-}
-
-inline uint32_t htonl(uint32_t v) {
-    return ((uint32_t)htons(v & 0xFFFF) << 16) |
-           (uint32_t)htons(v >> 16);
-}
-
-inline uint32_t ntohl(uint32_t v) {
-    return htonl(v);
-}
 
 extern "C++" {
 typedef struct macaddr {
@@ -152,8 +136,6 @@ struct ipv4addr {
 const macaddr broadcast_mac = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
-
-uint16_t checksum(void* data, uint32_t size);
 
 struct netconf {
     ipv4addr ip;

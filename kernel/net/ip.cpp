@@ -11,10 +11,10 @@ void reassemble(ip_header* header) {
 }
 
 int fragment_send_ipv4(const ipv4addr& dst_ip,
-    void* payload, uint32_t payload_len, uint8_t ttl) { return -1; }
+    const void* payload, uint32_t payload_len, uint8_t ttl) { return -1; }
 
 int send_ipv4(const ipv4addr& dst_ip, uint8_t protocol,
-    void* payload, uint32_t payload_len, uint8_t ttl) {
+    const void* payload, uint32_t payload_len, uint8_t ttl) {
     if (payload_len >= 576 - sizeof(ip_header)) { // 超过576的阈值，需要分片
         return fragment_send_ipv4(dst_ip, payload, payload_len, ttl);
     }
@@ -55,7 +55,7 @@ int send_ipv4(const ipv4addr& dst_ip, uint8_t protocol,
     return ret;
 }
 
-void icmp_handler(const ipv4addr& src_ip, char* buffer, uint16_t size);
+void icmp_handler(uint16_t ip_header_size, char* buffer, uint16_t size);
 
 void ip_handler(char* buffer, uint16_t size) {
     ip_header* header = reinterpret_cast<ip_header*>(buffer);
@@ -80,7 +80,7 @@ void ip_handler(char* buffer, uint16_t size) {
         return;
     }
     if (header->protocol == IP_PROTOCOL_ICMP) {
-        icmp_handler(ipv4addr(header->src_ip), buffer + header_size, ip_total_len - header_size);
+        icmp_handler(header_size, buffer, ip_total_len);
     }
     return;
 }

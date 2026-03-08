@@ -1,22 +1,28 @@
 #include <kernel/net/net.hpp>
-
-uint16_t checksum(void* data, uint32_t size) {
-    uint32_t res = 0;
-    for (int i = 0; i < size / 2; ++i) { // 每次算16位，两个字节
-        res += *((uint16_t*)data + i);
-    }
-    if (size % 2 != 0) {
-        res += *((uint8_t*)data + size - 1);
-    }
-    while (res >> 16) {
-        res = (res & 0xFFFF) + (res >> 16); // 折叠进位
-    }
-    return ~(uint16_t)res;
-}
+#include <driver/devfs.hpp>
+#include <format.h>
 
 static netconf net_conf;
 
 extern "C" void get_mac(uint8_t mac[6]);
+
+static int ipv4_addr_read(char* buffer, uint32_t, uint32_t size) {
+    uint8_t out[4];
+    net_conf.ip.to_bytes(out);
+    char output[16];
+    sprintf(output, "%d.%d.%d.%d", out[0], out[1], out[2], out[3]);
+    strncpy(buffer, output, size < strlen(output) ? size : strlen(output));
+    return size < strlen(output) ? size : strlen(output);
+}
+
+static int ipv4_addr_write(const char*, uint32_t) { return -1; } // 不支持改IP
+
+void init_ipv4addr_dev_file(mounting_point* mp) {
+    static dev_operation ipv4_addr_opr;
+    ipv4_addr_opr.read = &ipv4_addr_read;
+    ipv4_addr_opr.write = &ipv4_addr_write;
+    register_in_devfs(mp, "ipv4_addr", &ipv4_addr_opr);
+}
 
 void init_netconf() {
     uint8_t mac[6];
@@ -27,5 +33,5 @@ void init_netconf() {
 }
 
 const netconf* getLocalNetconf() {
-     return &net_conf; 
+     return &net_conf;
 }

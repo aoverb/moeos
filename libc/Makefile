@@ -19,7 +19,8 @@ sys/wait.o \
 stdio/setcolor.o \
 stdio/getline.o \
 stdlib/malloc.o \
-elf/elf.o
+elf/elf.o \
+net/net.o
 
 SYSROOT?=
 
