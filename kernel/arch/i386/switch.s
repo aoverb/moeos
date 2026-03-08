@@ -2,6 +2,7 @@
 .extern cur_process_id
 .global process_switch_to
 .global ret_to_user_mode
+.global schedule_tail_restore
 
 process_switch_to:
     cli
@@ -41,4 +42,7 @@ ret_to_user_mode:
     mov %ax, %ds
     mov %ax, %es
     iret
-    
+
+schedule_tail_restore:
+    popfl
+    ret

@@ -17,6 +17,7 @@ extern "C" int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
 extern "C" int v_close(PCB* proc, int fd_pos);
 
 extern "C" void ret_to_user_mode();
+extern "C" void schedule_tail_restore();
 extern uintptr_t stack_bottom;
 void exit_process_wrapper();
 
@@ -287,41 +288,33 @@ pid_t exec(const char* name, void* code, uint32_t code_size, uint8_t priority, i
     vmm_switch(pd_addr_old);
     return newpid;
 }
-
 pid_t create_process(const char* name, void* entry, void* args) {
     SpinlockGuard guard(process_list_lock);
-    for (auto nid = 1; nid < MAX_PROCESSES_NUM; ++nid) {
-        if (process_list[nid] == nullptr) {
-            PCB*& new_process = process_list[nid];
-            new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
-            memset(new_process, 0, sizeof(PCB));
-            new_process->kernel_stack_bottom = kmalloc(KERNEL_STACK_SIZE);
-            new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + KERNEL_STACK_SIZE;
-            *((uintptr_t*)(new_process->esp - 4)) = reinterpret_cast<uintptr_t>(args);
-            *((uintptr_t*)(new_process->esp - 8)) = reinterpret_cast<uintptr_t>(&exit_process_wrapper);
-            *((uintptr_t*)(new_process->esp - 12)) = reinterpret_cast<uintptr_t>(entry);
-            *((uintptr_t*)(new_process->esp - 16)) = 0;      // ebx
-            *((uintptr_t*)(new_process->esp - 20)) = 0;      // esi
-            *((uintptr_t*)(new_process->esp - 24)) = 0;      // edi
-            *((uintptr_t*)(new_process->esp - 28)) = 0;      // ebp  ← 栈顶，最先被 pop
-            new_process->esp -= 28;
-            new_process->saved_eflags = 0x202;
-            new_process->pid = nid;
-            new_process->cr3 = vmm_get_cr3();
-            new_process->create_time = pit_get_ticks();
-            new_process->fd_num = 0;
-            new_process->to_exit = 0;
-            new_process->parent_pid = cur_process_id;
-            new_process->waiting_queue = nullptr;
-            strcpy(new_process->name, name);
-            strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
-            new_process->state = process_state::READY;
 
-            insert_into_scheduling_queue(nid);
-            return nid;
-        }
-    }
-    return 0;
+    pid_t newpid = get_new_pid();
+    if (newpid == 0) return 0;
+
+    PCB* new_process = init_pcb(newpid);
+    prepare_pcb_for_new_process(new_process);
+    strcpy(new_process->name, name);
+    new_process->cr3 = vmm_get_cr3();
+
+    new_process->kernel_stack_bottom = kmalloc(KERNEL_STACK_SIZE);
+    new_process->esp = (uintptr_t)(new_process->kernel_stack_bottom) + KERNEL_STACK_SIZE;
+
+    *((uintptr_t*)(new_process->esp - 4))  = reinterpret_cast<uintptr_t>(args);
+    *((uintptr_t*)(new_process->esp - 8))  = reinterpret_cast<uintptr_t>(&exit_process_wrapper);
+    *((uintptr_t*)(new_process->esp - 12)) = reinterpret_cast<uintptr_t>(entry);
+    *((uintptr_t*)(new_process->esp - 16)) = 0x202;
+    *((uintptr_t*)(new_process->esp - 20)) = reinterpret_cast<uintptr_t>(schedule_tail_restore);
+    *((uintptr_t*)(new_process->esp - 24)) = 0;  // ebx
+    *((uintptr_t*)(new_process->esp - 28)) = 0;  // esi
+    *((uintptr_t*)(new_process->esp - 32)) = 0;  // edi
+    *((uintptr_t*)(new_process->esp - 36)) = 0;  // ebp
+    new_process->esp -= 36;
+
+    insert_into_scheduling_queue(newpid);
+    return newpid;
 }
 
 uint32_t exit_process(pid_t pid, int exit_code) {
