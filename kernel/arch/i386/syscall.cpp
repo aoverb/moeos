@@ -6,6 +6,8 @@
 #include <driver/pipefs.hpp>
 #include <kernel/tty.h>
 #include <kernel/spinlock.hpp>
+#include <kernel/timer.hpp>
+#include <driver/pit.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -155,7 +157,9 @@ int sys_exec(interrupt_frame* reg) {
     char**     argv      = reinterpret_cast<char**>(reg->esi);
     fd_remap*  remaps    = reinterpret_cast<fd_remap*>(reg->ebp);
     int        remap_cnt = int(reg->edi);
-    return static_cast<int>(exec("user process", code, code_size, 4, argc, argv, remaps, remap_cnt));
+    char name[64];
+    strcpy(name, argv[0]);
+    return static_cast<int>(exec(name, code, code_size, 4, argc, argv, remaps, remap_cnt));
 }
 
 // WAITPID(ebx = pid)
@@ -196,6 +200,18 @@ int sys_pipe(interrupt_frame* reg) {
     return kpipe(fds);
 }
 
+// SLEEP(ebx = ms)
+int sys_sleep(interrupt_frame* reg) {
+    uint32_t fds = reinterpret_cast<uint32_t>(reg->ebx);
+    sleep(fds * 1000);
+    return 0;
+}
+
+// CLOCK(eax = ticks)
+int sys_clock(interrupt_frame* reg) {
+    return pit_get_ticks();
+}
+
 void syscall_init() {
     printf("syscall initializing...");
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
@@ -203,6 +219,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);
     register_syscall(uint32_t(SYSCALL::TERMINAL_CLEAR), sys_terminal_clear);
+    register_syscall(uint32_t(SYSCALL::CLOCK), sys_clock);
     register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
@@ -219,6 +236,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
+    register_syscall(uint32_t(SYSCALL::SLEEP),  sys_sleep);
     printf("OK\n");
 }
 

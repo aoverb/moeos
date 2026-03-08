@@ -2,6 +2,7 @@
 #include <kernel/mm.hpp>
 #include <kernel/process.hpp>
 #include <kernel/schedule.h>
+#include <driver/pit.h>
 
 #include <stdio.h>
 #include <priority_queue>
@@ -68,7 +69,7 @@ void sleep(uint32_t ms) {
         return;
     };
     sleep_pid = cur_process_id;
-    register_timer(ms_10, callback, &sleep_pid);
+    register_timer(pit_get_ticks() + ms_10, callback, &sleep_pid);
     process_list[cur_process_id]->state = process_state::SLEEPING;
     spinlock_release(&process_list_lock, flags);
     yield();

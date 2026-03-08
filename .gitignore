@@ -7,5 +7,6 @@
 *.log
 *.elf
 *.swp
+/.vscode
 /isodir
 /SYSROOT
