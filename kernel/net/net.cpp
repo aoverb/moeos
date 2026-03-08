@@ -30,6 +30,7 @@ void init_netconf() {
     net_conf.mac = mac;
     net_conf.ip = ipv4addr("10", "0", "1", "1");
     net_conf.mask = ipv4addr("255", "255", "255", "0");
+    net_conf.gateway = ipv4addr("10", "0", "1", "0");
 }
 
 const netconf* getLocalNetconf() {

@@ -140,6 +140,7 @@ const macaddr broadcast_mac = {
 struct netconf {
     ipv4addr ip;
     ipv4addr mask;
+    ipv4addr gateway;
     macaddr mac;
 };
 
