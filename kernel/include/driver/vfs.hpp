@@ -13,7 +13,8 @@ constexpr uint32_t MAX_PATH_LEN = 256;
 enum class FS_DRIVER {
     TARFS = 0,
     DEVFS = 1,
-    PIPEFS = 2
+    PIPEFS = 2,
+    SOCKFS = 3,
 };
 
 struct dirent {

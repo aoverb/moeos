@@ -24,6 +24,7 @@
 #include <driver/tarfs.hpp>
 #include <driver/devfs.hpp>
 #include <driver/pipefs.hpp>
+#include <driver/sockfs.hpp>
 #include <driver/rtl8139.hpp>
 
 void print_rumia() {
@@ -195,6 +196,7 @@ void test_unordered_map() {
 
 extern void init_console_dev(mounting_point* mp);
 extern void init_nic_dev_file(mounting_point* mp);
+extern void init_ipv4addr_dev_file(mounting_point* mp);
 
 void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initializing...\n");
@@ -202,6 +204,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     init_tarfs();
     init_devfs();
     init_pipefs();
+    init_sockfs();
 
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
@@ -223,13 +226,22 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     }
     init_console_dev(dev_ret);
     init_nic_dev_file(dev_ret);
+    init_ipv4addr_dev_file(dev_ret);
 
     mounting_point* pipe_ret = v_mount(FS_DRIVER::PIPEFS, "/pipe", nullptr);
     if (pipe_ret == nullptr) {
         panic("failed to mount pipefs to /pipe!");
     } else {
         printf("/pipe mounted!\n");
-        }
+    }
+
+    mounting_point* sock_ret = v_mount(FS_DRIVER::SOCKFS, "/sock", nullptr);
+    if (sock_ret == nullptr) {
+        panic("failed to mount sockfs to /sock!");
+    } else {
+        printf("/sock mounted!\n");
+    }
+
     printf("filesystem initialized!\n");
 }
 

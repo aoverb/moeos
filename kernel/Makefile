@@ -23,6 +23,7 @@ driver/pit.o \
 driver/vfs.o \
 driver/tarfs.o \
 driver/devfs.o \
+driver/sockfs.o \
 driver/console.o \
 driver/pipefs.o \
 driver/rtl8139.o
