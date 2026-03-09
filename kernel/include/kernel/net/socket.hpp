@@ -17,7 +17,10 @@ enum class protocol {ROOT, ICMP, TCP};
 typedef struct {
     uint8_t valid;
     protocol ptcl;
-    char addr[32];
+    char src_addr[32];
+    char dst_addr[32];
+    uint16_t src_port;
+    uint16_t dst_port;
     void* data;
     spinlock lock;
     process_queue wait_queue;

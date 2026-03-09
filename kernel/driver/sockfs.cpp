@@ -1,13 +1,14 @@
 #include <driver/vfs.hpp>
 #include <driver/sockfs.hpp>
-#include <kernel/net/ip.hpp>
-#include <kernel/net/socket.hpp>
 #include <kernel/schedule.hpp>
 #include <kernel/timer.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/panic.h>
 
+#include <kernel/net/socket.hpp>
 #include <kernel/net/icmp.hpp>
+#include <kernel/net/tcp.hpp>
+#include <kernel/net/ip.hpp>
 
 #include <string.h>
 #include <stdio.h>
@@ -27,13 +28,6 @@ typedef struct {
 typedef struct {
     socket sock[MAX_SOCK_NUM];
 } socketfs_data;
-
-struct icmp_node {
-    char* data;
-    uint32_t size;
-    icmp_node* next;
-};
-
 
 void sockfs_icmp_add(int inode_id, char* buffer, size_t size) {
     if (!global_mp || inode_id < 0 || inode_id >= MAX_SOCK_NUM) return;
@@ -71,7 +65,7 @@ static int mount(mounting_point* mp) {
     mp->data = (socketfs_data*)kmalloc(sizeof(socketfs_data));
     memset(mp->data, 0, sizeof(socketfs_data));
     reinterpret_cast<socketfs_data*>(mp->data)->sock[0].ptcl = protocol::ROOT;
-    strcpy(reinterpret_cast<socketfs_data*>(mp->data)->sock[0].addr, ".");
+    strcpy(reinterpret_cast<socketfs_data*>(mp->data)->sock[0].dst_addr, ".");
     reinterpret_cast<socketfs_data*>(mp->data)->sock[0].valid = 1;
     return 0;
 }
@@ -98,10 +92,15 @@ static int open(mounting_point* mp, const char* path,  uint8_t mode) {
         socket& new_sock = data->sock[new_sock_num];
         new_sock.valid = 1;
 
+        uint8_t src_addr[4];
+        getLocalNetconf()->ip.to_bytes(src_addr);
+        sprintf(new_sock.src_addr, "%d.%d.%d.%d", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+        new_sock.src_port = 60001; // TODO：应该是要有一个全局端口池分配的
+
         // 创建socket格式：<addr>/<protocol>
         char protocol[8];
         strcpy(protocol, path);
-        strcpy("127.0.0.1", new_sock.addr); // 先给一个默认地址，后面通过connect设置
+        strcpy("127.0.0.1", new_sock.dst_addr); // 先给一个默认地址，后面通过connect设置
 
         if (!strlen(protocol)) {
             return -1;
@@ -201,7 +200,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     if (cur_sock.ptcl == protocol::ICMP) {
         uint8_t trans_addr[4];
         unsigned int a, b, c, d;
-        sscanf_s(cur_sock.addr, "%u.%u.%u.%u", &a, &b, &c, &d);
+        sscanf_s(cur_sock.dst_addr, "%u.%u.%u.%u", &a, &b, &c, &d);
         trans_addr[0] = (uint8_t)a;
         trans_addr[1] = (uint8_t)b;
         trans_addr[2] = (uint8_t)c;
@@ -293,6 +292,8 @@ static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::ICMP) {
         return icmp_connect(sock, addr, port);
+    } else if (sock.ptcl == protocol::TCP) {
+        return tcp_connect(sock, addr, port);
     }
 }
 

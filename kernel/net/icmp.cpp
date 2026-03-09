@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 int icmp_connect(socket& sock, const char* addr, uint16_t) {
-    strcpy(sock.addr, addr);
+    strcpy(sock.dst_addr, addr);
     return 0;
 }
 

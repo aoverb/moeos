@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 int send_ipv4(const ipv4addr& dst_ip, uint8_t protocol,
-    const void* payload, uint32_t payload_len, uint8_t ttl = 120);
+    const void* payload, uint32_t payload_len, uint8_t ttl = 128);
 
 #ifdef __cplusplus
 }

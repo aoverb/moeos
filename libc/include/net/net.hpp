@@ -18,7 +18,7 @@ enum class tcp_flags : uint8_t {
     CWR = 1 << 7
 };
 
-struct Header {
+struct tcp_header {
     uint16_t src_port;
     uint16_t dst_port;
     uint32_t seq_num;
@@ -31,7 +31,7 @@ struct Header {
     uint16_t urgent_ptr;
 } __attribute__((packed));
 
-struct PseudoHeader {
+struct pseudo_tcp_header {
     uint32_t src_addr;
     uint32_t dst_addr;
     uint8_t  zero;
@@ -40,6 +40,7 @@ struct PseudoHeader {
 } __attribute__((packed));
 
 constexpr uint8_t IP_PROTOCOL_ICMP = 0x01;
+constexpr uint8_t IP_PROTOCOL_TCP = 0x06;
 
 typedef struct {
     uint8_t header_len : 4;

@@ -8,6 +8,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct icmp_node {
+    char* data;
+    uint32_t size;
+    icmp_node* next;
+};
+
 int icmp_connect(socket& sock, const char* addr, uint16_t);
 #ifdef __cplusplus
 }
