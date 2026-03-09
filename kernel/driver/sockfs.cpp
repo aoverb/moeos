@@ -6,13 +6,16 @@
 #include <kernel/timer.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/panic.h>
+
+#include <kernel/net/icmp.hpp>
+
 #include <string.h>
 #include <stdio.h>
 #include <format.h>
 
 fs_operation sock_fs_operation;
 sock_operation sock_operations;
-enum class protocol {ROOT, ICMP};
+
 static mounting_point* global_mp;
 
 typedef struct {
@@ -20,15 +23,6 @@ typedef struct {
     bool  expired;
     bool  cancelled;
 } icmp_timeout_ctx;
-
-typedef struct {
-    uint8_t valid;
-    protocol ptcl;
-    char addr[32];
-    void* data;
-    spinlock lock;
-    process_queue wait_queue;
-} socket;
 
 typedef struct {
     socket sock[MAX_SOCK_NUM];
@@ -106,15 +100,17 @@ static int open(mounting_point* mp, const char* path,  uint8_t mode) {
 
         // 创建socket格式：<addr>/<protocol>
         char protocol[8];
-        protocol[0] = '\0';
-        sscanf_s(path, "%[^/]/%[^/]", new_sock.addr, sizeof(new_sock.addr),
-                                      protocol, sizeof(protocol));
-        if (!strlen(new_sock.addr) || !strlen(protocol)) {
+        strcpy(protocol, path);
+        strcpy("127.0.0.1", new_sock.addr); // 先给一个默认地址，后面通过connect设置
+
+        if (!strlen(protocol)) {
             return -1;
         }
 
         if (strcmp("icmp", protocol) == 0) {
             new_sock.ptcl = protocol::ICMP;
+        } else if (strcmp("tcp", protocol) == 0) {
+            new_sock.ptcl = protocol::TCP;
         } else {
             // 不支持的协议
             return -1;
@@ -292,7 +288,12 @@ static int ioctl(mounting_point*, uint32_t, const char* cmd, void* arg) {
 }
 
 static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port) {
-    return -1;
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::ICMP) {
+        return icmp_connect(sock, addr, port);
+    }
 }
 
 void init_sockfs() {

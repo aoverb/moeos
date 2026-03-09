@@ -1,8 +1,14 @@
 #include <kernel/net/icmp.hpp>
 #include <kernel/net/ip.hpp>
 #include <kernel/net/net.hpp>
+#include <kernel/net/socket.hpp>
 #include <kernel/mm.hpp>
 #include <stdio.h>
+
+int icmp_connect(socket& sock, const char* addr, uint16_t) {
+    strcpy(sock.addr, addr);
+    return 0;
+}
 
 void handle_echo_request(const ipv4addr& src_ip, char* buffer, uint16_t size) {
     char* cp_buf = (char*)kmalloc(size);

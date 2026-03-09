@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.hpp>
 #include <net/net.hpp>
+#include <net/socket.hpp>
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -14,15 +15,12 @@ int main(int argc, char** argv) {
     char ip_addr[16];
     snprintf(ip_addr, sizeof(ip_addr), "%s", argv[1]);
 
-    char icmp_open_path[64];
-    snprintf(icmp_open_path, sizeof(icmp_open_path), "/sock/%s/icmp", ip_addr);
-
-    int file = open(icmp_open_path, O_CREATE);
-    if (file == -1) {
+    int conn = open("/sock/icmp", O_CREATE);
+    if (conn == -1) {
         printf("icmp unsupported!\n");
         return 0;
     }
-
+    connect(conn, ip_addr, 0);
     // 构造ICMP报文
     const char* data_str = "1234567890loliOS$!@&#($&)OWOXCVBNMASDFGHJKLQWERTYUIOPBA";
 
@@ -46,14 +44,14 @@ int main(int argc, char** argv) {
     for (int i = 0; i < ping_count; ++i) {
         clock_t ticks = clock();
 
-        head->id = file;
+        head->id = conn;
         head->seq = i;
         transmitted++;
 
         uint32_t recv_size = 0;
-        if (write(file, (char*)payload, sizeof(icmp_echo_head) + strlen(data_str) + 1) == -1) {
+        if (write(conn, (char*)payload, sizeof(icmp_echo_head) + strlen(data_str) + 1) == -1) {
             printf("Failed to send icmp request.\n");
-        } else if ((recv_size = read(file, buffer, 2048)) != -1) {
+        } else if ((recv_size = read(conn, buffer, 2048)) != -1) {
             auto* ip = reinterpret_cast<ip_header*>(buffer);
             if (ip->header_len * 4 + sizeof(icmp_echo_head) > recv_size) {
                 printf("Malformed packet.\n");
@@ -90,6 +88,6 @@ int main(int argc, char** argv) {
 
     free(buffer);
     free(payload);
-    close(file);
+    close(conn);
     return 0;
 }
