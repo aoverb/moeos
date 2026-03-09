@@ -157,9 +157,26 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
     socket& cur_sock = data->sock[inode_id];
     if (cur_sock.ptcl == protocol::ICMP) {
         int ret = -1;
-        while (1) {
-            {
-                SpinlockGuard guard(cur_sock.lock);
+        {
+            uint32_t flags = spinlock_acquire(&(cur_sock.lock));
+            if (cur_sock.data) {
+                icmp_node* icmp_data = (icmp_node*)cur_sock.data;
+                size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
+                memcpy(buffer, icmp_data->data, cpysize);
+                icmp_node* next = icmp_data->next;
+                kfree(icmp_data->data);
+                kfree(cur_sock.data);
+                cur_sock.data = next;
+                ret = cpysize;
+            } else {
+                {
+                    SpinlockGuard guard(process_list_lock);
+                    process_list[cur_process_id]->state = process_state::WAITING;
+                    insert_into_process_queue(cur_sock.wait_queue, process_list[cur_process_id]);
+                }
+                spinlock_release(&(cur_sock.lock), flags);
+                timeout(&(cur_sock.wait_queue), 1000);
+                uint32_t flags = spinlock_acquire(&(cur_sock.lock));
                 if (cur_sock.data) {
                     icmp_node* icmp_data = (icmp_node*)cur_sock.data;
                     size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
@@ -169,14 +186,9 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
                     kfree(cur_sock.data);
                     cur_sock.data = next;
                     ret = cpysize;
-                    break;
-                } else {
-                    SpinlockGuard guard(process_list_lock);
-                    process_list[cur_process_id]->state = process_state::WAITING;
-                    insert_into_process_queue(cur_sock.wait_queue, process_list[cur_process_id]);
                 }
             }
-            yield();
+            spinlock_release(&(cur_sock.lock), flags);
         }
 
         return ret;

@@ -21,8 +21,8 @@
 //  Placement new (freestanding)
 // ============================================================
 
-#ifndef __PLACEMENT_NEW_DEFINED
-#define __PLACEMENT_NEW_DEFINED
+#ifndef _std_PLACEMENT_NEW_DEFINED
+#define _std_PLACEMENT_NEW_DEFINED
 inline void* operator new(size_t, void* ptr) noexcept { return ptr; }
 inline void  operator delete(void*, void*)   noexcept {}
 #endif
