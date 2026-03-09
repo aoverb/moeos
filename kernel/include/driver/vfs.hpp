@@ -2,6 +2,7 @@
 #define _DRIVER_VFS_H
 
 #include <stdint.h>
+#include <kernel/net/socket.hpp>
 #include <kernel/process.hpp>
 
 #ifdef __cplusplus
@@ -47,15 +48,18 @@ struct fs_operation {
     int (*readdir)(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out);
     int (*closedir)(mounting_point* mp, uint32_t inode_id);
     int (*stat)(mounting_point* mp, const char* path, file_stat* out);
+    int (*ioctl)(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg);
+
+    sock_operation* sock_opr;
 };
 
-typedef struct mounting_point {
+struct mounting_point {
 	uint32_t index;
     FS_DRIVER driver;
     char mount_path[MAX_PATH_LEN];
     fs_operation* operations;
     void* data;
-} mounting_point;
+};
 
 void init_vfs();
 
@@ -72,6 +76,8 @@ int v_closedir(PCB* proc, int fd_pos);
 int v_stat(const char* path, file_stat* out);
 int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
 int v_dup(PCB* src_proc, int fd_src, PCB* dst_proc);
+int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg);
+int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);

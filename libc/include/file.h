@@ -26,6 +26,7 @@ struct file_stat {
     char     link_name[100];
 };
 
+int ioctl(int fd, char* cmd, void* arg);
 int stat(const char* path, file_stat* stat);
 int mount(uint32_t driver, const char* mount_path, void* device_data);
 int unmount(const char* mount_path);

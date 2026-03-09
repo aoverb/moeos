@@ -1,6 +1,10 @@
 #include <file.h>
 #include <syscall_def.hpp>
 
+int ioctl(int fd, char* cmd, void* arg) {
+    return syscall3((uint32_t)SYSCALL::IOCTL, (uint32_t)fd, (uint32_t)cmd, (uint32_t)arg);
+}
+
 int stat(const char* path, file_stat* stat) {
     return syscall2((uint32_t)SYSCALL::STAT, (uint32_t)path, (uint32_t)stat);
 }

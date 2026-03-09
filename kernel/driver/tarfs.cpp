@@ -378,5 +378,7 @@ void init_tarfs() {
     tar_fs_operation.readdir = &readdir;
     tar_fs_operation.closedir = &closedir;
     tar_fs_operation.stat = &stat;
+    tar_fs_operation.ioctl = nullptr;
+    tar_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::TARFS, &tar_fs_operation);
 }

@@ -269,5 +269,7 @@ void init_pipefs() {
     pipe_fs_operation.readdir = &readdir;
     pipe_fs_operation.closedir = &closedir;
     pipe_fs_operation.stat = &stat;
+    pipe_fs_operation.ioctl = nullptr;
+    pipe_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::PIPEFS, &pipe_fs_operation);
 }

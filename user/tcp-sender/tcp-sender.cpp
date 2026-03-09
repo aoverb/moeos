@@ -1,4 +1,5 @@
 #include <net/net.hpp>
+#include <net/socket.hpp>
 #include <file.h>
 #include <stdio.h>
 #include <format.h>
@@ -10,22 +11,20 @@ int main(int argc, char** argv) {
         printf("usage: ping <ip addr> <port>\n");
         return 0;
     }
-    const uint16_t src_port = 60001; // 本机端口
+
+    int conn = open("/sock/tcp", O_CREATE);
+    if (conn == -1) {
+        printf("tcp unsupported!\n");
+        return 0;
+    }
 
     char ip_addr[16];
     uint16_t dst_port;
     snprintf(ip_addr, sizeof(ip_addr), "%s", argv[1]);
     dst_port = atoi(argv[2]);
 
-    char tcp_open_path[64];
-    snprintf(tcp_open_path, sizeof(tcp_open_path), "/sock/%s/tcp/%d/%d", ip_addr, src_port, dst_port);
-
-    printf("tcp-sender: connecting to %s:%d using port %d...", ip_addr, dst_port, src_port);
-    int conn = open(tcp_open_path, O_CREATE);
-    if (conn == -1) {
-        printf("tcp unsupported!\n");
-        return 0;
-    }
+    printf("tcp-sender: connecting to %s:%d using port %d...", ip_addr, dst_port);
+    connect(conn, ip_addr, dst_port);
 
     auto tcp_cb = [&](size_t size) {
         int r_size = size > 1024 ? 1024 : size;

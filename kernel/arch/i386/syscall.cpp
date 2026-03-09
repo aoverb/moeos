@@ -45,6 +45,22 @@ static PCB* current_pcb() {
     return process_list[cur_process_id];
 }
 
+// CONNECT(ebx = fd, ecx = addr, edx = port)  → returns 0 if succeeded
+int sys_connect(interrupt_frame* reg) {
+    int fd           = static_cast<int>(reg->ebx);
+    const char* addr = reinterpret_cast<char*>(reg->ecx);
+    uint16_t port    = reg->edx;
+    return v_connect(current_pcb(), fd, addr, port);
+}
+
+// IOCTL(ebx = fd, ecx = cmd, edx = arg)  → returns 0 if succeeded
+int sys_ioctl(interrupt_frame* reg) {
+    int fd          = static_cast<int>(reg->ebx);
+    const char* cmd = reinterpret_cast<char*>(reg->ecx);
+    void* arg       = reinterpret_cast<void*>(reg->edx);
+    return v_ioctl(current_pcb(), fd, cmd, arg);
+}
+
 // STAT(ebx = path, ecx = &file_stat)
 int sys_stat(interrupt_frame* reg) {
     const char* path = reinterpret_cast<const char*>(reg->ebx);
@@ -221,6 +237,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::TERMINAL_CLEAR), sys_terminal_clear);
     register_syscall(uint32_t(SYSCALL::CLOCK), sys_clock);
     register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
+    register_syscall(uint32_t(SYSCALL::CONNECT),  sys_connect);
+    register_syscall(uint32_t(SYSCALL::IOCTL),  sys_ioctl);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
     register_syscall(uint32_t(SYSCALL::UNMOUNT),  sys_unmount);

@@ -142,6 +142,8 @@ void init_devfs() {
     dev_fs_operation.readdir = &readdir;
     dev_fs_operation.closedir = &closedir;
     dev_fs_operation.stat = &stat;
+    dev_fs_operation.ioctl = nullptr;
+    dev_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::DEVFS, &dev_fs_operation);
 }
 

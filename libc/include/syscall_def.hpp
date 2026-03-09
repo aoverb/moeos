@@ -14,6 +14,8 @@ enum class SYSCALL {
     TERMINAL_CLEAR = 4,
     CLOCK = 25,
     SBRK = 50,
+    CONNECT = 75,
+    IOCTL = 98,
     STAT = 99,
     MOUNT = 100,
     UNMOUNT = 101,

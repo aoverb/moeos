@@ -1,6 +1,7 @@
 #include <driver/vfs.hpp>
 #include <driver/sockfs.hpp>
 #include <kernel/net/ip.hpp>
+#include <kernel/net/socket.hpp>
 #include <kernel/schedule.hpp>
 #include <kernel/timer.hpp>
 #include <kernel/mm.hpp>
@@ -10,7 +11,7 @@
 #include <format.h>
 
 fs_operation sock_fs_operation;
-
+sock_operation sock_operations;
 enum class protocol {ROOT, ICMP};
 static mounting_point* global_mp;
 
@@ -286,6 +287,14 @@ static int closedir(mounting_point*, uint32_t) {
     return 0;
 }
 
+static int ioctl(mounting_point*, uint32_t, const char* cmd, void* arg) {
+    return 0;
+}
+
+static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port) {
+    return -1;
+}
+
 void init_sockfs() {
     sock_fs_operation.mount = &mount;
     sock_fs_operation.unmount = &unmount;
@@ -297,5 +306,9 @@ void init_sockfs() {
     sock_fs_operation.readdir = &readdir;
     sock_fs_operation.closedir = &closedir;
     sock_fs_operation.stat = &stat;
+    sock_fs_operation.ioctl = &ioctl;
+    sock_fs_operation.sock_opr = &sock_operations;
+    sock_operations.connect = &connect;
+
     register_fs_operation(FS_DRIVER::SOCKFS, &sock_fs_operation);
 }

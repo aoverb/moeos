@@ -363,6 +363,27 @@ int v_stat(const char* path, file_stat* out) {
     if (!mp) return -1;
     return mp->operations->stat(mp, get_mounting_relative_path(mp, path), out);
 }
+
+int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg) {
+    SpinlockGuard guard(vfs_lock);
+    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+    file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
+    mounting_point* mp = fd->mp;
+    if (!mp || !(mp->operations->ioctl)) return -1;
+    return mp->operations->ioctl(mp, fd->inode_id, cmd, arg);
+}
+
+int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port) {
+    SpinlockGuard guard(vfs_lock);
+    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+    file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
+    mounting_point* mp = fd->mp;
+    if (!mp || !(mp->operations->sock_opr)) return -1;
+    return mp->operations->sock_opr->connect(mp, fd->inode_id, addr, port);
+}
+
 void resolve_path(const char* cwd, const char* input, char* output) {
     char tmp[MAX_PATH_LEN];
 
