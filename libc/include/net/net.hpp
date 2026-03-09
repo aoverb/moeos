@@ -7,6 +7,38 @@
 extern "C" {
 #endif
 
+enum class tcp_flags : uint8_t {
+    FIN = 1 << 0,
+    SYN = 1 << 1,
+    RST = 1 << 2,
+    PSH = 1 << 3,
+    ACK = 1 << 4,
+    URG = 1 << 5,
+    ECE = 1 << 6,
+    CWR = 1 << 7
+};
+
+struct Header {
+    uint16_t src_port;
+    uint16_t dst_port;
+    uint32_t seq_num;
+    uint32_t ack_num;
+    uint8_t  reserved : 4;
+    uint8_t  data_offset : 4; // 注意这里跟上面的四字节位置掉转过来了
+    uint8_t  flags;
+    uint16_t window;
+    uint16_t checksum;
+    uint16_t urgent_ptr;
+} __attribute__((packed));
+
+struct PseudoHeader {
+    uint32_t src_addr;
+    uint32_t dst_addr;
+    uint8_t  zero;
+    uint8_t  protocol;
+    uint16_t tcp_length;
+} __attribute__((packed));
+
 constexpr uint8_t IP_PROTOCOL_ICMP = 0x01;
 
 typedef struct {
