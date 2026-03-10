@@ -17,11 +17,15 @@ struct TCB { // 传输控制块
     uint32_t ack;
     std::queue<TCB*, MAX_ACCEPTED_QUEUE_NUM> accepted_queue;
     uint8_t accepted_queue_size;
-
+    uint8_t pending_count = 0;
     uint32_t src_addr;
     uint32_t dst_addr;
     uint16_t src_port;
     uint16_t dst_port;
+
+    socket* owner;
+    socket* listener;
+    spinlock lock;
 };
 
 int tcp_init(socket& sock, uint16_t local_port);

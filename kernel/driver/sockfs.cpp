@@ -319,6 +319,7 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
             new_sock.valid = 0;
             return -1;
         }
+        new_sock.data.tcp.block->owner = &sock;
         return inode_id;
     }
     return -1;

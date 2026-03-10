@@ -400,22 +400,30 @@ int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size) {
     if (!fd) return -1;
     mounting_point* mp = fd->mp;
     if (!mp || !(mp->operations->sock_opr)) return -1;
-
-    // 先准备好新的fd
-    int new_fd_pos = alloc_fd_for_proc(proc);
-    if (new_fd_pos == -1) {
-        return -1;
-    }
-    int handle_id = get_empty_handle();
-    if (handle_id == -1) {
-        return -1;
-    }
-    uint32_t inode_id = mp->operations->sock_opr->accept(mp, fd->inode_id, peeraddr, size);
-    if (inode_id == -1) {
-        return -1;
+    int new_fd_pos;
+    int handle_id;
+    {
+        SpinlockGuard guard(vfs_lock);
+        // 先准备好新的fd
+        new_fd_pos = alloc_fd_for_proc(proc);
+        if (new_fd_pos == -1) {
+            return -1;
+        }
+        handle_id = get_empty_handle();
+        if (handle_id == -1) {
+            return -1;
+        }
+        proc->fd[new_fd_pos] = file_handle[handle_id] = (file_description*)kmalloc(sizeof(file_description));
+        // 先占好位置
     }
     file_description*& new_fd = proc->fd[new_fd_pos];
-    new_fd = file_handle[handle_id] = (file_description*)kmalloc(sizeof(file_description));
+    uint32_t inode_id = mp->operations->sock_opr->accept(mp, fd->inode_id, peeraddr, size);
+    if (inode_id == -1) {
+        kfree(file_handle[handle_id]);
+        new_fd = file_handle[handle_id] = nullptr;
+        return -1;
+    }
+
     new_fd->mp = mp;
     new_fd->handle_id = handle_id;
     new_fd->inode_id = inode_id;

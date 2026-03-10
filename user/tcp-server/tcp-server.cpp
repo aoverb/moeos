@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     int client_fd;
     while (client_fd = accept(conn, nullptr, nullptr)) {
         if (client_fd == -1) break;
+        printf("we got a new guest!\n");
         pollfd fds[2] = {
             { .fd = 0, .events = POLLIN, .revents = 0}, // 标准输入
             { .fd = client_fd, .events = POLLIN, .revents = 0 }
