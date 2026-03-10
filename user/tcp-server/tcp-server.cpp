@@ -13,8 +13,8 @@ int main(int argc, char** argv) {
         return 0;
     }
     sockaddr bindaddr;
+    bindaddr.addr = SOCKADDR_BROADCAST_ADDR;
     bindaddr.port = 8080;
-    strcpy(bindaddr.addr, SOCKADDR_BROADCAST_ADDR); 
     if (ioctl(conn, "SOCK_IOC_BIND", &bindaddr) < 0) {
         printf("failed to bind %s:%d", bindaddr.addr, bindaddr.port);
         return 0;

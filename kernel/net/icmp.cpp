@@ -3,6 +3,7 @@
 #include <kernel/net/net.hpp>
 #include <kernel/net/socket.hpp>
 #include <kernel/mm.hpp>
+#include <format.h>
 #include <stdio.h>
 
 int icmp_init(socket& sock) {
@@ -10,8 +11,8 @@ int icmp_init(socket& sock) {
     return 0;
 }
 
-int icmp_connect(socket& sock, const char* addr, uint16_t) {
-    strcpy(sock.dst_addr, addr);
+int icmp_connect(socket& sock, uint32_t addr, uint16_t) {
+    sock.dst_addr = addr;
     return 0;
 }
 

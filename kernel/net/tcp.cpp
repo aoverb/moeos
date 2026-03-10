@@ -48,12 +48,10 @@ constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
 
 int tcp_init(socket& sock, uint16_t local_port) {
     sock.ptcl = protocol::TCP;
-    strcpy(sock.dst_addr, "127.0.0.1"); // 先给一个默认地址，后面通过connect设置
+    sock.dst_addr = 0; // 先给一个默认地址，后面通过connect设置
     sock.dst_port = 0; // 与上面同理
 
-    uint8_t src_addr[4];
-    getLocalNetconf()->ip.to_bytes(src_addr);
-    sprintf(sock.src_addr, "%d.%d.%d.%d", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+    sock.src_addr = getLocalNetconf()->ip.addr;
     sock.src_port = local_port;
 
     sock.data = kmalloc(sizeof(TCB));
@@ -74,15 +72,9 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
     pseudo_tcp_header* p_header = (pseudo_tcp_header*)packet;
     tcp_header* t_header = (tcp_header*)((char*)packet + sizeof(pseudo_tcp_header));
     TCB* tcb = (TCB*)sock.data;
-    int tmp[4];
 
-    sscanf_s(sock.dst_addr, "%d.%d.%d.%d", &tmp[0], &tmp[1], &tmp[2], &tmp[3]);
-    uint8_t dst_addr[4] = { (uint8_t)tmp[0], (uint8_t)tmp[1], (uint8_t)tmp[2], (uint8_t)tmp[3] };
-
-    sscanf_s(sock.src_addr, "%d.%d.%d.%d", &tmp[0], &tmp[1], &tmp[2], &tmp[3]);
-    uint8_t src_addr[4] = { (uint8_t)tmp[0], (uint8_t)tmp[1], (uint8_t)tmp[2], (uint8_t)tmp[3] };
-    p_header->src_addr = ipv4addr(src_addr).addr;
-    p_header->dst_addr = ipv4addr(dst_addr).addr;
+    p_header->src_addr = sock.src_addr;
+    p_header->dst_addr = sock.dst_addr;
     p_header->protocol = IP_PROTOCOL_TCP;
     p_header->zero = 0;
     p_header->tcp_length = htons(sizeof(tcp_header) + size);
@@ -105,13 +97,13 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
     if ((uint8_t)flags & (uint8_t)tcp_flags::FIN) {
         tcb->seq += 1; // 虚拟字节
     }
-    int ret = send_ipv4((ipv4addr(dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
+    int ret = send_ipv4((ipv4addr(sock.dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
     kfree(packet);
     return ret;
 }
 
 int tcp_bind(socket& sock, sockaddr* bind_conf) {
-    strcpy(sock.src_addr, bind_conf->addr);
+    sock.src_addr = bind_conf->addr;
     sock.src_port = bind_conf->port;
     return 0;
 }
@@ -123,10 +115,10 @@ int tcp_ioctl(socket& sock, const char* cmd, void* arg) {
     return -1;
 }
 
-int tcp_connect(socket& sock, const char* addr, uint16_t port) {
+int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
     TCB* tcb = (TCB*)sock.data;
     uint32_t flags = spinlock_acquire(&(sock.lock));
-    strncpy(sock.dst_addr, addr, 16);
+    sock.dst_addr = addr;
     sock.dst_port = port;
     // SEND SYN
     if (send_tcp_pack(sock, tcp_flags::SYN, nullptr, 0) < 0) {

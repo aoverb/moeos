@@ -17,14 +17,14 @@ enum class protocol {ROOT, ICMP, TCP};
 typedef struct {
     uint8_t valid;
     protocol ptcl;
-    char src_addr[32];
-    char dst_addr[32];
+    uint32_t src_addr;
+    uint32_t dst_addr;
     uint16_t src_port;
     uint16_t dst_port;
     void* data;
     spinlock lock;
     process_queue wait_queue;
-} socket;
+} socket; // 全部都放网络序！
 
 struct sock_operation {
     int (*connect)(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port);

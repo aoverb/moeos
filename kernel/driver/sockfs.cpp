@@ -66,7 +66,6 @@ static int mount(mounting_point* mp) {
     mp->data = (socketfs_data*)kmalloc(sizeof(socketfs_data));
     memset(mp->data, 0, sizeof(socketfs_data));
     reinterpret_cast<socketfs_data*>(mp->data)->sock[0].ptcl = protocol::ROOT;
-    strcpy(reinterpret_cast<socketfs_data*>(mp->data)->sock[0].dst_addr, ".");
     reinterpret_cast<socketfs_data*>(mp->data)->sock[0].valid = 1;
     return 0;
 }
@@ -193,15 +192,6 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     if (data->sock[inode_id].valid == 0) return -1;
     socket& cur_sock = data->sock[inode_id];
     if (cur_sock.ptcl == protocol::ICMP) {
-        uint8_t trans_addr[4];
-        unsigned int a, b, c, d;
-        sscanf_s(cur_sock.dst_addr, "%u.%u.%u.%u", &a, &b, &c, &d);
-        trans_addr[0] = (uint8_t)a;
-        trans_addr[1] = (uint8_t)b;
-        trans_addr[2] = (uint8_t)c;
-        trans_addr[3] = (uint8_t)d;
-        ipv4addr addr = ipv4addr(trans_addr);
-
         char* id_modified_buffer = (char*)kmalloc(size);
         memcpy(id_modified_buffer, buffer, size);
         // 虽然我们现在的socket数量最大是1024，在这个情况下这个标识符应该是但是我不排除后面会有调大这个数量的情况
@@ -212,7 +202,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
         *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = 0;
         uint16_t chksum = checksum(id_modified_buffer, size);
         *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = chksum;
-        int ret = send_ipv4(addr, IP_PROTOCOL_ICMP, id_modified_buffer, size);
+        int ret = send_ipv4(ipv4addr(cur_sock.dst_addr), IP_PROTOCOL_ICMP, id_modified_buffer, size);
         kfree(id_modified_buffer);
         return ret;
     }
@@ -291,10 +281,14 @@ static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint
     if (!mp->data) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
+    int tmp[4];
+    sscanf_s(addr, "%d.%d.%d.%d", &tmp[0], &tmp[1], &tmp[2], &tmp[3]);
+    uint8_t dst_addr[4] = { (uint8_t)tmp[0], (uint8_t)tmp[1], (uint8_t)tmp[2], (uint8_t)tmp[3] };
+    uint32_t trans_addr = ipv4addr(dst_addr).addr;
     if (sock.ptcl == protocol::ICMP) {
-        return icmp_connect(sock, addr, port);
+        return icmp_connect(sock, trans_addr, port);
     } else if (sock.ptcl == protocol::TCP) {
-        return tcp_connect(sock, addr, port);
+        return tcp_connect(sock, trans_addr, port);
     }
     return -1;
 }

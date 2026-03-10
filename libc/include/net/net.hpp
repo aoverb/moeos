@@ -8,10 +8,10 @@
 extern "C" {
 #endif
 
-constexpr char* SOCKADDR_BROADCAST_ADDR = "0.0.0.0";
+constexpr uint32_t SOCKADDR_BROADCAST_ADDR = 0;
 
 struct sockaddr {
-    char addr[32];
+    uint32_t addr;
     uint16_t port;
 };
 
