@@ -49,11 +49,6 @@ int send_ipv4(const ipv4addr& dst_ip, uint8_t protocol,
     uint8_t dst_ip_arr[4];
     dst_ip_x.to_bytes(dst_ip_arr);
     if (!arp_table_lookup(dst_ip_x, dst_mac)) {
-        // todo: 也许需要包装一个解析ip->mac的函数
-        // printf("warning: mac addr of dst_ip_arr %d.%d.%d.%d not found!", dst_ip_arr[0],
-        //                                                                  dst_ip_arr[1],
-        //                                                                  dst_ip_arr[2],
-        //                                                                  dst_ip_arr[3]);
         return -1;
     }
     int ret = send_ethernet_frame(dst_mac, getLocalNetconf()->mac, TYPE_IP, data, total_len);

@@ -19,7 +19,7 @@ struct sockaddr {
 };
 
 enum class tcb_state {
-    CLOSED, SYN_SENT, ESTABLISHED, LISTEN
+    CLOSED, SYN_SENT, ESTABLISHED, LISTEN, SYN_RCVD
 };
 
 enum class tcp_flags : uint8_t {

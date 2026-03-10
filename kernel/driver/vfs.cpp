@@ -395,7 +395,6 @@ int v_listen(PCB* proc, int fd_pos, size_t queue_length) {
 }
 
 int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size) {
-    SpinlockGuard guard(vfs_lock);
     if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
     file_description*& fd = proc->fd[fd_pos];
     if (!fd) return -1;
