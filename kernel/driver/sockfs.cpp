@@ -167,7 +167,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
                 }
                 spinlock_release(&(cur_sock.lock), flags);
                 timeout(&(cur_sock.wait_queue), 1000);
-                uint32_t flags = spinlock_acquire(&(cur_sock.lock));
+                flags = spinlock_acquire(&(cur_sock.lock));
                 if (cur_sock.data) {
                     icmp_node* icmp_data = (icmp_node*)cur_sock.data;
                     size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
