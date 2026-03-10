@@ -263,11 +263,11 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     hal_init();
     keyboard_init();
     pit_init();
-    rtl8139_init();
-    init_netconf();
     syscall_init();
     fs_init(saved, mod_count);
     process_init();
+    rtl8139_init();
+    init_netconf();
     init_kernel_timer();
     asm volatile ("sti");
     PCB* cur_pcb = process_list[cur_process_id];

@@ -7,6 +7,8 @@
 #include <kernel/net/net.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/spinlock.hpp>
+#include <kernel/process.hpp>
+#include <kernel/schedule.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +31,17 @@ constexpr uint32_t SEND_BUFFER_SIZE_TOTAL = 0x2000;
 
 static uint32_t is_initialized = 0;
 static uint32_t p_addr = 0;
+
+struct net_packet {
+    char data[1800];
+    uint16_t len;
+};
+
+constexpr uint32_t NET_QUEUE_SIZE = 64;
+static net_packet net_pkt_queue[NET_QUEUE_SIZE];
+static volatile uint32_t nq_head = 0;  // 中断写
+static volatile uint32_t nq_tail = 0;  // 内核线程读
+static pid_t net_thread_pid = 0;
 
 void round_buffer_init() {
     int total_pages = RBUFFER_SIZE / (1 << 12) + 1; // 多出的一页是为了16字节的余量
@@ -137,14 +150,34 @@ static int nic_read(char* buffer, uint32_t /* offset */, uint32_t size) {
 static char recv_buff[1800];
 void ethernet_handler(char* buffer, uint16_t size);
 
+static void net_enqueue(const char* data, uint16_t len) {
+    uint32_t next_head = (nq_head + 1) % NET_QUEUE_SIZE;
+    if (next_head == nq_tail) return;
+    memcpy(net_pkt_queue[nq_head].data, data, len);
+    net_pkt_queue[nq_head].len = len;
+    nq_head = next_head;
+}
+
+static void net_thread_wakeup() {
+    if (net_thread_pid == 0) return;
+    uint32_t flags = spinlock_acquire(&process_list_lock);
+    if (process_list[net_thread_pid] &&
+        process_list[net_thread_pid]->state == process_state::SLEEPING) {
+        process_list[net_thread_pid]->state = process_state::READY;
+        insert_into_scheduling_queue(net_thread_pid);
+    }
+    spinlock_release(&process_list_lock, flags);
+}
+
 void rtl8139_interrupt_handler(registers*) {
     uint16_t status = inw(io_addr + REG_ISR);
     if (status & 0x0001) { // 收到了包
         while (!(inb(io_addr + REG_CHIPCMD) & 0x01)) {  // 缓冲区不为空
             int len = nic_read(recv_buff, 0, sizeof(recv_buff));
             if (len > 0)
-                ethernet_handler(recv_buff, len);
+                net_enqueue(recv_buff, len);
         }
+        net_thread_wakeup();
     }
 
     outw(io_addr + REG_ISR, status);  // 写回清除
@@ -165,6 +198,25 @@ void reg_isr() {
 
     // 开启接收OK和发送OK的中断
     outw(io_addr + REG_IMR, 0x0001 | 0x0004);  // ROK | TOK
+}
+
+void net_rx_thread_main(void*) {
+    while (1) {
+        while (nq_tail != nq_head) {
+            net_packet* pkt = &net_pkt_queue[nq_tail];
+            ethernet_handler(pkt->data, pkt->len);
+            nq_tail = (nq_tail + 1) % NET_QUEUE_SIZE;
+        }
+
+        uint32_t flags = spinlock_acquire(&process_list_lock);
+        if (nq_tail == nq_head) {
+            process_list[cur_process_id]->state = process_state::SLEEPING;
+            spinlock_release(&process_list_lock, flags);
+            yield();
+        } else {
+            spinlock_release(&process_list_lock, flags);
+        }
+    }
 }
 
 void rtl8139_init() {
@@ -214,6 +266,7 @@ void rtl8139_init() {
     init_send_buffer();
     reg_isr();
     is_initialized = 1;
+    net_thread_pid = create_process("knetd", (void*)&net_rx_thread_main, nullptr);
     printf("OK\n");
     return;
 }
