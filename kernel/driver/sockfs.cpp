@@ -27,6 +27,7 @@ typedef struct {
 
 typedef struct {
     socket sock[MAX_SOCK_NUM];
+    spinlock socket_lock;
 } socketfs_data;
 
 void sockfs_icmp_add(int inode_id, char* buffer, size_t size) {
@@ -74,51 +75,45 @@ static int unmount(mounting_point*) {
     return -1;
 }
 
-static int open(mounting_point* mp, const char* path,  uint8_t mode) {
-    ++path; // 第一位是斜线
+uint32_t init_new_socket(socketfs_data* data) {
+    SpinlockGuard guard(data->socket_lock);
+    uint32_t new_sock_num = 0;
+    for (int i = 0; i < MAX_SOCK_NUM; ++i) {
+        if (data->sock[i].valid == 0) {
+            new_sock_num = i;
+            data->sock[i].valid = 1;
+            break;
+        }
+    }
+    return new_sock_num;
+}
+
+static int open(mounting_point* mp, const char* protocol,  uint8_t mode) {
+    ++protocol; // 默认第一位是斜线，todo，要校验输入
+    if (!strlen(protocol)) {
+        return -1;
+    }
     if (!mp->data) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
+
     if (mode == O_CREATE) { // 创建一个套接字
-        uint32_t new_sock_num = 0;
-        for (int i = 0; i < MAX_SOCK_NUM; ++i) {
-            if (data->sock[i].valid == 0) {
-                new_sock_num = i;
-                break;
-            }
-        }
+        uint32_t new_sock_num = init_new_socket(data);
+        socket& new_sock = data->sock[new_sock_num];
         if (new_sock_num == 0) { // 套接字数量已到达最大值
             return -1;
         }
-        socket& new_sock = data->sock[new_sock_num];
-        new_sock.valid = 1;
-
-        uint8_t src_addr[4];
-        getLocalNetconf()->ip.to_bytes(src_addr);
-        sprintf(new_sock.src_addr, "%d.%d.%d.%d", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
-        new_sock.src_port = 60001; // TODO：应该是要有一个全局端口池分配的
-
-        // 创建socket格式：<addr>/<protocol>
-        char protocol[8];
-        strcpy(protocol, path);
-        strcpy("127.0.0.1", new_sock.dst_addr); // 先给一个默认地址，后面通过connect设置
-
-        if (!strlen(protocol)) {
-            return -1;
-        }
-
+        
         if (strcmp("icmp", protocol) == 0) {
-            new_sock.ptcl = protocol::ICMP;
+            icmp_init(new_sock);
         } else if (strcmp("tcp", protocol) == 0) {
-            new_sock.ptcl = protocol::TCP;
+            tcp_init(new_sock, 60001);  // TODO：应该是要有一个全局端口池分配的
         } else {
-            // 不支持的协议
-            return -1;
+            return -1; // 不支持的协议
         }
         return new_sock_num;
     } else { // 打开已有的套接字
         return -1; // todo: 暂不支持
     }
-    return -1;
 }
 
 static int close(mounting_point* mp, uint32_t inode_id, uint32_t) {

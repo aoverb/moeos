@@ -15,6 +15,7 @@ struct icmp_node {
     icmp_node* next;
 };
 
+int icmp_init(socket& sock);
 int icmp_connect(socket& sock, const char* addr, uint16_t);
 #ifdef __cplusplus
 }

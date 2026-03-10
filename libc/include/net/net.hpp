@@ -7,6 +7,10 @@
 extern "C" {
 #endif
 
+enum class tcb_state {
+    CLOSED, SYN_SENT, ESTABLISHED
+};
+
 enum class tcp_flags : uint8_t {
     FIN = 1 << 0,
     SYN = 1 << 1,

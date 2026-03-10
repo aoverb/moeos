@@ -5,6 +5,11 @@
 #include <kernel/mm.hpp>
 #include <stdio.h>
 
+int icmp_init(socket& sock) {
+    sock.ptcl = protocol::ICMP;
+    return 0;
+}
+
 int icmp_connect(socket& sock, const char* addr, uint16_t) {
     strcpy(sock.dst_addr, addr);
     return 0;

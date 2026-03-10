@@ -6,6 +6,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+int tcp_init(socket& sock, uint16_t local_port);
 int tcp_connect(socket& sock, const char* addr, uint16_t port);
 #ifdef __cplusplus
 }
