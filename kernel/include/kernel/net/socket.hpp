@@ -11,20 +11,26 @@ extern "C" {
 struct mounting_point;
 struct spinlock;
 struct PCB;
+struct TCB;
+struct icmp_node;
 typedef PCB* process_queue;
 enum class protocol {ROOT, ICMP, TCP};
 
-typedef struct {
+struct socket {
     uint8_t valid;
     protocol ptcl;
     uint32_t src_addr;
     uint32_t dst_addr;
     uint16_t src_port;
     uint16_t dst_port;
-    void* data;
+    union {
+        struct { uint32_t bound_ip;
+                 icmp_node* queue_head; }   icmp;
+        struct { TCB* block; }        tcp;
+    } data;
     spinlock lock;
     process_queue wait_queue;
-} socket; // 全部都放网络序！
+}; // 全部都放网络序！
 
 struct sock_operation {
     int (*connect)(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port);

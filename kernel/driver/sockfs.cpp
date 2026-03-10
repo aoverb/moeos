@@ -41,8 +41,8 @@ void sockfs_icmp_add(int inode_id, char* buffer, size_t size) {
         new_node->data = (char*)kmalloc(size);
         memcpy(new_node->data, buffer, size);
         new_node->size = size;
-        new_node->next = (icmp_node*)(cur_sock.data);
-        cur_sock.data = new_node;
+        new_node->next = cur_sock.data.icmp.queue_head;
+        cur_sock.data.icmp.queue_head = new_node;
     }
     {
         SpinlockGuard guard(process_list_lock);
@@ -128,7 +128,7 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t) {
             cur->state = process_state::READY;
             insert_into_scheduling_queue(cur->pid);
         }
-        icmp_node* node = (icmp_node*)cur_sock.data;
+        icmp_node* node = cur_sock.data.icmp.queue_head;
         while (node) {
             icmp_node* next = node->next;
             kfree(node->data);
@@ -149,14 +149,14 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
         int ret = -1;
         {
             uint32_t flags = spinlock_acquire(&(cur_sock.lock));
-            if (cur_sock.data) {
-                icmp_node* icmp_data = (icmp_node*)cur_sock.data;
+            if (cur_sock.data.icmp.queue_head) {
+                icmp_node* icmp_data = cur_sock.data.icmp.queue_head;
                 size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
                 memcpy(buffer, icmp_data->data, cpysize);
                 icmp_node* next = icmp_data->next;
                 kfree(icmp_data->data);
-                kfree(cur_sock.data);
-                cur_sock.data = next;
+                kfree(cur_sock.data.icmp.queue_head);
+                cur_sock.data.icmp.queue_head = next;
                 ret = cpysize;
             } else {
                 {
@@ -167,14 +167,14 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
                 spinlock_release(&(cur_sock.lock), flags);
                 timeout(&(cur_sock.wait_queue), 1000);
                 flags = spinlock_acquire(&(cur_sock.lock));
-                if (cur_sock.data) {
-                    icmp_node* icmp_data = (icmp_node*)cur_sock.data;
+                if (cur_sock.data.icmp.queue_head) {
+                    icmp_node* icmp_data = (icmp_node*)cur_sock.data.icmp.queue_head;
                     size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
                     memcpy(buffer, icmp_data->data, cpysize);
                     icmp_node* next = icmp_data->next;
                     kfree(icmp_data->data);
-                    kfree(cur_sock.data);
-                    cur_sock.data = next;
+                    kfree(cur_sock.data.icmp.queue_head);
+                    cur_sock.data.icmp.queue_head = next;
                     ret = cpysize;
                 }
             }
@@ -314,8 +314,8 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
         if (new_sock_num == 0) { // 套接字数量已到达最大值
             return -1;
         }
-        new_sock.data = tcp_accept(sock, peeraddr, size);
-        if (new_sock.data == nullptr) {
+        new_sock.data.tcp.block = tcp_accept(sock, peeraddr, size);
+        if (new_sock.data.tcp.block == nullptr) {
             new_sock.valid = 0;
             return -1;
         }

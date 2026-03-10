@@ -59,8 +59,8 @@ int tcp_init(socket& sock, uint16_t local_port) {
     sock.src_addr = getLocalNetconf()->ip.addr;
     sock.src_port = local_port;
 
-    sock.data = (void*)(new (kmalloc(sizeof(TCB))) TCB());
-    TCB* tcb = (TCB*)sock.data;
+    sock.data.tcp.block = new (kmalloc(sizeof(TCB))) TCB();
+    TCB* tcb = sock.data.tcp.block;
     tcb->state = tcb_state::CLOSED;
     tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
     tcb->window = (char*)kmalloc(tcb->window_size);
@@ -71,13 +71,13 @@ int tcp_init(socket& sock, uint16_t local_port) {
     return 0;
 }
 
-int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t size) {
+int send_tcp_pack(socket& sock, uint8_t flags, const char* payload, size_t size) {
     void* packet = kmalloc(sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size);
     uint32_t packet_size = sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size;
     memset(packet, 0, packet_size);
     pseudo_tcp_header* p_header = (pseudo_tcp_header*)packet;
     tcp_header* t_header = (tcp_header*)((char*)packet + sizeof(pseudo_tcp_header));
-    TCB* tcb = (TCB*)sock.data;
+    TCB* tcb = (TCB*)sock.data.tcp.block;
 
     p_header->src_addr = sock.src_addr;
     p_header->dst_addr = sock.dst_addr;
@@ -108,7 +108,7 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
 
 int tcp_bind(socket& sock, sockaddr* bind_conf) {
     sock.src_addr = bind_conf->addr;
-    sock.src_port = bind_conf->port;
+    sock.src_port = htons(bind_conf->port);
     return 0;
 }
 
@@ -120,14 +120,14 @@ int tcp_ioctl(socket& sock, const char* cmd, void* arg) {
 }
 
 int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
-    TCB* tcb = (TCB*)sock.data;
+    TCB* tcb = sock.data.tcp.block;
     uint32_t flags = spinlock_acquire(&(sock.lock));
     sock.dst_addr = addr;
     sock.dst_port = port;
     // SEND SYN
     map_quad_to_sock[tcp_quadruple {.local_ip = sock.src_addr, .remote_ip = sock.dst_addr,
                                     .local_port = sock.src_port, .remote_port = sock.dst_port}] = &sock;
-    if (send_tcp_pack(sock, tcp_flags::SYN, nullptr, 0) < 0) {
+    if (send_tcp_pack(sock, (uint8_t)tcp_flags::SYN, nullptr, 0) < 0) {
         spinlock_release(&(sock.lock), flags);
         return -1;
     }
@@ -157,7 +157,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
 
 int tcp_listen(socket& sock, size_t queue_length) {
     SpinlockGuard guard(sock.lock);
-    TCB* tcb = (TCB*)sock.data;
+    TCB* tcb = sock.data.tcp.block;
     if (tcb->state == tcb_state::LISTEN) {
         return -1;
     }
@@ -179,7 +179,7 @@ int tcp_listen(socket& sock, size_t queue_length) {
 // v_accept()封装成一个fd，然后用户就能拿到一个新的fd了
 TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
     uint32_t flags = spinlock_acquire(&(sock.lock));
-    TCB* tcb = (TCB*)sock.data;
+    TCB* tcb = sock.data.tcp.block;
     if (tcb->state != tcb_state::LISTEN) {
         spinlock_release(&(sock.lock), flags);
         return nullptr;
@@ -210,18 +210,26 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     tcp_header* header = reinterpret_cast<tcp_header*>(buffer + ip_header_size);
     uint32_t src_ip = reinterpret_cast<ip_header*>(buffer)->src_ip;
     uint32_t dst_ip = reinterpret_cast<ip_header*>(buffer)->dst_ip;
-    uint16_t src_port = header->src_port;
-    uint16_t dst_port = header->dst_port;
-
+    uint16_t src_port = ntohs(header->src_port);
+    uint16_t dst_port = ntohs(header->dst_port);
     auto itr = map_quad_to_sock.find(tcp_quadruple {.local_ip = dst_ip, .remote_ip = src_ip,
                                .local_port = dst_port, .remote_port = src_port});
     if (itr == map_quad_to_sock.end()) { // 没在已有的连接找到
-        printf("discard."); // todo: 这里可能是被动连接，我们先丢弃。
+        sockaddr tofind_addr;
+        tofind_addr.addr = dst_ip;
+        tofind_addr.addr = dst_port;
+        auto itr = map_sockaddr_to_sock.find(tofind_addr);
+        if (itr == map_sockaddr_to_sock.end()) {
+            // 如果按特定ip找没找到，那就找0.0.0.0
+            tofind_addr.addr = 0;
+            itr = map_sockaddr_to_sock.find(tofind_addr);
+            if (itr == map_sockaddr_to_sock.end()) { return; } // 实在找不到对应的，就丢弃掉了
+        }
         return;
     }
     SpinlockGuard guard(itr->second->lock);
     socket* sock = itr->second;
-    TCB* tcb = (TCB*)itr->second->data;
+    TCB* tcb = itr->second->data.tcp.block;
 
     switch (tcb->state)
     {
@@ -230,10 +238,10 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     case tcb_state::SYN_SENT:
         if ((header->flags & ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK)) != 
             ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK)) {
-                break;
+            break;
         }
         tcb->ack = ntohl(header->seq_num) + 1; // 下一次希望收到的：SYN出来的序列号，加一个虚拟字节
-        send_tcp_pack(*sock, tcp_flags::ACK, nullptr, 0);
+        send_tcp_pack(*sock, (uint8_t)tcp_flags::ACK, nullptr, 0);
         tcb->state = tcb_state::ESTABLISHED;
         {
             SpinlockGuard guard(process_list_lock);
