@@ -136,9 +136,14 @@ void timeout(process_queue* queue, uint32_t ms) {
         spinlock_release(&process_list_lock, flags);
         insert_into_scheduling_queue(pid);
     };
-    timer_id_t id = register_timer(pit_get_ticks() + ms_10, callback, queue);
+    timer_id_t id;
+    if (ms != 0) {
+        id = register_timer(pit_get_ticks() + ms_10, callback, queue);
+    }
     process_list[cur_process_id]->state = process_state::WAITING;
     spinlock_release(&process_list_lock, flags);
     yield();
-    cancel_timer(id);
+    if (ms != 0) {
+        cancel_timer(id);
+    }
 }

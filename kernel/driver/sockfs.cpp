@@ -308,7 +308,18 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::TCP) {
-        return tcp_accept(sock, peeraddr, size);
+        // 准备好包装的inode
+        uint32_t new_sock_num = init_new_socket(data);
+        socket& new_sock = data->sock[new_sock_num];
+        if (new_sock_num == 0) { // 套接字数量已到达最大值
+            return -1;
+        }
+        new_sock.data = tcp_accept(sock, peeraddr, size);
+        if (new_sock.data == nullptr) {
+            new_sock.valid = 0;
+            return -1;
+        }
+        return inode_id;
     }
     return -1;
 }

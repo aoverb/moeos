@@ -3,14 +3,26 @@
 
 #include <kernel/net/ip.hpp>
 #include <kernel/net/socket.hpp>
+#include <queue>
 #ifdef __cplusplus
 extern "C" {
 #endif
+constexpr uint8_t MAX_ACCEPTED_QUEUE_NUM = 128;
+struct TCB { // 传输控制块
+    tcb_state state;
+    char* window;
+    size_t window_size;
+    size_t window_tail;
+    uint32_t seq;
+    uint32_t ack;
+    std::queue<TCB*, MAX_ACCEPTED_QUEUE_NUM> accepted_queue;
+    uint8_t accepted_queue_size;
+};
 
 int tcp_init(socket& sock, uint16_t local_port);
 int tcp_connect(socket& sock, uint32_t addr, uint16_t port);
 int tcp_listen(socket& sock, size_t queue_length);
-int tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
+TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
 int tcp_ioctl(socket& sock, const char* cmd, void* arg);
 
 #ifdef __cplusplus

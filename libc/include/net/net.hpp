@@ -13,10 +13,13 @@ constexpr uint32_t SOCKADDR_BROADCAST_ADDR = 0;
 struct sockaddr {
     uint32_t addr;
     uint16_t port;
+    bool operator==(const sockaddr& o) const {
+        return addr == o.addr && port == o.port;
+    }
 };
 
 enum class tcb_state {
-    CLOSED, SYN_SENT, ESTABLISHED
+    CLOSED, SYN_SENT, ESTABLISHED, LISTEN
 };
 
 enum class tcp_flags : uint8_t {

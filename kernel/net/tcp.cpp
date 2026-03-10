@@ -6,15 +6,6 @@
 #include <format.h>
 #include <unordered_map>
 
-struct TCB { // 传输控制块
-    tcb_state state;
-    char* window;
-    size_t window_size;
-    size_t window_tail;
-    uint32_t seq;
-    uint32_t ack; 
-};
-
 // 约定：网络序存储
 struct tcp_quadruple {
     uint32_t local_ip;
@@ -41,7 +32,21 @@ struct tcp_hasher {
     }
 };
 
-std::unordered_map<tcp_quadruple, socket*, tcp_hasher> map_to_sock;
+struct sockaddr_hasher {
+    size_t operator()(const sockaddr& q) const {
+        size_t seed = 0;
+        auto combine = [&](uint32_t v) {
+            // 经典的位扰动算法，防止哈希冲突
+            seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        };
+        combine(q.addr);
+        combine(q.port);
+        return seed;
+    }
+};
+
+std::unordered_map<sockaddr, socket*, sockaddr_hasher> map_sockaddr_to_sock;
+std::unordered_map<tcp_quadruple, socket*, tcp_hasher> map_quad_to_sock;
 
 constexpr uint32_t DEFAULT_WINDOW_SIZE = (1 << 16) - 1;
 constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
@@ -54,7 +59,7 @@ int tcp_init(socket& sock, uint16_t local_port) {
     sock.src_addr = getLocalNetconf()->ip.addr;
     sock.src_port = local_port;
 
-    sock.data = kmalloc(sizeof(TCB));
+    sock.data = (void*)(new (kmalloc(sizeof(TCB))) TCB());
     TCB* tcb = (TCB*)sock.data;
     tcb->state = tcb_state::CLOSED;
     tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
@@ -62,6 +67,7 @@ int tcp_init(socket& sock, uint16_t local_port) {
     tcb->window_tail = 0;
     tcb->seq = 0; // todo: 这里要使用时间戳+随机数生成
     tcb->ack = 0;
+    tcb->accepted_queue_size = 0;
     return 0;
 }
 
@@ -91,10 +97,8 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
     t_header->urgent_ptr = 0;
     memcpy(((char*)packet + sizeof(pseudo_tcp_header) + sizeof(tcp_header)), payload, size);
     t_header->checksum = checksum(packet, packet_size);
-    map_to_sock[tcp_quadruple {.local_ip = p_header->src_addr, .remote_ip = p_header->dst_addr,
-                               .local_port = t_header->src_port, .remote_port = t_header->dst_port}] = &sock;
     tcb->seq += size;
-    if ((uint8_t)flags & (uint8_t)tcp_flags::FIN) {
+    if ((uint8_t)flags & (uint8_t)tcp_flags::SYN) {
         tcb->seq += 1; // 虚拟字节
     }
     int ret = send_ipv4((ipv4addr(sock.dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
@@ -121,6 +125,8 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
     sock.dst_addr = addr;
     sock.dst_port = port;
     // SEND SYN
+    map_quad_to_sock[tcp_quadruple {.local_ip = sock.src_addr, .remote_ip = sock.dst_addr,
+                                    .local_port = sock.src_port, .remote_port = sock.dst_port}] = &sock;
     if (send_tcp_pack(sock, tcp_flags::SYN, nullptr, 0) < 0) {
         spinlock_release(&(sock.lock), flags);
         return -1;
@@ -150,11 +156,54 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
 }
 
 int tcp_listen(socket& sock, size_t queue_length) {
-    return -1;
+    SpinlockGuard guard(sock.lock);
+    TCB* tcb = (TCB*)sock.data;
+    if (tcb->state == tcb_state::LISTEN) {
+        return -1;
+    }
+    tcb->state = tcb_state::LISTEN;
+    tcb->accepted_queue_size = queue_length;
+
+    sockaddr config;
+    config.addr = sock.src_addr;
+    config.port = sock.src_port;
+    map_sockaddr_to_sock[config] = &sock;
+
+    return 0;
 }
 
-int tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
-    return -1;
+// 这个函数比较特殊，因为它会产生一个新的fd。
+// 我们按这样的思路去做
+// 原本的调用链条是accept()->sys_accept()->v_accept()->sockfs_accept()->tcp_accept()
+// 那我们的返回过程就是tcp_accept()返回一个新TCB->sockfs_accept()封装成一个socket，返回inode_id->
+// v_accept()封装成一个fd，然后用户就能拿到一个新的fd了
+TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
+    uint32_t flags = spinlock_acquire(&(sock.lock));
+    TCB* tcb = (TCB*)sock.data;
+    if (tcb->state != tcb_state::LISTEN) {
+        spinlock_release(&(sock.lock), flags);
+        return nullptr;
+    }
+    TCB* ret = nullptr;
+    if (!tcb->accepted_queue.empty()) {
+        ret = tcb->accepted_queue.front();
+        tcb->accepted_queue.pop_into(ret);
+    } else {
+        {
+            SpinlockGuard guard(process_list_lock);
+            process_list[cur_process_id]->state = process_state::WAITING;
+            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+        }
+        spinlock_release(&(sock.lock), flags);
+        yield();
+        flags = spinlock_acquire(&(sock.lock));
+        if (!tcb->accepted_queue.empty()) {
+            ret = tcb->accepted_queue.front();
+            tcb->accepted_queue.pop_into(ret);
+        }
+    }
+    spinlock_release(&(sock.lock), flags);
+    return ret;
 }
 
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
@@ -164,9 +213,9 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     uint16_t src_port = header->src_port;
     uint16_t dst_port = header->dst_port;
 
-    auto itr = map_to_sock.find(tcp_quadruple {.local_ip = dst_ip, .remote_ip = src_ip,
+    auto itr = map_quad_to_sock.find(tcp_quadruple {.local_ip = dst_ip, .remote_ip = src_ip,
                                .local_port = dst_port, .remote_port = src_port});
-    if (itr == map_to_sock.end()) { // 没在已有的连接找到
+    if (itr == map_quad_to_sock.end()) { // 没在已有的连接找到
         printf("discard."); // todo: 这里可能是被动连接，我们先丢弃。
         return;
     }

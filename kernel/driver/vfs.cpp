@@ -401,7 +401,32 @@ int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size) {
     if (!fd) return -1;
     mounting_point* mp = fd->mp;
     if (!mp || !(mp->operations->sock_opr)) return -1;
-    return mp->operations->sock_opr->accept(mp, fd->inode_id, peeraddr, size);
+
+    // 先准备好新的fd
+    int new_fd_pos = alloc_fd_for_proc(proc);
+    if (new_fd_pos == -1) {
+        return -1;
+    }
+    int handle_id = get_empty_handle();
+    if (handle_id == -1) {
+        return -1;
+    }
+    uint32_t inode_id = mp->operations->sock_opr->accept(mp, fd->inode_id, peeraddr, size);
+    if (inode_id == -1) {
+        return -1;
+    }
+    file_description*& new_fd = proc->fd[new_fd_pos];
+    new_fd = file_handle[handle_id] = (file_description*)kmalloc(sizeof(file_description));
+    new_fd->mp = mp;
+    new_fd->handle_id = handle_id;
+    new_fd->inode_id = inode_id;
+    new_fd->mode = O_RDWR;
+    new_fd->offset = 0;
+    new_fd->refcnt = 1;
+    strcpy(new_fd->path, "/sock/tcp");
+    ++file_handle_num;
+    proc->fd_num++;
+    return new_fd_pos;
 }
 
 void resolve_path(const char* cwd, const char* input, char* output) {

@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
 
     if (listen(conn, 5)) {
         printf("failed to listen!\n");
+        return 0;
     }
 
     int client_fd;
