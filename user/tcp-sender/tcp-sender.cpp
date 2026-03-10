@@ -8,7 +8,7 @@
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        printf("usage: ping <ip addr> <port>\n");
+        printf("usage: tcp-sender <ip addr> <port>\n");
         return 0;
     }
 
@@ -27,14 +27,6 @@ int main(int argc, char** argv) {
     if (connect(conn, ip_addr, dst_port)) {
         printf("connection establised failed!\n");
     }
-
-    auto tcp_cb = [&](size_t size) {
-        int r_size = size > 1024 ? 1024 : size;
-        char* buffer = (char*)malloc(r_size);
-        if (read(conn, buffer, r_size)) {
-            printf("%s\n", buffer);
-        }
-    };
 
     pollfd fds[2] = {
         { .fd = 0, .events = POLLIN, .revents = 0}, // 标准输入

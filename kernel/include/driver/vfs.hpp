@@ -78,6 +78,8 @@ int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
 int v_dup(PCB* src_proc, int fd_src, PCB* dst_proc);
 int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg);
 int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port);
+int v_listen(PCB* proc, int fd_pos, size_t queue_length);
+int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);

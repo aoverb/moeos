@@ -110,6 +110,10 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
     return ret;
 }
 
+int tcp_ioctl(socket& sock, const char* cmd, void* arg) {
+    return -1;
+}
+
 int tcp_connect(socket& sock, const char* addr, uint16_t port) {
     TCB* tcb = (TCB*)sock.data;
     uint32_t flags = spinlock_acquire(&(sock.lock));
@@ -142,6 +146,14 @@ int tcp_connect(socket& sock, const char* addr, uint16_t port) {
     }
     spinlock_release(&(sock.lock), flags);
     return ret;
+}
+
+int tcp_listen(socket& sock, size_t queue_length) {
+    return -1;
+}
+
+int tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
+    return -1;
 }
 
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {

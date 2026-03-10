@@ -384,6 +384,26 @@ int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port) {
     return mp->operations->sock_opr->connect(mp, fd->inode_id, addr, port);
 }
 
+int v_listen(PCB* proc, int fd_pos, size_t queue_length) {
+    SpinlockGuard guard(vfs_lock);
+    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+    file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
+    mounting_point* mp = fd->mp;
+    if (!mp || !(mp->operations->sock_opr)) return -1;
+    return mp->operations->sock_opr->listen(mp, fd->inode_id, queue_length);
+}
+
+int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size) {
+    SpinlockGuard guard(vfs_lock);
+    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+    file_description*& fd = proc->fd[fd_pos];
+    if (!fd) return -1;
+    mounting_point* mp = fd->mp;
+    if (!mp || !(mp->operations->sock_opr)) return -1;
+    return mp->operations->sock_opr->accept(mp, fd->inode_id, peeraddr, size);
+}
+
 void resolve_path(const char* cwd, const char* input, char* output) {
     char tmp[MAX_PATH_LEN];
 

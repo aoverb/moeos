@@ -28,6 +28,8 @@ typedef struct {
 
 struct sock_operation {
     int (*connect)(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port);
+    int (*listen)(mounting_point* mp, uint32_t inode_id, size_t queue_length);
+    int (*accept)(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* size);
 };
 #ifdef __cplusplus
 }

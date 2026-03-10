@@ -277,8 +277,14 @@ static int closedir(mounting_point*, uint32_t) {
     return 0;
 }
 
-static int ioctl(mounting_point*, uint32_t, const char* cmd, void* arg) {
-    return 0;
+static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::TCP) {
+        return tcp_ioctl(sock, cmd, arg);
+    }
+    return -1;
 }
 
 static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port) {
@@ -290,6 +296,27 @@ static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint
     } else if (sock.ptcl == protocol::TCP) {
         return tcp_connect(sock, addr, port);
     }
+    return -1;
+}
+
+int listen(mounting_point* mp, uint32_t inode_id, size_t queue_length) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::TCP) {
+        return tcp_listen(sock, queue_length);
+    }
+    return -1;
+}
+
+int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* size) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::TCP) {
+        return tcp_accept(sock, peeraddr, size);
+    }
+    return -1;
 }
 
 void init_sockfs() {
@@ -306,6 +333,8 @@ void init_sockfs() {
     sock_fs_operation.ioctl = &ioctl;
     sock_fs_operation.sock_opr = &sock_operations;
     sock_operations.connect = &connect;
+    sock_operations.listen = &listen;
+    sock_operations.accept = &accept;
 
     register_fs_operation(FS_DRIVER::SOCKFS, &sock_fs_operation);
 }

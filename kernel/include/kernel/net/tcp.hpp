@@ -9,6 +9,10 @@ extern "C" {
 
 int tcp_init(socket& sock, uint16_t local_port);
 int tcp_connect(socket& sock, const char* addr, uint16_t port);
+int tcp_listen(socket& sock, size_t queue_length);
+int tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
+int tcp_ioctl(socket& sock, const char* cmd, void* arg);
+
 #ifdef __cplusplus
 }
 #endif

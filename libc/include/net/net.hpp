@@ -1,11 +1,19 @@
 #ifndef _NET_NET_HPP
 #define _NET_NET_HPP 1
 #include <stdint.h>
+#include <stddef.h>
 #define EOF (-1)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+constexpr char* SOCKADDR_BROADCAST_ADDR = "0.0.0.0";
+
+struct sockaddr {
+    char addr[32];
+    uint16_t port;
+};
 
 enum class tcb_state {
     CLOSED, SYN_SENT, ESTABLISHED

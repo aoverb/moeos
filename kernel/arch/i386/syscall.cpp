@@ -45,6 +45,21 @@ static PCB* current_pcb() {
     return process_list[cur_process_id];
 }
 
+// ACCEPT(ebx = fd, ecx = peeraddr, edx = size)  → returns 0 if succeeded
+int sys_accept(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    sockaddr* peeraddr  = reinterpret_cast<sockaddr*>(reg->ecx);
+    size_t* size        = reinterpret_cast<size_t*>(reg->edx);
+    return v_accept(current_pcb(), fd, peeraddr, size);
+}
+
+// LISTEN(ebx = fd, ecx = queue_length)  → returns 0 if succeeded
+int sys_listen(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    size_t queue_length = static_cast<size_t>(reg->ecx);
+    return v_listen(current_pcb(), fd, queue_length);
+}
+
 // CONNECT(ebx = fd, ecx = addr, edx = port)  → returns 0 if succeeded
 int sys_connect(interrupt_frame* reg) {
     int fd           = static_cast<int>(reg->ebx);
@@ -238,6 +253,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::CLOCK), sys_clock);
     register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
     register_syscall(uint32_t(SYSCALL::CONNECT),  sys_connect);
+    register_syscall(uint32_t(SYSCALL::LISTEN),  sys_listen);
+    register_syscall(uint32_t(SYSCALL::ACCEPT),  sys_accept);
     register_syscall(uint32_t(SYSCALL::IOCTL),  sys_ioctl);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);
