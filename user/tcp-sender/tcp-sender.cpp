@@ -24,7 +24,9 @@ int main(int argc, char** argv) {
     dst_port = atoi(argv[2]);
 
     printf("tcp-sender: connecting to %s:%d using port %d...", ip_addr, dst_port);
-    connect(conn, ip_addr, dst_port);
+    if (connect(conn, ip_addr, dst_port)) {
+        printf("connection establised failed!\n");
+    }
 
     auto tcp_cb = [&](size_t size) {
         int r_size = size > 1024 ? 1024 : size;
