@@ -12,7 +12,7 @@ int icmp_init(socket& sock) {
 }
 
 int icmp_connect(socket& sock, uint32_t addr, uint16_t) {
-    sock.dst_addr = addr;
+    sock.data.icmp.bound_ip = addr;
     return 0;
 }
 

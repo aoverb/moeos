@@ -202,7 +202,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
         *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = 0;
         uint16_t chksum = checksum(id_modified_buffer, size);
         *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = chksum;
-        int ret = send_ipv4(ipv4addr(cur_sock.dst_addr), IP_PROTOCOL_ICMP, id_modified_buffer, size);
+        int ret = send_ipv4(ipv4addr(cur_sock.data.icmp.bound_ip), IP_PROTOCOL_ICMP, id_modified_buffer, size);
         kfree(id_modified_buffer);
         return ret;
     }
@@ -272,7 +272,7 @@ static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* a
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::TCP) {
-        return tcp_ioctl(sock, cmd, arg);
+        return tcp_ioctl(sock.data.tcp.block, cmd, arg);
     }
     return -1;
 }

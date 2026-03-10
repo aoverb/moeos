@@ -19,10 +19,6 @@ enum class protocol {ROOT, ICMP, TCP};
 struct socket {
     uint8_t valid;
     protocol ptcl;
-    uint32_t src_addr;
-    uint32_t dst_addr;
-    uint16_t src_port;
-    uint16_t dst_port;
     union {
         struct { uint32_t bound_ip;
                  icmp_node* queue_head; }   icmp;
