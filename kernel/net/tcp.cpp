@@ -237,7 +237,11 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         tcb->dst_port = src_port;
         tcb->src_addr = dst_ip;
         tcb->src_port = dst_port;
-        send_tcp_pack(tcb, ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+        if (send_tcp_pack(tcb, ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0) < 0) {
+            tcb->~TCB();
+            kfree(tcb);
+            return;
+        }
         return;
     }
     SpinlockGuard guard(itr->second->lock);
