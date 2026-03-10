@@ -110,7 +110,16 @@ int send_tcp_pack(socket& sock, tcp_flags flags, const char* payload, size_t siz
     return ret;
 }
 
+int tcp_bind(socket& sock, sockaddr* bind_conf) {
+    strcpy(sock.src_addr, bind_conf->addr);
+    sock.src_port = bind_conf->port;
+    return 0;
+}
+
 int tcp_ioctl(socket& sock, const char* cmd, void* arg) {
+    if (strcmp(cmd, "SOCK_IOC_BIND") == 0) {
+        return tcp_bind(sock, reinterpret_cast<sockaddr*>(arg));
+    }
     return -1;
 }
 
