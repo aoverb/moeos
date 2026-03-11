@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     printf("tcp-sender: connecting to %s:%d using port %d...", ip_addr, dst_port);
     if (connect(conn, ip_addr, dst_port)) {
         printf("connection establised failed!\n");
+        return 0;
     }
 
     pollfd fds[2] = {

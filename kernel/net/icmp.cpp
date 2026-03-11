@@ -3,12 +3,53 @@
 #include <kernel/net/net.hpp>
 #include <kernel/net/socket.hpp>
 #include <kernel/mm.hpp>
+#include <kernel/process.hpp>
+#include <kernel/timer.hpp>
 #include <format.h>
 #include <stdio.h>
 
 int icmp_init(socket& sock) {
     sock.ptcl = protocol::ICMP;
     return 0;
+}
+
+int icmp_read(socket& sock, char* buffer, uint32_t size) {
+    int ret = -1;
+    {
+        uint32_t flags = spinlock_acquire(&(sock.lock));
+        if (sock.data.icmp.queue_head) {
+            icmp_node* icmp_data = sock.data.icmp.queue_head;
+            size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
+            memcpy(buffer, icmp_data->data, cpysize);
+            icmp_node* next = icmp_data->next;
+            kfree(icmp_data->data);
+            kfree(sock.data.icmp.queue_head);
+            sock.data.icmp.queue_head = next;
+            ret = cpysize;
+        } else {
+            {
+                SpinlockGuard guard(process_list_lock);
+                process_list[cur_process_id]->state = process_state::WAITING;
+                insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+            }
+            spinlock_release(&(sock.lock), flags);
+            timeout(&(sock.wait_queue), 1000);
+            flags = spinlock_acquire(&(sock.lock));
+            if (sock.data.icmp.queue_head) {
+                icmp_node* icmp_data = (icmp_node*)sock.data.icmp.queue_head;
+                size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
+                memcpy(buffer, icmp_data->data, cpysize);
+                icmp_node* next = icmp_data->next;
+                kfree(icmp_data->data);
+                kfree(sock.data.icmp.queue_head);
+                sock.data.icmp.queue_head = next;
+                ret = cpysize;
+            }
+        }
+        spinlock_release(&(sock.lock), flags);
+    }
+
+    return ret;
 }
 
 int icmp_connect(socket& sock, uint32_t addr, uint16_t) {

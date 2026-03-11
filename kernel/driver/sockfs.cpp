@@ -140,48 +140,13 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t) {
     return 0;
 }
 
-static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+static int read(mounting_point* mp, uint32_t inode_id, uint32_t, char* buffer, uint32_t size) {
     if (!mp->data || (MAX_SOCK_NUM <= inode_id)) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
     if (data->sock[inode_id].valid == 0) return -1;
     socket& cur_sock = data->sock[inode_id];
     if (cur_sock.ptcl == protocol::ICMP) {
-        int ret = -1;
-        {
-            uint32_t flags = spinlock_acquire(&(cur_sock.lock));
-            if (cur_sock.data.icmp.queue_head) {
-                icmp_node* icmp_data = cur_sock.data.icmp.queue_head;
-                size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
-                memcpy(buffer, icmp_data->data, cpysize);
-                icmp_node* next = icmp_data->next;
-                kfree(icmp_data->data);
-                kfree(cur_sock.data.icmp.queue_head);
-                cur_sock.data.icmp.queue_head = next;
-                ret = cpysize;
-            } else {
-                {
-                    SpinlockGuard guard(process_list_lock);
-                    process_list[cur_process_id]->state = process_state::WAITING;
-                    insert_into_process_queue(cur_sock.wait_queue, process_list[cur_process_id]);
-                }
-                spinlock_release(&(cur_sock.lock), flags);
-                timeout(&(cur_sock.wait_queue), 1000);
-                flags = spinlock_acquire(&(cur_sock.lock));
-                if (cur_sock.data.icmp.queue_head) {
-                    icmp_node* icmp_data = (icmp_node*)cur_sock.data.icmp.queue_head;
-                    size_t cpysize = icmp_data->size < size ? icmp_data->size : size;
-                    memcpy(buffer, icmp_data->data, cpysize);
-                    icmp_node* next = icmp_data->next;
-                    kfree(icmp_data->data);
-                    kfree(cur_sock.data.icmp.queue_head);
-                    cur_sock.data.icmp.queue_head = next;
-                    ret = cpysize;
-                }
-            }
-            spinlock_release(&(cur_sock.lock), flags);
-        }
-
-        return ret;
+        return icmp_read(cur_sock, buffer, size);
     }
     return -1;
 }
