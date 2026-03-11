@@ -61,7 +61,9 @@ int tcp_init(socket& sock, uint16_t local_port) {
     tcb->state = tcb_state::CLOSED;
     tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
     tcb->window = (char*)kmalloc(tcb->window_size);
+    tcb->window_head = 0;
     tcb->window_tail = 0;
+    tcb->window_used_size = 0;
     tcb->seq = 0; // todo: 这里要使用时间戳+随机数生成
     tcb->ack = 0;
     tcb->accepted_queue_size = 0;
@@ -97,7 +99,7 @@ int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
     t_header->reserved = 0;
     t_header->data_offset = sizeof(tcp_header) / 4;
     t_header->flags = (uint8_t)flags;
-    t_header->window = htons(tcb->window_size);
+    t_header->window = htons(tcb->window_size - tcb->window_used_size);
     t_header->checksum = 0;
     t_header->urgent_ptr = 0;
     memcpy(((char*)packet + sizeof(pseudo_tcp_header) + sizeof(tcp_header)), payload, size);
@@ -214,6 +216,36 @@ TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
     return ret;
 }
 
+int tcp_read(socket& sock, char* buffer, uint32_t size) {
+    // head 与 tail，左闭右开
+    TCB* tcb = sock.data.tcp.block;
+    SpinlockGuard guard(tcb->lock);
+    char* window = sock.data.tcp.block->window;
+    size_t read_size;
+    if (tcb->window_used_size == 0) {
+        return 0;
+    }
+    if (tcb->window_head < tcb->window_tail) {
+        read_size = tcb->window_tail - tcb->window_head < size?
+                           tcb->window_tail - tcb->window_head : size;
+        memcpy(buffer, window + tcb->window_head, read_size);
+    } else {
+        size_t first = tcb->window_size - tcb->window_head;
+        if (size <= first) {
+            memcpy(buffer, window + tcb->window_head, size);
+            read_size = size;
+        } else {
+            memcpy(buffer, window + tcb->window_head, first);
+            size_t second = (size - first) > tcb->window_tail ? tcb->window_tail : size - first;
+            memcpy(buffer + first, window, second);
+            read_size = first + second;
+        }
+    }
+    tcb->window_head = (tcb->window_head + read_size) % tcb->window_size;
+    tcb->window_used_size -= read_size;
+    return read_size;
+}
+
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     tcp_header* header = reinterpret_cast<tcp_header*>(buffer + ip_header_size);
     uint32_t src_ip = reinterpret_cast<ip_header*>(buffer)->src_ip;
@@ -249,7 +281,9 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         tcb->state = tcb_state::SYN_RCVD;
         tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
         tcb->window = (char*)kmalloc(tcb->window_size);
+        tcb->window_head = 0;
         tcb->window_tail = 0;
+        tcb->window_used_size = 0;
         tcb->seq = 0; // todo: 这里要使用时间戳+随机数生成
         tcb->ack = ntohl(header->seq_num) + 1;
         tcb->accepted_queue_size = 0;
@@ -340,12 +374,34 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         }
         break;
     case tcb_state::ESTABLISHED:
+    {
         if ((header->flags & (uint8_t)tcp_flags::ACK) == 0) {
             break;
         }
-        // todo: 把数据写入缓冲区
-
-        printf("news");
+        if (ntohl(header->seq_num) != tcb->ack) { // 我们先做一个简单实现，乱序的直接丢弃
+            break;
+        }
+        size_t payload_size = size - ip_header_size - header->data_offset * 4; // 别忘了乘4
+        char* payload = buffer + header->data_offset * 4 + ip_header_size;
+        if (tcb->window_size - tcb->window_used_size < payload_size) {
+            break; // 超过当前窗口大小直接丢弃
+        }
+        if (tcb->window_tail < tcb->window_head) {
+            memcpy(tcb->window + tcb->window_tail, payload, payload_size);
+        } else {
+            size_t first = tcb->window_size - tcb->window_tail;
+            if (first >= payload_size) {
+                memcpy(tcb->window + tcb->window_tail, payload, payload_size);
+            } else {
+                memcpy(tcb->window + tcb->window_tail, payload, first);
+                size_t second = payload_size - first;
+                memcpy(tcb->window, payload + first, second);
+            }
+        }
+        tcb->window_used_size += payload_size;
+        tcb->window_tail = (tcb->window_tail + payload_size) % tcb->window_size;
+        tcb->ack += payload_size;
+        send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
         { // 阻塞式read
             SpinlockGuard guard(process_list_lock);
             PCB* cur;
@@ -358,13 +414,15 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         { // poll
             SpinlockGuard guard(process_list_lock);
             PCB* cur;
-            while((sock->poll_queue != nullptr) && (cur = *(sock->poll_queue))) {
+            while((sock->poll_queue != nullptr) && (*(sock->poll_queue) != nullptr) &&
+                (cur = *(sock->poll_queue))) {
                 remove_from_process_queue(*(sock->poll_queue), cur->pid);
                 cur->state = process_state::READY;
                 insert_into_scheduling_queue(cur->pid);
             }
         }
         break;
+    }
     default:
         break;
     }

@@ -250,6 +250,9 @@ int sys_poll(interrupt_frame* reg) {
     process_queue poll_queue = nullptr;
     bool has_event = false;
     bool has_data = false;
+    for (uint32_t i = 0; i < fd_num; ++i) {
+        fds[i].revents = 0;
+    }
     {
         SpinlockGuard guard(process_list_lock);
         PCB* cur_pcb = current_pcb();
@@ -265,7 +268,7 @@ int sys_poll(interrupt_frame* reg) {
                 if (ret < 0 && (fds[i].events & ERROR)) {
                     fds[i].revents |= ERROR;
                     has_event = true;
-                } else if (ret == 0 && (fds[i].events & POLLIN)) {
+                } else if (ret > 0 && (fds[i].events & POLLIN)) {
                     fds[i].revents |= POLLIN;
                     has_event = true;
                     has_data = true;
@@ -282,6 +285,11 @@ int sys_poll(interrupt_frame* reg) {
     } else {
         SpinlockGuard guard(process_list_lock);
         remove_from_process_queue(poll_queue, current_pcb()->pid);
+        for (int i = 0; i < fd_num; ++i) {
+            if (current_pcb()->fd[fds[i].fd] != nullptr) {
+                v_setpoll(current_pcb(), fds[i].fd, nullptr);
+            }
+        }
         return 1;
     }
     {
@@ -296,7 +304,7 @@ int sys_poll(interrupt_frame* reg) {
                 int ret = v_peek(cur_pcb, fds[i].fd);
                 if (ret < 0 && (fds[i].events & ERROR)) {
                     fds[i].revents |= ERROR;
-                } else if (ret == 0 && (fds[i].events & POLLIN)) {
+                } else if (ret > 0 && (fds[i].events & POLLIN)) {
                     fds[i].revents |= POLLIN;
                     has_data = true;
                 }

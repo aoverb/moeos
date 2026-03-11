@@ -147,6 +147,8 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t, char* buffer, u
     socket& cur_sock = data->sock[inode_id];
     if (cur_sock.ptcl == protocol::ICMP) {
         return icmp_read(cur_sock, buffer, size);
+    } else if (cur_sock.ptcl == protocol::TCP) {
+        return tcp_read(cur_sock, buffer, size);
     }
     return -1;
 }
@@ -295,7 +297,7 @@ static int peek(mounting_point* mp, uint32_t inode_id) {
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
     // todo: TCP看一眼缓冲区
-    return -1;
+    return sock.data.tcp.block->window_used_size;
 }
 
 static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
