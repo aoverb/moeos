@@ -17,6 +17,7 @@ typedef PCB* process_queue;
 enum class protocol {ROOT, ICMP, TCP};
 
 struct socket {
+    uint16_t inode_id;
     uint8_t valid;
     protocol ptcl;
     union {

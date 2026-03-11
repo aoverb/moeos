@@ -2,6 +2,7 @@
 #include <kernel/net/ip.hpp>
 #include <kernel/net/net.hpp>
 #include <kernel/net/socket.hpp>
+#include <driver/sockfs.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/process.hpp>
 #include <kernel/timer.hpp>
@@ -12,7 +13,18 @@ int icmp_init(socket& sock) {
     sock.ptcl = protocol::ICMP;
     return 0;
 }
-
+int icmp_write(socket& sock, char* buffer, uint32_t size) {
+    // 虽然我们现在的socket数量最大是1024，在这个情况下这个标识符应该是但是我不排除后面会有调大这个数量的情况
+    // 我不希望调大socket数的时候忘掉了修改这里导致标识符冲突，因此我需要在这里加个断言...
+    // 虽然现在这个断言永不失败，但谁知道呢？或许后面我会把MAX_SOCK_NUM换个类型。
+    static_assert(MAX_SOCK_NUM <= 65536);
+    *reinterpret_cast<uint16_t*>(buffer + 4) = (uint16_t)sock.inode_id;
+    *reinterpret_cast<uint16_t*>(buffer + 2) = 0;
+    uint16_t chksum = checksum(buffer, size);
+    *reinterpret_cast<uint16_t*>(buffer + 2) = chksum;
+    int ret = send_ipv4(ipv4addr(sock.data.icmp.bound_ip), IP_PROTOCOL_ICMP, buffer, size);
+    return ret;
+}
 int icmp_read(socket& sock, char* buffer, uint32_t size) {
     int ret = -1;
     {

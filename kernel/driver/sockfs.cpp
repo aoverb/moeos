@@ -98,6 +98,7 @@ static int open(mounting_point* mp, const char* protocol,  uint8_t mode) {
     if (mode == O_CREATE) { // 创建一个套接字
         uint32_t new_sock_num = init_new_socket(data);
         socket& new_sock = data->sock[new_sock_num];
+        new_sock.inode_id = new_sock_num;
         if (new_sock_num == 0) { // 套接字数量已到达最大值
             return -1;
         }
@@ -158,23 +159,14 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     socketfs_data* data = (socketfs_data*)mp->data;
     if (data->sock[inode_id].valid == 0) return -1;
     socket& cur_sock = data->sock[inode_id];
+    char* id_modified_buffer = (char*)kmalloc(size);
+    memcpy(id_modified_buffer, buffer, size);
+    int ret = -1;
     if (cur_sock.ptcl == protocol::ICMP) {
-        char* id_modified_buffer = (char*)kmalloc(size);
-        memcpy(id_modified_buffer, buffer, size);
-        // 虽然我们现在的socket数量最大是1024，在这个情况下这个标识符应该是但是我不排除后面会有调大这个数量的情况
-        // 我不希望调大socket数的时候忘掉了修改这里导致标识符冲突，因此我需要在这里加个断言...
-        // 虽然现在这个断言永不失败，但谁知道呢？或许后面我会把MAX_SOCK_NUM换个类型。
-        static_assert(MAX_SOCK_NUM <= 65536);
-        *reinterpret_cast<uint16_t*>(id_modified_buffer + 4) = (uint16_t)inode_id;
-        *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = 0;
-        uint16_t chksum = checksum(id_modified_buffer, size);
-        *reinterpret_cast<uint16_t*>(id_modified_buffer + 2) = chksum;
-        int ret = send_ipv4(ipv4addr(cur_sock.data.icmp.bound_ip), IP_PROTOCOL_ICMP, id_modified_buffer, size);
-        kfree(id_modified_buffer);
-        return ret;
+        ret = icmp_write(cur_sock, id_modified_buffer, size);
     }
-
-    return -1;
+    kfree(id_modified_buffer);
+    return ret;
 }
 
 static int stat(mounting_point* mp, const char* path, file_stat* out) {
@@ -286,8 +278,9 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
             new_sock.valid = 0;
             return -1;
         }
+        new_sock.inode_id = new_sock_num;
         new_sock.data.tcp.block->owner = &sock;
-        return inode_id;
+        return new_sock_num;
     }
     return -1;
 }
