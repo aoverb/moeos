@@ -247,7 +247,7 @@ int sys_poll(interrupt_frame* reg) {
     pollfd* fds         = reinterpret_cast<pollfd*>(reg->ebx);
     uint32_t fd_num     = reg->ecx;
     uint32_t timeout    = reg->edx;
-    process_queue poll_queue;
+    process_queue poll_queue = nullptr;
     bool has_event = false;
     bool has_data = false;
     {

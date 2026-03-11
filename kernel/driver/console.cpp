@@ -36,9 +36,14 @@ static int console_write(const char* buffer, uint32_t size) {
     return size;
 }
 
+static int console_peek() {
+    return keyboard_haschar();
+}
+
 void init_console_dev(mounting_point* mp) {
     static dev_operation ops = {};
     ops.read  = console_read;
     ops.write = console_write;
+    ops.peek = console_peek;
     register_in_devfs(mp, "console", &ops);
 }
