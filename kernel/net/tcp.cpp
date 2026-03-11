@@ -344,7 +344,26 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             break;
         }
         // todo: 把数据写入缓冲区
+
         printf("news");
+        { // 阻塞式read
+            SpinlockGuard guard(process_list_lock);
+            PCB* cur;
+            while(cur = sock->wait_queue) {
+                remove_from_process_queue(sock->wait_queue, cur->pid);
+                cur->state = process_state::READY;
+                insert_into_scheduling_queue(cur->pid);
+            }
+        }
+        { // poll
+            SpinlockGuard guard(process_list_lock);
+            PCB* cur;
+            while((sock->poll_queue != nullptr) && (cur = *(sock->poll_queue))) {
+                remove_from_process_queue(*(sock->poll_queue), cur->pid);
+                cur->state = process_state::READY;
+                insert_into_scheduling_queue(cur->pid);
+            }
+        }
         break;
     default:
         break;

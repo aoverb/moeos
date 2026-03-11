@@ -68,6 +68,19 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     return item->entry[inode_id].opr->write(buffer, size);
 }
 
+static int peek(mounting_point* mp, uint32_t inode_id) {
+    if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
+    dev_item* item = reinterpret_cast<dev_item*>(mp->data);
+    if (item->entry[inode_id].opr->peek == nullptr) return -1;
+    return item->entry[inode_id].opr->peek();
+}
+static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
+    if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
+    dev_item* item = reinterpret_cast<dev_item*>(mp->data);
+    if (item->entry[inode_id].opr->set_poll == nullptr) return -1;
+    return item->entry[inode_id].opr->set_poll(poll_queue);
+}
+
 static int stat(mounting_point* mp, const char* path, file_stat* out) {
     if (!mp->data) return -1;
     if (path[0] == '/') path++;
@@ -144,6 +157,8 @@ void init_devfs() {
     dev_fs_operation.stat = &stat;
     dev_fs_operation.ioctl = nullptr;
     dev_fs_operation.sock_opr = nullptr;
+    dev_fs_operation.set_poll = &set_poll;
+    dev_fs_operation.peek = &peek;
     register_fs_operation(FS_DRIVER::DEVFS, &dev_fs_operation);
 }
 

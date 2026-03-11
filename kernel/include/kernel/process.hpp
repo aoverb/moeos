@@ -23,6 +23,9 @@ enum class process_state {
     WAITING = 4
 };
 
+struct PCB;
+typedef PCB* process_queue;
+
 typedef struct {
     mounting_point* mp;
     uint32_t inode_id;
@@ -31,10 +34,8 @@ typedef struct {
     uint32_t handle_id;
     uint32_t refcnt;
     char path[255];
+    process_queue* poll_queue;
 } file_description;
-
-struct PCB;
-typedef PCB* process_queue;
 
 typedef struct PCB {
     pid_t pid;

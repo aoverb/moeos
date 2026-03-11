@@ -8,6 +8,9 @@
 #include <kernel/spinlock.hpp>
 #include <kernel/timer.hpp>
 #include <driver/pit.h>
+#include <kernel/schedule.hpp>
+
+#include <poll.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -238,6 +241,72 @@ int sys_sleep(interrupt_frame* reg) {
     return 0;
 }
 
+// POLL(ebx = ms)
+// 仅限字节流描述符使用！如stdin，tcp_socket
+int sys_poll(interrupt_frame* reg) {
+    pollfd* fds         = reinterpret_cast<pollfd*>(reg->ebx);
+    uint32_t fd_num     = reg->ecx;
+    uint32_t timeout    = reg->edx;
+    process_queue poll_queue;
+    bool has_event = false;
+    bool has_data = false;
+    {
+        SpinlockGuard guard(process_list_lock);
+        PCB* cur_pcb = current_pcb();
+        insert_into_process_queue(poll_queue, cur_pcb);
+        for (int i = 0; i < fd_num; ++i) {
+            if (cur_pcb->fd[fds[i].fd] == nullptr) {
+                if (fds[i].events & INVFD) {
+                    fds[i].revents |= INVFD;
+                    has_event = true;
+                }
+            } else {
+                int ret = v_peek(cur_pcb, fds[i].fd);
+                if (ret < 0 && (fds[i].events & ERROR)) {
+                    fds[i].revents |= ERROR;
+                    has_event = true;
+                } else if (ret == 0 && (fds[i].events & POLLIN)) {
+                    fds[i].revents |= POLLIN;
+                    has_event = true;
+                    has_data = true;
+                }
+                v_setpoll(cur_pcb, fds[i].fd, &poll_queue);
+            }
+        }
+        if (!has_event) {
+            current_pcb()->state = process_state::WAITING;
+        }
+    }
+    if (!has_event) {
+        ::timeout(&poll_queue, timeout);
+    } else {
+        SpinlockGuard guard(process_list_lock);
+        remove_from_process_queue(poll_queue, current_pcb()->pid);
+        return 1;
+    }
+    {
+        SpinlockGuard guard(process_list_lock);
+        PCB* cur_pcb = current_pcb();
+        for (int i = 0; i < fd_num; ++i) {
+            if (cur_pcb->fd[fds[i].fd] == nullptr) {
+                if (fds[i].events & INVFD) {
+                    fds[i].revents |= INVFD;
+                }
+            } else {
+                int ret = v_peek(cur_pcb, fds[i].fd);
+                if (ret < 0 && (fds[i].events & ERROR)) {
+                    fds[i].revents |= ERROR;
+                } else if (ret == 0 && (fds[i].events & POLLIN)) {
+                    fds[i].revents |= POLLIN;
+                    has_data = true;
+                }
+                v_setpoll(cur_pcb, fds[i].fd, nullptr);
+            }
+        }
+    }
+    return has_data;
+}
+
 // CLOCK(eax = ticks)
 int sys_clock(interrupt_frame* reg) {
     return pit_get_ticks();
@@ -272,6 +341,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
     register_syscall(uint32_t(SYSCALL::SLEEP),  sys_sleep);
+    register_syscall(uint32_t(SYSCALL::POLL),  sys_poll);
     printf("OK\n");
 }
 

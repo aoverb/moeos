@@ -271,5 +271,7 @@ void init_pipefs() {
     pipe_fs_operation.stat = &stat;
     pipe_fs_operation.ioctl = nullptr;
     pipe_fs_operation.sock_opr = nullptr;
+    pipe_fs_operation.set_poll = nullptr;
+    pipe_fs_operation.peek = nullptr;
     register_fs_operation(FS_DRIVER::PIPEFS, &pipe_fs_operation);
 }

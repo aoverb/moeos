@@ -1,5 +1,10 @@
 #include <file.h>
+#include <poll.h>
 #include <syscall_def.hpp>
+
+int poll(pollfd* fds, uint32_t fd_num, uint32_t timeout) {
+    return syscall3((uint32_t)SYSCALL::POLL, (uint32_t)fds, (uint32_t)fd_num, (uint32_t)timeout);
+}
 
 int ioctl(int fd, char* cmd, void* arg) {
     return syscall3((uint32_t)SYSCALL::IOCTL, (uint32_t)fd, (uint32_t)cmd, (uint32_t)arg);

@@ -164,6 +164,48 @@ int v_open(PCB* proc, const char* path, uint8_t mode) {
     return fd_pos;
 }
 
+int v_peek(PCB* proc, int fd_pos) {
+    mounting_point* mp;
+    uint32_t inode_id;
+
+    {
+        SpinlockGuard guard(vfs_lock);
+        if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+        {
+            SpinlockGuard guard(proc->plock);
+            file_description* fd = proc->fd[fd_pos];
+            if (!fd || !fd->mp) return -1;
+            mp = fd->mp;
+            inode_id = fd->inode_id;
+        }
+    }
+
+    int ret = mp->operations->peek(mp, inode_id);
+    return ret;
+}
+
+int v_setpoll(PCB* proc, int fd_pos, process_queue* poll_queue) {
+    mounting_point* mp;
+    uint32_t inode_id;
+
+    {
+        SpinlockGuard guard(vfs_lock);
+        if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+        {
+            SpinlockGuard guard(proc->plock);
+            file_description* fd = proc->fd[fd_pos];
+            if (!fd || !fd->mp) return -1;
+            mp = fd->mp;
+            inode_id = fd->inode_id;
+        }
+    }
+
+    if (mp->operations->set_poll != nullptr) {
+        mp->operations->set_poll(mp, inode_id, poll_queue);
+    }
+    return 0;
+}
+
 int v_read(PCB* proc, int fd_pos, char* buffer, uint32_t size) {
     mounting_point* mp;
     uint32_t inode_id;

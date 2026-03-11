@@ -340,6 +340,10 @@ static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, diren
     return 1;
 }
 
+static int peek(mounting_point* mp, uint32_t inode_id) {
+    return 0; // todo: 暂不支持
+}
+
 static int closedir(mounting_point* mp, uint32_t inode_id) {
     return close(mp, inode_id, 0);
 }
@@ -378,6 +382,8 @@ void init_tarfs() {
     tar_fs_operation.readdir = &readdir;
     tar_fs_operation.closedir = &closedir;
     tar_fs_operation.stat = &stat;
+    tar_fs_operation.peek = &peek;
+    tar_fs_operation.set_poll = nullptr;
     tar_fs_operation.ioctl = nullptr;
     tar_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::TARFS, &tar_fs_operation);

@@ -26,6 +26,7 @@ struct socket {
     } data;
     spinlock lock;
     process_queue wait_queue;
+    process_queue* poll_queue;
 }; // 全部都放网络序！
 
 struct sock_operation {

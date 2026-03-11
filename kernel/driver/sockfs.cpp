@@ -325,6 +325,22 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
     return -1;
 }
 
+static int peek(mounting_point* mp, uint32_t inode_id) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    // todo: TCP看一眼缓冲区
+    return -1;
+}
+
+static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    sock.poll_queue = poll_queue;
+    return 0;
+}
+
 void init_sockfs() {
     sock_fs_operation.mount = &mount;
     sock_fs_operation.unmount = &unmount;
@@ -337,6 +353,8 @@ void init_sockfs() {
     sock_fs_operation.closedir = &closedir;
     sock_fs_operation.stat = &stat;
     sock_fs_operation.ioctl = &ioctl;
+    sock_fs_operation.set_poll = &set_poll;
+    sock_fs_operation.peek = &peek;
     sock_fs_operation.sock_opr = &sock_operations;
     sock_operations.connect = &connect;
     sock_operations.listen = &listen;

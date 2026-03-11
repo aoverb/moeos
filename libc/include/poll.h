@@ -6,16 +6,16 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-constexpr int8_t POLLIN = (1 << 0);
+constexpr int16_t POLLIN = (1 << 0);
+constexpr int16_t INVFD = (1 << 7);
+constexpr uint16_t ERROR = (1 << 8);
 struct pollfd {
     int fd;
-    uint8_t events;
-    uint8_t revents;
+    uint16_t events;
+    uint16_t revents;
 };
 
-int poll(pollfd* fds, uint32_t fd_num, uint32_t timeout) {
-    return -1;
-}
+int poll(pollfd* fds, uint32_t fd_num, uint32_t timeout);
 
 #ifdef __cplusplus
 }

@@ -33,7 +33,8 @@ enum class SYSCALL {
     PIPE = 199,
     EXEC = 200,
     WAITPID = 201,
-    SLEEP = 202
+    SLEEP = 202,
+    POLL = 203
 };
 
 enum SYSCALL_RET {

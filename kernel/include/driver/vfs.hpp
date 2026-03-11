@@ -49,7 +49,8 @@ struct fs_operation {
     int (*closedir)(mounting_point* mp, uint32_t inode_id);
     int (*stat)(mounting_point* mp, const char* path, file_stat* out);
     int (*ioctl)(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg);
-
+    int (*peek)(mounting_point* mp, uint32_t inode_id);
+    int (*set_poll)(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue);
     sock_operation* sock_opr;
 };
 
@@ -80,6 +81,8 @@ int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg);
 int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port);
 int v_listen(PCB* proc, int fd_pos, size_t queue_length);
 int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size);
+int v_peek(PCB* proc, int fd_pos);
+int v_setpoll(PCB* proc, int fd_pos, process_queue* poll_queue);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);
