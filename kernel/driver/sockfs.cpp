@@ -164,6 +164,8 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     int ret = -1;
     if (cur_sock.ptcl == protocol::ICMP) {
         ret = icmp_write(cur_sock, id_modified_buffer, size);
+    } else if (cur_sock.ptcl == protocol::TCP) {
+        ret = tcp_write(cur_sock, id_modified_buffer, size);
     }
     kfree(id_modified_buffer);
     return ret;
@@ -280,6 +282,7 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
         }
         new_sock.inode_id = new_sock_num;
         new_sock.data.tcp.block->owner = &sock;
+        new_sock.ptcl = protocol::TCP;
         return new_sock_num;
     }
     return -1;

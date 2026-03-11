@@ -246,6 +246,12 @@ int tcp_read(socket& sock, char* buffer, uint32_t size) {
     return read_size;
 }
 
+int tcp_write(socket& sock, char* buffer, uint32_t size) {
+    TCB* tcb = sock.data.tcp.block;
+    int ret = send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, buffer, size);
+    return ret;
+}
+
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     tcp_header* header = reinterpret_cast<tcp_header*>(buffer + ip_header_size);
     uint32_t src_ip = reinterpret_cast<ip_header*>(buffer)->src_ip;

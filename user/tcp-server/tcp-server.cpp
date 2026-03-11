@@ -24,11 +24,11 @@ int main(int argc, char** argv) {
         printf("failed to listen!\n");
         return 0;
     }
-
+    printf("TCP Server listening...\n");
     int client_fd;
     while (client_fd = accept(conn, nullptr, nullptr)) {
         if (client_fd == -1) break;
-        printf("we got a new guest!\n");
+        printf("New session: %d\n", client_fd);
         pollfd fds[2] = {
             { .fd = 0, .events = POLLIN, .revents = 0}, // 标准输入
             { .fd = client_fd, .events = POLLIN, .revents = 0 }
@@ -40,18 +40,19 @@ int main(int argc, char** argv) {
             if (ret < 0) { break; }
 
             if (fds[0].revents & POLLIN) {
-                uint32_t n = read(0, buff, sizeof(buff));
+                int n = read(0, buff, sizeof(buff));
                 if (n <= 0) break;
                 write(client_fd, buff, n);
             }
 
             // socket 有数据 → 读取并打印
             if (fds[1].revents & POLLIN) {
-                uint32_t n = read(client_fd, buff, sizeof(buff));
-                if (n <= 0) {
+                int n = read(client_fd, buff, sizeof(buff));
+                if (n < 0) {
                     printf("connection has been closed\n");
                     break;
                 }
+                if (n == 0) continue;
                 buff[n] = '\0';
                 printf("%s\n", buff);
             }
