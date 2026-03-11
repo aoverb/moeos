@@ -40,18 +40,19 @@ int main(int argc, char** argv) {
         if (ret < 0) { break; }
 
         if (fds[0].revents & POLLIN) {
-            uint32_t n = read(0, buff, sizeof(buff));
+            int n = read(0, buff, sizeof(buff));
             if (n <= 0) break;
             write(conn, buff, n);
         }
 
         // socket 有数据 → 读取并打印
         if (fds[1].revents & POLLIN) {
-            uint32_t n = read(conn, buff, sizeof(buff));
-            if (n <= 0) {
+            int n = read(conn, buff, sizeof(buff));
+            if (n < 0) {
                 printf("connection has been closed\n");
                 break;
             }
+            if (n == 0) continue;
             buff[n] = '\0';
             printf("%s\n", buff);
         }
