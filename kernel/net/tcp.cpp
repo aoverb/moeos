@@ -157,21 +157,19 @@ int tcp_close(socket& sock) {
         }
 
         // 清理accepted_queue中已ESTABLISHED但未被accept取走的子连接
-        {
-            SpinlockGuard guard(tcb->lock);
-            while (!tcb->accepted_queue.empty()) {
-                TCBPtr child = tcb->accepted_queue.front();
-                tcb->accepted_queue.pop_into(child);
-                send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
-                {
-                    SpinlockGuard quad_guard(map_quad_lock);
-                    map_quad_to_sock.erase(tcp_quadruple{
-                        child->src_addr, child->dst_addr,
-                        child->src_port, child->dst_port});
-                }
-                // child的shared_ptr在此作用域结束时自动释放（~TCB()会kfree(window)）
+        while (!tcb->accepted_queue.empty()) {
+            TCBPtr child = tcb->accepted_queue.front();
+            tcb->accepted_queue.pop_into(child);
+            send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+            {
+                SpinlockGuard quad_guard(map_quad_lock);
+                map_quad_to_sock.erase(tcp_quadruple{
+                    child->src_addr, child->dst_addr,
+                    child->src_port, child->dst_port});
             }
+            // child的shared_ptr在此作用域结束时自动释放（~TCB()会kfree(window)）
         }
+
 
         // 清理处于SYN_RCVD的半连接
         {
