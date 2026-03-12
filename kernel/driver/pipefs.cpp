@@ -144,22 +144,34 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     uint32_t read_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == pipe->write_pos) { // 当前没有可读的字节
-            if (!pipe->write_open) {
+            if (!pipe->write_open || read_cnt > 0) { // 但是只要有读了的字节就返回
                 return read_cnt;
             }
-            PCB* proc;
-            while (proc = pipe->writer) {
-                proc->state = process_state::READY;
-                remove_from_process_queue(pipe->writer, proc->pid);
-                insert_into_scheduling_queue(proc->pid);
+            {
+                SpinlockGuard guard(process_list_lock);
+                PCB* proc;
+                while (proc = pipe->writer) {
+                    proc->state = process_state::READY;
+                    remove_from_process_queue(pipe->writer, proc->pid);
+                    insert_into_scheduling_queue(proc->pid);
+                }
+                process_list[cur_process_id]->state = process_state::WAITING;
+                insert_into_process_queue(pipe->reader, process_list[cur_process_id]);
             }
-            process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(pipe->reader, process_list[cur_process_id]);
             yield();
         }
         buffer[i] = pipe->buffer[(pipe->read_pos++)];
         pipe->read_pos = pipe->read_pos % PIPE_BUF_SIZE;
         ++read_cnt;
+    }
+    {
+        SpinlockGuard guard(process_list_lock);
+        PCB* proc;
+        while (proc = pipe->writer) {
+            proc->state = process_state::READY;
+            remove_from_process_queue(pipe->writer, proc->pid);
+            insert_into_scheduling_queue(proc->pid);
+        }
     }
     return read_cnt;
 }
@@ -172,22 +184,34 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
     uint32_t write_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
-            if (!pipe->read_open) {
+            if (!pipe->read_open || write_cnt > 0) { // 有写入的字节就返回
                 return write_cnt;
             }
-            PCB* proc;
-            while (proc = pipe->reader) {
-                proc->state = process_state::READY;
-                remove_from_process_queue(pipe->reader, proc->pid);
-                insert_into_scheduling_queue(proc->pid);
+            {
+                SpinlockGuard guard(process_list_lock);
+                PCB* proc;
+                while (proc = pipe->reader) {
+                    proc->state = process_state::READY;
+                    remove_from_process_queue(pipe->reader, proc->pid);
+                    insert_into_scheduling_queue(proc->pid);
+                }
+                process_list[cur_process_id]->state = process_state::WAITING;
+                insert_into_process_queue(pipe->writer, process_list[cur_process_id]);
             }
-            process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(pipe->writer, process_list[cur_process_id]);
             yield();
         }
         pipe->buffer[(pipe->write_pos++)] = buffer[i];
         pipe->write_pos = pipe->write_pos % PIPE_BUF_SIZE;
         ++write_cnt;
+    }
+    {
+        SpinlockGuard guard(process_list_lock);
+        PCB* proc;
+        while (proc = pipe->reader) {
+            proc->state = process_state::READY;
+            remove_from_process_queue(pipe->reader, proc->pid);
+            insert_into_scheduling_queue(proc->pid);
+        }
     }
     return write_cnt;
 }
