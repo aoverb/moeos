@@ -79,6 +79,23 @@ int tcp_init(socket& sock, uint16_t local_port) {
     return 0;
 }
 
+static void destroy_tcb(pid_t, void* arg) {
+    TCB* tcb = reinterpret_cast<TCB*>(arg);
+    {
+        SpinlockGuard guard(map_quad_lock);
+        map_quad_to_sock.erase(tcp_quadruple{
+            tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
+    }
+    kfree(reinterpret_cast<TCB*>(tcb)->window);
+    tcb->~TCB();
+    kfree(tcb);
+    printf("destroyed!\n");
+}
+
+static void time_wait(TCB* tcb) {
+    register_timer(pit_get_ticks() + 300, &destroy_tcb, tcb); // 10ms 1tick, 也就是等3秒
+}
+
 int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
     void* packet = kmalloc(sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size);
     uint32_t packet_size = sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size;
@@ -249,23 +266,6 @@ int tcp_listen(socket& sock, size_t queue_length) {
         map_sockaddr_to_sock[config] = tcb;
     }
     return 0;
-}
-
-static void destroy_tcb(pid_t, void* arg) {
-    TCB* tcb = reinterpret_cast<TCB*>(arg);
-    {
-        SpinlockGuard guard(map_quad_lock);
-        map_quad_to_sock.erase(tcp_quadruple{
-            tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
-    }
-    kfree(reinterpret_cast<TCB*>(tcb)->window);
-    tcb->~TCB();
-    kfree(tcb);
-    printf("destroyed!\n");
-}
-
-static void time_wait(TCB* tcb) {
-    register_timer(pit_get_ticks() + 300, &destroy_tcb, tcb); // 10ms 1tick, 也就是等3秒
 }
 
 // 这个函数比较特殊，因为它会产生一个新的fd。
