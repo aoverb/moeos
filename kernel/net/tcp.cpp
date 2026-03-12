@@ -129,12 +129,14 @@ int send_tcp_pack(TCBPtr tcb, uint8_t flags, const char* payload, size_t size) {
     t_header->urgent_ptr = 0;
     memcpy(((char*)packet + sizeof(pseudo_tcp_header) + sizeof(tcp_header)), payload, size);
     t_header->checksum = checksum(packet, packet_size);
-    tcb->seq += size;
-    // 需要被可靠确认的标志位都需要虚拟字节
-    if (((uint8_t)flags & (uint8_t)tcp_flags::SYN) || ((uint8_t)flags & (uint8_t)tcp_flags::FIN)) {
-        tcb->seq += 1; // 虚拟字节
-    }
     int ret = send_ipv4((ipv4addr(tcb->dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
+    if (ret >= 0) {
+        tcb->seq += size;
+        // 需要被可靠确认的标志位都需要虚拟字节
+        if (((uint8_t)flags & (uint8_t)tcp_flags::SYN) || ((uint8_t)flags & (uint8_t)tcp_flags::FIN)) {
+            tcb->seq += 1; // 虚拟字节
+        }
+    }
     kfree(packet);
     return ret;
 }
