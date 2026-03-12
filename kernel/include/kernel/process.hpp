@@ -15,6 +15,10 @@ constexpr uint32_t MAX_FD_NUM = 128;
 constexpr uint32_t USER_STACK_PAGE_SIZE = 16;
 struct mounting_point;
 
+constexpr const char* KERNEL_PROC_NAME_IDLE = "idle";
+constexpr const char* KERNEL_PROC_NAME_KTIMER = "ktimerd";
+constexpr const char* KERNEL_PROC_NAME_KNET = "knetd";
+
 enum class process_state {
     READY = 0,
     RUNNING = 1,

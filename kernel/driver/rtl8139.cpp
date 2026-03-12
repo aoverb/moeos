@@ -266,7 +266,7 @@ void rtl8139_init() {
     init_send_buffer();
     reg_isr();
     is_initialized = 1;
-    net_thread_pid = create_process("knetd", (void*)&net_rx_thread_main, nullptr);
+    net_thread_pid = create_process(KERNEL_PROC_NAME_KNET, (void*)&net_rx_thread_main, nullptr);
     printf("OK\n");
     return;
 }

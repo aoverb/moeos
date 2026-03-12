@@ -89,7 +89,7 @@ void kernel_timer_main() {
 }
 
 void init_kernel_timer() {
-    create_process("ktimerd", (void *)(&kernel_timer_main), nullptr); // ktimerd进程
+    create_process(KERNEL_PROC_NAME_KTIMER, (void *)(&kernel_timer_main), nullptr); // ktimerd进程
 }
 
 void timer_handler(uint32_t current_tick) {

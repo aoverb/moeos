@@ -107,7 +107,7 @@ void process_init() {
     PCB* new_process = init_pcb(0);
     cur_process_id = 0;
     prepare_pcb_for_new_process(new_process);
-    strcpy(new_process->name, "idle");
+    strcpy(new_process->name, KERNEL_PROC_NAME_IDLE);
     strcpy(new_process->cwd, "/");
     new_process->cr3 = vmm_get_cr3();
     new_process->state = process_state::RUNNING;
@@ -319,7 +319,7 @@ pid_t create_process(const char* name, void* entry, void* args) {
 
 uint32_t exit_process(pid_t pid, int exit_code) {
     uint32_t flags = spinlock_acquire(&process_list_lock);
-
+    
     if (pid == 0 || process_list[pid] == nullptr) {
         spinlock_release(&process_list_lock, flags);
         return 1;
