@@ -16,7 +16,23 @@ void cls() {
     #endif
 }
 
-void getline(char* buf, uint32_t size) {
+#if !defined(__is_libk)
+static char readbuf[512];
+static int  readbuf_pos = 0;
+static int  readbuf_len = 0;
+
+static int read_one_byte(char* c) {
+    if (readbuf_pos >= readbuf_len) {
+        readbuf_len = read(0, readbuf, sizeof(readbuf));
+        readbuf_pos = 0;
+        if (readbuf_len <= 0) return -1; // EOF
+    }
+    *c = readbuf[readbuf_pos++];
+    return 0;
+}
+#endif
+
+bool getline(char* buf, uint32_t size) {
 #if defined(__is_libk)
     keyboard_flush();
     uint32_t i = 0;
@@ -38,7 +54,7 @@ void getline(char* buf, uint32_t size) {
         if (c == '\n') {
             buf[i] = '\0';
             printf("\n");
-            return;
+            return true;
         }
 
         if (c >= 32 && c <= 126) {
@@ -48,11 +64,19 @@ void getline(char* buf, uint32_t size) {
     }
 
     buf[i] = '\0';
+    return true;
 #else
-    int n = read(0, buf, size - 1);
-    if (n < 0) n = 0;
-    if (n > 0 && buf[n - 1] == '\n') n--;
-    buf[n] = '\0';
+    uint32_t i = 0;
+    char c;
+    while (i < size - 1) {
+        if (read_one_byte(&c) < 0) {
+            if (i == 0) { buf[0] = '\0'; return false; }
+            break;
+        }
+        if (c == '\n') break;
+        buf[i++] = c;
+    }
+    buf[i] = '\0';
+    return true;
 #endif
-
 }

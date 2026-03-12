@@ -40,8 +40,7 @@ int sys_terminal_clear(interrupt_frame*) {
 }
 
 int sys_terminal_getline(interrupt_frame* reg) {
-    getline(reinterpret_cast<char*>(reg->ebx), reg->ecx);
-    return 0;
+    return getline(reinterpret_cast<char*>(reg->ebx), reg->ecx);
 }
 
 static PCB* current_pcb() {
