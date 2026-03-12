@@ -8,7 +8,7 @@
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        printf("usage: tcp-sender <ip addr> <port>\n");
+        printf("usage: tcp-client <ip addr> <port>\n");
         return 0;
     }
 
@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
     snprintf(ip_addr, sizeof(ip_addr), "%s", argv[1]);
     dst_port = atoi(argv[2]);
 
-    printf("tcp-sender: connecting to %s:%d using port %d...", ip_addr, dst_port);
+    printf("tcp-client: connecting to %s:%d using port %d...", ip_addr, dst_port);
     if (connect(conn, ip_addr, dst_port)) {
         printf("connection establised failed!\n");
         return 0;
