@@ -245,7 +245,37 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initialized!\n");
 }
 
-extern void to_print_mac(uint8_t* ip);
+void start_telnetd_svc() {
+    PCB* cur_pcb = process_list[cur_process_id];
+
+    int fd = v_open(cur_pcb, "/usr/bin/telnetd", 1);
+    if (fd == -1) {
+        printf("failed to start telnetd!\n");
+        return;
+    }
+    char* buffer = (char*)kmalloc(131072);
+    int size = v_read(cur_pcb, fd, buffer, 131072);
+    pid_t telnetd_pid = exec("shell", buffer, size, 1, 0, nullptr);
+    if (telnetd_pid == 0) {
+        printf("failed to start telnetd!\n");
+    } else {
+        printf("Telnet service started!\n");
+    }
+}
+
+void start_shell() {
+    PCB* cur_pcb = process_list[cur_process_id];
+
+    int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
+    if (fd == -1) {
+        panic("failed to open shell!");
+    }
+    char* buffer = (char*)kmalloc(131072);
+    int size = v_read(cur_pcb, fd, buffer, 131072);
+    pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
+    if (shell_pid == 0) panic("Loading shell failed!");
+    waitpid(shell_pid);
+}
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_prepare(mbi);
@@ -270,17 +300,9 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     init_netconf();
     init_kernel_timer();
     asm volatile ("sti");
-    PCB* cur_pcb = process_list[cur_process_id];
+    start_telnetd_svc();
+    start_shell();
 
-    int fd = v_open(cur_pcb, "/usr/bin/shell", 1);
-    if (fd == -1) {
-        panic("failed to open shell!");
-    }
-    char* buffer = (char*)kmalloc(131072);
-    int size = v_read(cur_pcb, fd, buffer, 131072);
-    pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
-    if (shell_pid == 0) panic("Loading shell failed!");
-    waitpid(shell_pid);
     while (1) {
         yield();
     }

@@ -50,10 +50,6 @@ typedef struct {
     uint8_t  target_ip[4];
 } __attribute__((packed)) arp_packet;
 
-void to_print_mac(uint8_t* ip) {
-    send_arp(htons(APR_OPCODE_REQ), broadcast_mac, ipv4addr(ip));
-}
-
 bool is_same_mac(const uint8_t* mac1, const uint8_t* mac2) {
     for (int i = 0; i < 6; ++i) {
         if (mac1[i] != mac2[i]) return false;
