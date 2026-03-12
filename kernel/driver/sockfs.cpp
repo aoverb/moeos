@@ -122,21 +122,9 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t) {
     if (data->sock[inode_id].valid == 0) return -1;
     socket& cur_sock = data->sock[inode_id];
     if (cur_sock.ptcl == protocol::ICMP) {
-        SpinlockGuard guard(cur_sock.lock);
-        PCB* cur;
-        while(cur = cur_sock.wait_queue) {
-            remove_from_process_queue(cur_sock.wait_queue, cur->pid);
-            cur->state = process_state::READY;
-            insert_into_scheduling_queue(cur->pid);
-        }
-        icmp_node* node = cur_sock.data.icmp.queue_head;
-        while (node) {
-            icmp_node* next = node->next;
-            kfree(node->data);
-            kfree(node);
-            node = next;
-        }
-        cur_sock.valid = 0;
+        return icmp_close(cur_sock);
+    } else if (cur_sock.ptcl == protocol::TCP) {
+        return tcp_close(cur_sock);
     }
     return 0;
 }

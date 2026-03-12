@@ -19,6 +19,7 @@ int icmp_init(socket& sock);
 int icmp_connect(socket& sock, uint32_t addr, uint16_t);
 int icmp_read(socket& sock, char* buffer, uint32_t size);
 int icmp_write(socket& sock, char* buffer, uint32_t size);
+int icmp_close(socket& sock);
 
 #ifdef __cplusplus
 }

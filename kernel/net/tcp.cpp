@@ -105,12 +105,27 @@ int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
     memcpy(((char*)packet + sizeof(pseudo_tcp_header) + sizeof(tcp_header)), payload, size);
     t_header->checksum = checksum(packet, packet_size);
     tcb->seq += size;
-    if ((uint8_t)flags & (uint8_t)tcp_flags::SYN) {
+    // 需要被可靠确认的标志位都需要虚拟字节
+    if (((uint8_t)flags & (uint8_t)tcp_flags::SYN) || ((uint8_t)flags & (uint8_t)tcp_flags::FIN)) {
         tcb->seq += 1; // 虚拟字节
     }
     int ret = send_ipv4((ipv4addr(tcb->dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
     kfree(packet);
     return ret;
+}
+
+int tcp_close(socket& sock) {
+    SpinlockGuard guard(sock.lock);
+    TCB* tcb = sock.data.tcp.block;
+    PCB* cur;
+    // 这里我拿sock里面的wait_queue好像没什么办法，因为这说明了进程正在被阻塞，是没法主动调close的
+    // 除非是收到了一些外部事件，但是这一般来说，会是整个进程都会被销毁掉的情况
+    sock.valid = 0;
+
+    // 连接关闭都发不出去也太衰了，但这里也只有三次机会
+    send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+    tcb->state = tcb_state::FIN_WAIT1;
+    return 0;
 }
 
 int tcp_bind(TCB* tcb, sockaddr* bind_conf) {
@@ -180,6 +195,15 @@ int tcp_listen(socket& sock, size_t queue_length) {
         map_sockaddr_to_sock[config] = tcb;
     }
     return 0;
+}
+
+static void destroy_tcb(pid_t pid, void* tcb) {
+    kfree(reinterpret_cast<TCB*>(tcb)->window);
+    kfree(tcb);
+}
+
+static void time_wait(TCB* tcb) {
+    register_timer(pit_get_ticks() + 300, &destroy_tcb, tcb); // 10ms 1tick, 也就是等3秒
 }
 
 // 这个函数比较特殊，因为它会产生一个新的fd。
@@ -379,12 +403,38 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             }
         }
         break;
+    case tcb_state::TIME_WAIT:
+        if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) {
+            // 这回不用加ACK了，我们之前肯定加过了
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
+            // 这里不重置定时器，就相当于定时器是限定“尝试发送所有的最后一个ACK”的尝试周期
+            // 你也可以重置，这样每次尝试发最后一个ACK都是独立计时的，我这里就简单实现了
+        }
+        break;
+    case tcb_state::FIN_WAIT1:
+        if ((header->flags & (uint8_t)tcp_flags::ACK) != 0) {
+            tcb->state = tcb_state::FIN_WAIT2; // 确认了我们这边已经发完了东西
+        } else if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 如果收到了FIN但是没有ACK，那就是刚好对端也在关闭连接
+            tcb->state = tcb_state::CLOSING; // 那就转成CLOSING
+            tcb->ack = ntohl(header->seq_num) + 1; // FIN会占一个虚拟字节
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
+            // 注意这里虽然还是会跑到下面，但是会因为不带ACK，对方的数据被丢弃。
+            // 不过如果真是这样，对方在FIN_WAIT1的时候同时发FIN，还不带ACK地把数据发过来，也太不讲规矩了吧。
+            // 这种情况下，他的数据丢掉就丢掉了。
+        }
+        [[fallthrough]];
+    case tcb_state::FIN_WAIT2:
+        [[fallthrough]];
     case tcb_state::ESTABLISHED:
     {
-        if ((header->flags & (uint8_t)tcp_flags::ACK) == 0) {
+        if (ntohl(header->seq_num) != tcb->ack) { // 我们先做一个简单实现，乱序的直接丢弃
             break;
         }
-        if (ntohl(header->seq_num) != tcb->ack) { // 我们先做一个简单实现，乱序的直接丢弃
+        if ((header->flags & (uint8_t)tcp_flags::RST) != 0) {
+            // todo: 正确handle RST
+            break;
+        }
+        if ((header->flags & (uint8_t)tcp_flags::ACK) == 0) {
             break;
         }
         size_t payload_size = size - ip_header_size - header->data_offset * 4; // 别忘了乘4
@@ -425,6 +475,17 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
                 remove_from_process_queue(*(sock->poll_queue), cur->pid);
                 cur->state = process_state::READY;
                 insert_into_scheduling_queue(cur->pid);
+            }
+        }
+        if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) {
+            tcb->ack = ntohl(header->seq_num) + 1;
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
+            if (tcb->state == tcb_state::FIN_WAIT2) { // 如果我们实际上是FIN_WAIT2
+                tcb->state = tcb_state::TIME_WAIT;
+                time_wait(tcb);
+                break;
+            } else {
+                printf("passively closed!\n");
             }
         }
         break;

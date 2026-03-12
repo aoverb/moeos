@@ -37,6 +37,7 @@ int tcp_write(socket& sock, char* buffer, uint32_t size);
 int tcp_listen(socket& sock, size_t queue_length);
 TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
 int tcp_ioctl(TCB* tcb, const char* cmd, void* arg);
+int tcp_close(socket& sock);
 
 #ifdef __cplusplus
 }

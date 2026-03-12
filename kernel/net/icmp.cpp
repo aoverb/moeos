@@ -2,6 +2,7 @@
 #include <kernel/net/ip.hpp>
 #include <kernel/net/net.hpp>
 #include <kernel/net/socket.hpp>
+#include <kernel/schedule.hpp>
 #include <driver/sockfs.hpp>
 #include <kernel/mm.hpp>
 #include <kernel/process.hpp>
@@ -62,6 +63,25 @@ int icmp_read(socket& sock, char* buffer, uint32_t size) {
     }
 
     return ret;
+}
+
+int icmp_close(socket& sock) {
+    SpinlockGuard guard(sock.lock);
+    PCB* cur;
+    while(cur = sock.wait_queue) {
+        remove_from_process_queue(sock.wait_queue, cur->pid);
+        cur->state = process_state::READY;
+        insert_into_scheduling_queue(cur->pid);
+    }
+    icmp_node* node = sock.data.icmp.queue_head;
+    while (node) {
+        icmp_node* next = node->next;
+        kfree(node->data);
+        kfree(node);
+        node = next;
+    }
+    sock.valid = 0;
+    return 0;
 }
 
 int icmp_connect(socket& sock, uint32_t addr, uint16_t) {

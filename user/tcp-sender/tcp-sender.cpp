@@ -42,6 +42,9 @@ int main(int argc, char** argv) {
         if (fds[0].revents & POLLIN) {
             int n = read(0, buff, sizeof(buff));
             if (n <= 0) break;
+            if (strncmp("/bye\n", buff, n) == 0) {
+                break;
+            }
             write(conn, buff, n);
         }
 
