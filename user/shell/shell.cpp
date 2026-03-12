@@ -193,6 +193,70 @@ bool exec_pipeline(stage stages[], int stage_count) {
     return true;
 }
 
+bool exec_bidir(stage& left, stage& right) {
+    int pipe_a2b[2];  // left stdout → right stdin
+    int pipe_b2a[2];  // right stdout → left stdin
+
+    if (pipe(pipe_a2b) != 0) {
+        printf("pipe: failed to create pipe\n");
+        return false;
+    }
+    if (pipe(pipe_b2a) != 0) {
+        printf("pipe: failed to create pipe\n");
+        close(pipe_a2b[0]);
+        close(pipe_a2b[1]);
+        return false;
+    }
+
+    // 加载 left
+    char* buf_l = nullptr; int sz_l = 0;
+    if (!load_cmd(left.argv[0], buf_l, sz_l)) {
+        printf("rumia: command not found '%s'\n", left.argv[0]);
+        close(pipe_a2b[0]); close(pipe_a2b[1]);
+        close(pipe_b2a[0]); close(pipe_b2a[1]);
+        return false;
+    }
+
+    // 加载 right
+    char* buf_r = nullptr; int sz_r = 0;
+    if (!load_cmd(right.argv[0], buf_r, sz_r)) {
+        printf("rumia: command not found '%s'\n", right.argv[0]);
+        free(buf_l);
+        close(pipe_a2b[0]); close(pipe_a2b[1]);
+        close(pipe_b2a[0]); close(pipe_b2a[1]);
+        return false;
+    }
+
+    // left: stdin=pipe_b2a[0], stdout=pipe_a2b[1]
+    fd_remap remaps_l[2] = {
+        { 0, pipe_b2a[0] },   // stdin  ← right 的输出
+        { 1, pipe_a2b[1] },   // stdout → right 的输入
+    };
+    int pid_l = exec(buf_l, sz_l, left.argc, left.argv, remaps_l, 2);
+    free(buf_l);
+
+    // right: stdin=pipe_a2b[0], stdout=pipe_b2a[1]
+    fd_remap remaps_r[2] = {
+        { 0, pipe_a2b[0] },   // stdin  ← left 的输出
+        { 1, pipe_b2a[1] },   // stdout → left 的输入
+    };
+    int pid_r = exec(buf_r, sz_r, right.argc, right.argv, remaps_r, 2);
+    free(buf_r);
+
+    // 父进程关掉所有 fd
+    close(pipe_a2b[0]); close(pipe_a2b[1]);
+    close(pipe_b2a[0]); close(pipe_b2a[1]);
+
+    if (pid_l <= 0) printf("rumia: failed to exec '%s'\n", left.argv[0]);
+    if (pid_r <= 0) printf("rumia: failed to exec '%s'\n", right.argv[0]);
+
+    // 等任意一个退出就回来（另一个会因管道断裂自行退出）
+    if (pid_l > 0) waitpid(pid_l);
+    if (pid_r > 0) waitpid(pid_r);
+
+    return true;
+}
+
 // ─── 单命令执行 (无管道) ───
 
 bool try_exec(const char* cmd, int argc, char* argv[]) {
@@ -264,7 +328,8 @@ int main(int argc_main, char** argv_main) {
         print_cwd();
         printf("$ ");
 
-        getline(input, MAX_INPUT);
+        if (!getline(input, MAX_INPUT))
+            break;
 
         int token_count = tokenize(input, tokens, MAX_ARGS);
         if (token_count == 0)
@@ -291,18 +356,50 @@ int main(int argc_main, char** argv_main) {
             builtin_cd(token_count, tokens);
 
         } else {
-            int n = split_pipeline(tokens, token_count, stages, MAX_PIPELINE);
+            // 先检查是否是双向管道
+            int bidir_pos = -1;
+            for (int i = 0; i < token_count; i++) {
+                if (strcmp(tokens[i], "<>") == 0) {
+                    bidir_pos = i;
+                    break;
+                }
+            }
 
-            if (n < 0) {
-                print_rumia_text();
-                printf(": syntax error near '|'\n");
-            } else if (n == 1) {
-                if (!try_exec(cmd, stages[0].argc, stages[0].argv)) {
+            if (bidir_pos >= 0) {
+                // 解析 left <> right
+                stage left_stage, right_stage;
+                left_stage.argc = 0;
+                right_stage.argc = 0;
+
+                for (int i = 0; i < bidir_pos; i++)
+                    left_stage.argv[left_stage.argc++] = tokens[i];
+                for (int i = bidir_pos + 1; i < token_count; i++)
+                    right_stage.argv[right_stage.argc++] = tokens[i];
+
+                left_stage.argv[left_stage.argc] = nullptr;
+                right_stage.argv[right_stage.argc] = nullptr;
+
+                if (left_stage.argc == 0 || right_stage.argc == 0) {
                     print_rumia_text();
-                    printf(": Unknown command '%s'!\n", cmd);
+                    printf(": syntax error near '<>'\n");
+                } else {
+                    exec_bidir(left_stage, right_stage);
                 }
             } else {
-                exec_pipeline(stages, n);
+                    // 原有的单向管道逻辑
+                    int n = split_pipeline(tokens, token_count, stages, MAX_PIPELINE);
+                    
+                if (n < 0) {
+                    print_rumia_text();
+                    printf(": syntax error near '|'\n");
+                } else if (n == 1) {
+                    if (!try_exec(cmd, stages[0].argc, stages[0].argv)) {
+                        print_rumia_text();
+                        printf(": Unknown command '%s'!\n", cmd);
+                    }
+                } else {
+                    exec_pipeline(stages, n);
+                }
             }
         }
 
