@@ -97,8 +97,13 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     new_process->to_exit = 0;
     new_process->plock.locked = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
-    v_open(new_process, "/dev/console", O_RDONLY);
-    v_open(new_process, "/dev/console", O_WRONLY);
+    if (cur_process_id == 0) {
+        v_open(new_process, "/dev/console", O_RDONLY);
+        v_open(new_process, "/dev/console", O_WRONLY);
+    } else {
+        v_dup_to(process_list[cur_process_id], 0, new_process, 0);
+        v_dup_to(process_list[cur_process_id], 1, new_process, 1);
+    }
 }
 
 void process_init() {
