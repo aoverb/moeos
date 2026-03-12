@@ -1,0 +1,98 @@
+#ifndef _SHARED_PTR_HPP
+#define _SHARED_PTR_HPP
+
+#include <kernel/mm.h>
+extern "C++" {
+template <typename T>
+class shared_ptr {
+public:
+    struct control_block {
+        int refcnt;
+    };
+    shared_ptr() : raw(nullptr), cb(nullptr) {}
+    shared_ptr(T* ptr) : raw(ptr) {
+        cb = reinterpret_cast<control_block*>(kmalloc(sizeof(control_block)));
+        cb->refcnt = 1;
+    }
+    void operator=(const shared_ptr<T>& rhs) {
+        if (rhs.cb == cb && rhs.raw == raw) return;
+        if (cb) {
+            if (__atomic_sub_fetch(&cb->refcnt, 1, __ATOMIC_ACQ_REL) == 0) {
+                if (raw) {
+                    raw->~T();
+                    kfree(raw);
+                }
+                cb->~control_block();
+                kfree(cb);
+            }
+        }
+
+        raw = rhs.raw;
+        cb = rhs.cb;
+        if (cb) __atomic_fetch_add(&cb->refcnt, 1, __ATOMIC_RELAXED);
+        return;
+    }
+    shared_ptr(const shared_ptr<T>& ptr) {
+        cb = ptr.cb;
+        raw = ptr.raw;
+        if (cb) __atomic_fetch_add(&cb->refcnt, 1, __ATOMIC_RELAXED);
+    }
+    ~shared_ptr() {
+        if (!cb) return;
+        if (__atomic_sub_fetch(&cb->refcnt, 1, __ATOMIC_ACQ_REL) == 0) {
+            if (raw) {
+                raw->~T();
+                kfree(raw);
+                raw = nullptr;
+            }
+            cb->~control_block();
+            kfree(cb);
+            cb = nullptr;
+            return;
+        }
+    }
+    void operator=(shared_ptr<T>&& rhs) {
+        if (rhs.cb == cb && rhs.raw == raw) return;
+        if (cb) {
+            if (__atomic_sub_fetch(&cb->refcnt, 1, __ATOMIC_ACQ_REL) == 0) {
+                if (raw) {
+                    raw->~T();
+                    kfree(raw);
+                }
+                cb->~control_block();
+                kfree(cb);
+            }
+        }
+        cb = rhs.cb;
+        raw = rhs.raw;
+        rhs.cb = nullptr;
+        rhs.raw = nullptr;
+    }
+    shared_ptr(shared_ptr<T>&& rhs) : raw(rhs.raw), cb(rhs.cb) {
+        rhs.raw = nullptr;
+        rhs.cb = nullptr;
+    }
+    shared_ptr<T> get() {
+        return *this;
+    }
+    T* operator->() const {
+        return raw;
+    }
+    bool operator!() const {
+        return !raw;
+    }
+    bool operator==(const T* rhs) const {
+        return raw == rhs;
+    }
+private:
+    T* raw;
+    control_block* cb;
+};
+
+template <typename T>
+shared_ptr<T> make_shared() {
+    T* ptr = new (kmalloc(sizeof(T))) T();
+    return shared_ptr<T>(ptr);
+}
+}
+#endif

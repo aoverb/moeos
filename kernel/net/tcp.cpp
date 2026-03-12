@@ -47,8 +47,8 @@ struct sockaddr_hasher {
 
 spinlock map_sockaddr_lock;
 spinlock map_quad_lock;
-std::unordered_map<sockaddr, TCB*, sockaddr_hasher> map_sockaddr_to_sock;
-std::unordered_map<tcp_quadruple, TCB*, tcp_hasher> map_quad_to_sock;
+std::unordered_map<sockaddr, TCBPtr, sockaddr_hasher> map_sockaddr_to_sock;
+std::unordered_map<tcp_quadruple, TCBPtr, tcp_hasher> map_quad_to_sock;
 
 constexpr uint32_t DEFAULT_WINDOW_SIZE = (1 << 16) - 1;
 constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
@@ -56,8 +56,7 @@ constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
 int tcp_init(socket& sock, uint16_t local_port) {
     sock.ptcl = protocol::TCP;
 
-    sock.data.tcp.block = new (kmalloc(sizeof(TCB))) TCB();
-    TCB* tcb = sock.data.tcp.block;
+    TCBPtr tcb = make_shared<TCB>();
     tcb->state = tcb_state::CLOSED;
     tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
     tcb->window = (char*)kmalloc(tcb->window_size);
@@ -76,27 +75,36 @@ int tcp_init(socket& sock, uint16_t local_port) {
 
     tcb->owner = &sock;
     tcb->listener = nullptr;
+
+    sock.data.tcp.block = tcb;
     return 0;
 }
 
+// 定时器回调：销毁堆上的shared_ptr副本，触发引用计数递减
 static void destroy_tcb(pid_t, void* arg) {
-    TCB* tcb = reinterpret_cast<TCB*>(arg);
+    TCBPtr* p = reinterpret_cast<TCBPtr*>(arg);
     {
-        SpinlockGuard guard(map_quad_lock);
-        map_quad_to_sock.erase(tcp_quadruple{
-            tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
+        TCBPtr tcb = static_cast<TCBPtr&&>(*p); // 移动出来
+        {
+            SpinlockGuard guard(map_quad_lock);
+            map_quad_to_sock.erase(tcp_quadruple{
+                tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
+        }
+        // tcb在此作用域结束时析构，若为最后一个引用则通过~TCB()释放window，再kfree(TCB)
     }
-    kfree(reinterpret_cast<TCB*>(tcb)->window);
-    tcb->~TCB();
-    kfree(tcb);
+    p->~shared_ptr();
+    kfree(p);
     printf("destroyed!\n");
 }
 
-static void time_wait(TCB* tcb) {
-    register_timer(pit_get_ticks() + 300, &destroy_tcb, tcb); // 10ms 1tick, 也就是等3秒
+static void time_wait(TCBPtr tcb) {
+    // 在堆上创建一个shared_ptr副本，延长生命周期直到定时器触发
+    void* mem = kmalloc(sizeof(TCBPtr));
+    TCBPtr* p = new (mem) TCBPtr(tcb);
+    register_timer(pit_get_ticks() + 300, &destroy_tcb, p); // 10ms 1tick, 也就是等3秒
 }
 
-int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
+int send_tcp_pack(TCBPtr tcb, uint8_t flags, const char* payload, size_t size) {
     void* packet = kmalloc(sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size);
     uint32_t packet_size = sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size;
     memset(packet, 0, packet_size);
@@ -132,7 +140,7 @@ int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
 }
 
 int tcp_close(socket& sock) {
-    TCB* tcb = sock.data.tcp.block;
+    TCBPtr tcb = sock.data.tcp.block;
     PCB* cur;
     // 这里我拿sock里面的wait_queue好像没什么办法，因为这说明了进程正在被阻塞，是没法主动调close的
     // 除非是收到了一些外部事件，但是这一般来说，会是整个进程都会被销毁掉的情况
@@ -152,18 +160,16 @@ int tcp_close(socket& sock) {
         {
             SpinlockGuard guard(tcb->lock);
             while (!tcb->accepted_queue.empty()) {
-                TCB* child = tcb->accepted_queue.front();
+                TCBPtr child = tcb->accepted_queue.front();
                 tcb->accepted_queue.pop_into(child);
-                send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
+                send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
                 {
                     SpinlockGuard quad_guard(map_quad_lock);
                     map_quad_to_sock.erase(tcp_quadruple{
                         child->src_addr, child->dst_addr,
                         child->src_port, child->dst_port});
                 }
-                kfree(child->window);
-                child->~TCB();
-                kfree(child);
+                // child的shared_ptr在此作用域结束时自动释放（~TCB()会kfree(window)）
             }
         }
 
@@ -172,14 +178,12 @@ int tcp_close(socket& sock) {
             SpinlockGuard quad_guard(map_quad_lock);
             auto it = map_quad_to_sock.begin();
             while (it != map_quad_to_sock.end()) {
-                TCB* child = it->second;
+                TCBPtr child = it->second;
                 if (child->listener == &sock &&
                     child->state == tcb_state::SYN_RCVD) {
                     it = map_quad_to_sock.erase(it);
-                    send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
-                    kfree(child->window);
-                    child->~TCB();
-                    kfree(child);
+                    send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+                    // child的shared_ptr在此作用域结束时自动释放
                 } else {
                     ++it;
                 }
@@ -188,10 +192,10 @@ int tcp_close(socket& sock) {
     }
     // 连接关闭都发不出去也太衰了，但这里也只有三次机会
     if (tcb->state == tcb_state::ESTABLISHED) {
-        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+        send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::FIN_WAIT1;
     } else if (tcb->state == tcb_state::CLOSE_WAIT) {
-        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+        send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::LAST_ACK;
     } else {
         time_wait(tcb);
@@ -199,21 +203,21 @@ int tcp_close(socket& sock) {
     return 0;
 }
 
-int tcp_bind(TCB* tcb, sockaddr* bind_conf) {
+int tcp_bind(TCBPtr tcb, sockaddr* bind_conf) {
     tcb->src_addr = bind_conf->addr;
     tcb->src_port = htons(bind_conf->port);
     return 0;
 }
 
-int tcp_ioctl(TCB* tcb, const char* cmd, void* arg) {
+int tcp_ioctl(TCBPtr& tcb, const char* cmd, void* arg) {
     if (strcmp(cmd, "SOCK_IOC_BIND") == 0) {
-        return tcp_bind(tcb, reinterpret_cast<sockaddr*>(arg));
+        return tcp_bind(tcb.get(), reinterpret_cast<sockaddr*>(arg));
     }
     return -1;
 }
 
 int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
-    TCB* tcb = sock.data.tcp.block;
+    TCBPtr tcb = sock.data.tcp.block;
     uint32_t flags = spinlock_acquire(&(tcb->lock));
     tcb->dst_addr = addr;
     tcb->dst_port = htons(port);
@@ -223,7 +227,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
                                         .local_port = tcb->src_port, .remote_port = tcb->dst_port}] = tcb;
     }
     // SEND SYN
-    if (send_tcp_pack(tcb, (uint8_t)tcp_flags::SYN, nullptr, 0) < 0) {
+    if (send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::SYN, nullptr, 0) < 0) {
         spinlock_release(&(tcb->lock), flags);
         return -1;
     }
@@ -251,7 +255,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
 }
 
 int tcp_listen(socket& sock, size_t queue_length) {
-    TCB* tcb = sock.data.tcp.block;
+    TCBPtr tcb = sock.data.tcp.block;
     if (tcb->state == tcb_state::LISTEN) {
         return -1;
     }
@@ -273,14 +277,14 @@ int tcp_listen(socket& sock, size_t queue_length) {
 // 原本的调用链条是accept()->sys_accept()->v_accept()->sockfs_accept()->tcp_accept()
 // 那我们的返回过程就是tcp_accept()返回一个新TCB->sockfs_accept()封装成一个socket，返回inode_id->
 // v_accept()封装成一个fd，然后用户就能拿到一个新的fd了
-TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
-    TCB* tcb = sock.data.tcp.block;
+TCBPtr tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
+    TCBPtr tcb = sock.data.tcp.block;
     uint32_t flags = spinlock_acquire(&(tcb->lock));
     if (tcb->state != tcb_state::LISTEN) {
         spinlock_release(&(tcb->lock), flags);
         return nullptr;
     }
-    TCB* ret = nullptr;
+    TCBPtr ret = nullptr;
     if (!tcb->accepted_queue.empty()) {
         ret = tcb->accepted_queue.front();
         tcb->accepted_queue.pop_into(ret);
@@ -304,9 +308,9 @@ TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
 
 int tcp_read(socket& sock, char* buffer, uint32_t size) {
     // head 与 tail，左闭右开
-    TCB* tcb = sock.data.tcp.block;
+    TCBPtr tcb = sock.data.tcp.block;
     SpinlockGuard guard(tcb->lock);
-    char* window = sock.data.tcp.block->window;
+    char* window = tcb->window;
     size_t read_size;
     if (tcb->window_used_size == 0) {
         return 0;
@@ -333,8 +337,8 @@ int tcp_read(socket& sock, char* buffer, uint32_t size) {
 }
 
 int tcp_write(socket& sock, char* buffer, uint32_t size) {
-    TCB* tcb = sock.data.tcp.block;
-    int ret = send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, buffer, size);
+    TCBPtr tcb = sock.data.tcp.block;
+    int ret = send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, buffer, size);
     return ret;
 }
 
@@ -390,8 +394,8 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         }
         if (header->flags != (uint8_t)tcp_flags::SYN) return;
         
-        TCB* listener_tcb = listener->data.tcp.block;
-        TCB* tcb = new (kmalloc(sizeof(TCB))) TCB();
+        TCBPtr listener_tcb = listener->data.tcp.block;
+        TCBPtr tcb = make_shared<TCB>();
         
         tcb->state = tcb_state::SYN_RCVD;
         tcb->window_size = DEFAULT_WINDOW_SIZE * DEFAULT_WINDOW_SCALE;
@@ -416,22 +420,18 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             if (listener_tcb->accepted_queue.size() + listener_tcb->pending_count >=
                 listener_tcb->accepted_queue_size) {
                 // 接受队列满了，重置连接
-                send_tcp_pack(tcb, (uint8_t)tcp_flags::RST, nullptr, 0);
-                kfree(tcb->window);
-                tcb->~TCB();
-                kfree(tcb);
+                send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+                // tcb的shared_ptr在此作用域结束时自动释放（~TCB()会kfree(window)）
                 return;
             }
             listener_tcb->pending_count++;
         }
-        if (send_tcp_pack(tcb, ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0) < 0) {
+        if (send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0) < 0) {
             {
                 SpinlockGuard listener_guard(listener_tcb->lock);
                 listener_tcb->pending_count--;
             }
-            kfree(tcb->window);
-            tcb->~TCB();
-            kfree(tcb);
+            // tcb的shared_ptr在此作用域结束时自动释放
             return;
         }
 
@@ -441,7 +441,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
                                         .local_port = tcb->src_port, .remote_port = tcb->dst_port}] = tcb;
         return;
     }
-    TCB* tcb = itr->second;
+    TCBPtr tcb = itr->second;
     spinlock_release(&map_quad_lock, flags);
 
     SpinlockGuard guard(tcb->lock);
@@ -454,10 +454,10 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     case tcb_state::SYN_RCVD:
     {
         if (header->flags != (uint8_t)tcp_flags::ACK) return;
-        TCB* listener_tcb = tcb->listener->data.tcp.block;
+        TCBPtr listener_tcb = tcb->listener->data.tcp.block;
         tcb->state = tcb_state::ESTABLISHED;
         SpinlockGuard listener_guard(listener_tcb->lock);
-        tcb->listener->data.tcp.block->accepted_queue.push(tcb);
+        listener_tcb->accepted_queue.push(tcb);
         listener_tcb->pending_count--;
         {
             SpinlockGuard guard(process_list_lock);
@@ -476,7 +476,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             break;
         }
         tcb->ack = ntohl(header->seq_num) + 1; // 下一次希望收到的：SYN出来的序列号，加一个虚拟字节
-        send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
+        send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
         tcb->state = tcb_state::ESTABLISHED;
         {
             SpinlockGuard guard(process_list_lock);
@@ -491,8 +491,8 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     case tcb_state::TIME_WAIT:
         if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) {
             // 这回不用加ACK了，我们之前肯定加过了
-            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
-            // 这里不重置定时器，就相当于定时器是限定“尝试发送所有的最后一个ACK”的尝试周期
+            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
+            // 这里不重置定时器，就相当于定时器是限定"尝试发送所有的最后一个ACK"的尝试周期
             // 你也可以重置，这样每次尝试发最后一个ACK都是独立计时的，我这里就简单实现了
         }
         break;
@@ -516,7 +516,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         } else if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 如果收到了FIN但是没有ACK，那就是刚好对端也在关闭连接
             tcb->state = tcb_state::CLOSING; // 那就转成CLOSING
             tcb->ack = ntohl(header->seq_num) + 1; // FIN会占一个虚拟字节
-            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
+            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
             // 注意这里虽然还是会跑到下面，但是会因为不带ACK，对方的数据被丢弃。
             // 不过如果真是这样，对方在FIN_WAIT1的时候同时发FIN，还不带ACK地把数据发过来，也太不讲规矩了吧。
             // 这种情况下，他的数据丢掉就丢掉了。
@@ -556,11 +556,11 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         tcb->window_used_size += payload_size;
         tcb->window_tail = (tcb->window_tail + payload_size) % tcb->window_size;
         tcb->ack += payload_size;
-        send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
+        send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
         wake_all_queue(sock);
         if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 对端通知，后面不发数据了
             tcb->ack += 1;
-            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
+            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
             if (tcb->state == tcb_state::FIN_WAIT2) { // 如果我们实际上是FIN_WAIT2
                 tcb->state = tcb_state::TIME_WAIT;
                 time_wait(tcb);

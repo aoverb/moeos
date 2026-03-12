@@ -3,11 +3,16 @@
 
 #include <kernel/net/ip.hpp>
 #include <kernel/net/socket.hpp>
+#include <shared_ptr>
 #include <queue>
 #ifdef __cplusplus
 extern "C" {
 #endif
 constexpr uint8_t MAX_ACCEPTED_QUEUE_NUM = 128;
+
+struct TCB; // 前向声明
+using TCBPtr = shared_ptr<TCB>;
+
 struct TCB { // 传输控制块
     tcb_state state;
     char* window;
@@ -17,7 +22,7 @@ struct TCB { // 传输控制块
     size_t window_used_size;
     uint32_t seq;
     uint32_t ack;
-    std::queue<TCB*, MAX_ACCEPTED_QUEUE_NUM> accepted_queue;
+    std::queue<TCBPtr, MAX_ACCEPTED_QUEUE_NUM> accepted_queue;
     uint8_t accepted_queue_size;
     uint8_t pending_count = 0;
     uint32_t src_addr;
@@ -28,6 +33,14 @@ struct TCB { // 传输控制块
     socket* owner;
     socket* listener;
     spinlock lock;
+
+    // 析构时自动释放接收窗口
+    ~TCB() {
+        if (window) {
+            kfree(window);
+            window = nullptr;
+        }
+    }
 };
 
 int tcp_init(socket& sock, uint16_t local_port);
@@ -35,8 +48,8 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port);
 int tcp_read(socket& sock, char* buffer, uint32_t size);
 int tcp_write(socket& sock, char* buffer, uint32_t size);
 int tcp_listen(socket& sock, size_t queue_length);
-TCB* tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
-int tcp_ioctl(TCB* tcb, const char* cmd, void* arg);
+TCBPtr tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
+int tcp_ioctl(TCBPtr& tcb, const char* cmd, void* arg);
 int tcp_close(socket& sock);
 
 #ifdef __cplusplus
