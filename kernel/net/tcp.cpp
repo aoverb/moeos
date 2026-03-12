@@ -94,7 +94,6 @@ static void destroy_tcb(pid_t, void* arg) {
     }
     p->~shared_ptr();
     kfree(p);
-    printf("destroyed!\n");
 }
 
 static void time_wait(TCBPtr tcb) {
