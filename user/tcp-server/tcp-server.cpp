@@ -55,6 +55,7 @@ int main(int argc, char** argv) {
                 }
                 if (n == 0) continue;
                 buff[n] = '\0';
+                if (strcmp("bye\n", buff) == 0) break;
                 printf("%s\n", buff);
             }
         }
