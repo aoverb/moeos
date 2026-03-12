@@ -115,20 +115,69 @@ int send_tcp_pack(TCB* tcb, uint8_t flags, const char* payload, size_t size) {
 }
 
 int tcp_close(socket& sock) {
-    SpinlockGuard guard(sock.lock);
     TCB* tcb = sock.data.tcp.block;
     PCB* cur;
     // 这里我拿sock里面的wait_queue好像没什么办法，因为这说明了进程正在被阻塞，是没法主动调close的
     // 除非是收到了一些外部事件，但是这一般来说，会是整个进程都会被销毁掉的情况
     sock.valid = 0;
+    if (!tcb) return 0;
+    SpinlockGuard guard(tcb->lock);
+    if (tcb->state == tcb_state::LISTEN) {
+        sockaddr config;
+        config.addr = tcb->src_addr;
+        config.port = tcb->src_port;
+        {
+            SpinlockGuard guard(map_sockaddr_lock);
+            map_sockaddr_to_sock.erase(config);
+        }
+
+        // 清理accepted_queue中已ESTABLISHED但未被accept取走的子连接
+        {
+            SpinlockGuard guard(tcb->lock);
+            while (!tcb->accepted_queue.empty()) {
+                TCB* child = tcb->accepted_queue.front();
+                tcb->accepted_queue.pop_into(child);
+                send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
+                {
+                    SpinlockGuard quad_guard(map_quad_lock);
+                    map_quad_to_sock.erase(tcp_quadruple{
+                        child->src_addr, child->dst_addr,
+                        child->src_port, child->dst_port});
+                }
+                kfree(child->window);
+                child->~TCB();
+                kfree(child);
+            }
+        }
+
+        // 清理处于SYN_RCVD的半连接
+        {
+            SpinlockGuard quad_guard(map_quad_lock);
+            auto it = map_quad_to_sock.begin();
+            while (it != map_quad_to_sock.end()) {
+                TCB* child = it->second;
+                if (child->listener == &sock &&
+                    child->state == tcb_state::SYN_RCVD) {
+                    it = map_quad_to_sock.erase(it);
+                    send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
+                    kfree(child->window);
+                    child->~TCB();
+                    kfree(child);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
     // 连接关闭都发不出去也太衰了，但这里也只有三次机会
-    send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
     if (tcb->state == tcb_state::ESTABLISHED) {
+        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::FIN_WAIT1;
     } else if (tcb->state == tcb_state::CLOSE_WAIT) {
+        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::LAST_ACK;
     } else {
-        printf("warning: unexpected state %d\n", tcb->state);
+        time_wait(tcb);
     }
     return 0;
 }
@@ -202,8 +251,15 @@ int tcp_listen(socket& sock, size_t queue_length) {
     return 0;
 }
 
-static void destroy_tcb(pid_t, void* tcb) {
+static void destroy_tcb(pid_t, void* arg) {
+    TCB* tcb = reinterpret_cast<TCB*>(arg);
+    {
+        SpinlockGuard guard(map_quad_lock);
+        map_quad_to_sock.erase(tcp_quadruple{
+            tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
+    }
     kfree(reinterpret_cast<TCB*>(tcb)->window);
+    tcb->~TCB();
     kfree(tcb);
     printf("destroyed!\n");
 }
@@ -283,6 +339,7 @@ int tcp_write(socket& sock, char* buffer, uint32_t size) {
 }
 
 void wake_all_queue(socket* sock){
+    if (!sock) return;
     { // 阻塞式read
         SpinlockGuard guard(process_list_lock);
         PCB* cur;
@@ -441,7 +498,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         break;
     case tcb_state::LAST_ACK:
         if ((header->flags & (uint8_t)tcp_flags::ACK) != 0) { // 收到最后一个ACK
-            destroy_tcb(cur_process_id, tcb);
+            time_wait(tcb); // 我们还拿着锁，不能马上释放
         }
         break;
     case tcb_state::CLOSING:
