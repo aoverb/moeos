@@ -278,6 +278,14 @@ static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, diren
     return 1;
 }
 
+static int peek(mounting_point* mp, uint32_t inode_id) {
+    if (!mp->data) return -1;
+    pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
+    if (!data->entry[inode_id]) return -1;
+    pipe_entry* pipe = data->entry[inode_id];
+    return (pipe->read_pos != pipe->write_pos);
+}
+
 static int closedir(mounting_point*, uint32_t) {
     return 0;
 }
@@ -296,6 +304,6 @@ void init_pipefs() {
     pipe_fs_operation.ioctl = nullptr;
     pipe_fs_operation.sock_opr = nullptr;
     pipe_fs_operation.set_poll = nullptr;
-    pipe_fs_operation.peek = nullptr;
+    pipe_fs_operation.peek = &peek;
     register_fs_operation(FS_DRIVER::PIPEFS, &pipe_fs_operation);
 }
