@@ -121,10 +121,15 @@ int tcp_close(socket& sock) {
     // 这里我拿sock里面的wait_queue好像没什么办法，因为这说明了进程正在被阻塞，是没法主动调close的
     // 除非是收到了一些外部事件，但是这一般来说，会是整个进程都会被销毁掉的情况
     sock.valid = 0;
-
     // 连接关闭都发不出去也太衰了，但这里也只有三次机会
     send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
-    tcb->state = tcb_state::FIN_WAIT1;
+    if (tcb->state == tcb_state::ESTABLISHED) {
+        tcb->state = tcb_state::FIN_WAIT1;
+    } else if (tcb->state == tcb_state::CLOSE_WAIT) {
+        tcb->state = tcb_state::LAST_ACK;
+    } else {
+        printf("warning: unexpected state %d\n", tcb->state);
+    }
     return 0;
 }
 
@@ -197,9 +202,10 @@ int tcp_listen(socket& sock, size_t queue_length) {
     return 0;
 }
 
-static void destroy_tcb(pid_t pid, void* tcb) {
+static void destroy_tcb(pid_t, void* tcb) {
     kfree(reinterpret_cast<TCB*>(tcb)->window);
     kfree(tcb);
+    printf("destroyed!\n");
 }
 
 static void time_wait(TCB* tcb) {
@@ -274,6 +280,28 @@ int tcp_write(socket& sock, char* buffer, uint32_t size) {
     TCB* tcb = sock.data.tcp.block;
     int ret = send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, buffer, size);
     return ret;
+}
+
+void wake_all_queue(socket* sock){
+    { // 阻塞式read
+        SpinlockGuard guard(process_list_lock);
+        PCB* cur;
+        while(cur = sock->wait_queue) {
+            remove_from_process_queue(sock->wait_queue, cur->pid);
+            cur->state = process_state::READY;
+            insert_into_scheduling_queue(cur->pid);
+        }
+    }
+    { // poll
+        SpinlockGuard guard(process_list_lock);
+        PCB* cur;
+        while((sock->poll_queue != nullptr) && (*(sock->poll_queue) != nullptr) &&
+            (cur = *(sock->poll_queue))) {
+            remove_from_process_queue(*(sock->poll_queue), cur->pid);
+            cur->state = process_state::READY;
+            insert_into_scheduling_queue(cur->pid);
+        }
+    }
 }
 
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
@@ -411,6 +439,20 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             // 你也可以重置，这样每次尝试发最后一个ACK都是独立计时的，我这里就简单实现了
         }
         break;
+    case tcb_state::LAST_ACK:
+        if ((header->flags & (uint8_t)tcp_flags::ACK) != 0) { // 收到最后一个ACK
+            destroy_tcb(cur_process_id, tcb);
+        }
+        break;
+    case tcb_state::CLOSING:
+        if ((header->flags & (uint8_t)tcp_flags::ACK) != 0) {
+            // 我们之前的FIN的ACK收到了，所以，对方知道了我们不发数据了
+            // 但是我们之前发出去的ACK，对方有没有收到呢？如果没有收到，对方会再发一次FIN
+            // 所以我们要进入TIME_WAIT
+            tcb->state = tcb_state::TIME_WAIT;
+            time_wait(tcb);
+        }
+        break;
     case tcb_state::FIN_WAIT1:
         if ((header->flags & (uint8_t)tcp_flags::ACK) != 0) {
             tcb->state = tcb_state::FIN_WAIT2; // 确认了我们这边已经发完了东西
@@ -458,34 +500,16 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         tcb->window_tail = (tcb->window_tail + payload_size) % tcb->window_size;
         tcb->ack += payload_size;
         send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
-        { // 阻塞式read
-            SpinlockGuard guard(process_list_lock);
-            PCB* cur;
-            while(cur = sock->wait_queue) {
-                remove_from_process_queue(sock->wait_queue, cur->pid);
-                cur->state = process_state::READY;
-                insert_into_scheduling_queue(cur->pid);
-            }
-        }
-        { // poll
-            SpinlockGuard guard(process_list_lock);
-            PCB* cur;
-            while((sock->poll_queue != nullptr) && (*(sock->poll_queue) != nullptr) &&
-                (cur = *(sock->poll_queue))) {
-                remove_from_process_queue(*(sock->poll_queue), cur->pid);
-                cur->state = process_state::READY;
-                insert_into_scheduling_queue(cur->pid);
-            }
-        }
-        if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) {
+        wake_all_queue(sock);
+        if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 对端通知，后面不发数据了
             tcb->ack = ntohl(header->seq_num) + 1;
             send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
             if (tcb->state == tcb_state::FIN_WAIT2) { // 如果我们实际上是FIN_WAIT2
                 tcb->state = tcb_state::TIME_WAIT;
                 time_wait(tcb);
-                break;
-            } else {
-                printf("passively closed!\n");
+            } else { // 被动关闭的情况
+                tcb->state = tcb_state::CLOSE_WAIT;
+                wake_all_queue(sock);
             }
         }
         break;

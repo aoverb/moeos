@@ -42,6 +42,7 @@ int main(int argc, char** argv) {
             if (fds[0].revents & POLLIN) {
                 int n = read(0, buff, sizeof(buff));
                 if (n <= 0) break;
+                if (strncmp("bye\n", buff, n) == 0) break;
                 write(client_fd, buff, n);
             }
 
@@ -54,10 +55,10 @@ int main(int argc, char** argv) {
                 }
                 if (n == 0) continue;
                 buff[n] = '\0';
-                if (strcmp("bye\r\n", buff) == 0) break;
                 printf("%s\n", buff);
             }
         }
+        close(client_fd);
     }
 
     close(conn);
