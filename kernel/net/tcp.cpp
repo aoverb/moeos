@@ -502,7 +502,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
         wake_all_queue(sock);
         if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 对端通知，后面不发数据了
-            tcb->ack = ntohl(header->seq_num) + 1;
+            tcb->ack += 1;
             send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
             if (tcb->state == tcb_state::FIN_WAIT2) { // 如果我们实际上是FIN_WAIT2
                 tcb->state = tcb_state::TIME_WAIT;
