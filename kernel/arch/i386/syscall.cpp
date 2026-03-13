@@ -273,7 +273,7 @@ int sys_poll(interrupt_frame* reg) {
     {
         SpinlockGuard guard(process_list_lock);
         PCB* cur_pcb = current_pcb();
-        insert_into_process_queue(poll_queue, cur_pcb);
+        insert_into_waiting_queue(poll_queue, cur_pcb);
         for (int i = 0; i < fd_num; ++i) {
             if (cur_pcb->fd[fds[i].fd] == nullptr) {
                 if (fds[i].events & INVFD) {
@@ -301,7 +301,7 @@ int sys_poll(interrupt_frame* reg) {
         ::timeout(&poll_queue, timeout);
     } else {
         SpinlockGuard guard(process_list_lock);
-        remove_from_process_queue(poll_queue, current_pcb()->pid);
+        remove_from_waiting_queue(poll_queue, current_pcb()->pid);
         for (int i = 0; i < fd_num; ++i) {
             if (current_pcb()->fd[fds[i].fd] != nullptr) {
                 v_setpoll(current_pcb(), fds[i].fd, nullptr);
@@ -337,6 +337,28 @@ int sys_clock(interrupt_frame* reg) {
     return pit_get_ticks();
 }
 
+// GETPID(eax = cur_pid)
+int sys_getpid(interrupt_frame* reg) {
+    return cur_process_id;
+}
+
+// SETPGID(ebx = child_pid, ecx = parent_pid) → returns 0 on success, -1 on failure
+int sys_setpgid(interrupt_frame* reg) {
+    // pid_t child_pid     = static_cast<pid_t>(reg->ecx);
+    // pid_t parent_pid    = static_cast<pid_t>(reg->ecx);
+    // todo：我们还没有进程组这个概念
+    return 0;
+}
+
+// TCSETGRP(ebx = fd, ecx = pid) → returns 0 on success, -1 on failure
+int sys_tcsetpgrp(interrupt_frame* reg) {
+    // int fd       = static_cast<int>(reg->ebx);
+    pid_t pid    = static_cast<pid_t>(reg->ecx);
+    // todo：这里先设置唯一的一个tty
+    terminal_setforeground(pid);
+    return 0;
+}
+
 void syscall_init() {
     printf("syscall initializing...");
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
@@ -344,6 +366,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);
     register_syscall(uint32_t(SYSCALL::TERMINAL_CLEAR), sys_terminal_clear);
+    register_syscall(uint32_t(SYSCALL::TCSETPGRP),  sys_tcsetpgrp);
     register_syscall(uint32_t(SYSCALL::CLOCK), sys_clock);
     register_syscall(uint32_t(SYSCALL::SBRK),     sys_sbrk);
     register_syscall(uint32_t(SYSCALL::CONNECT),  sys_connect);
@@ -369,6 +392,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);
     register_syscall(uint32_t(SYSCALL::SLEEP),  sys_sleep);
     register_syscall(uint32_t(SYSCALL::POLL),  sys_poll);
+    register_syscall(uint32_t(SYSCALL::SETPGID),  sys_setpgid);
+    register_syscall(uint32_t(SYSCALL::GETPID),  sys_getpid);
     printf("OK\n");
 }
 

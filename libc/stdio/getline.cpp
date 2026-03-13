@@ -2,11 +2,14 @@
 #include <stdio.h>
 #include <syscall_def.hpp>
 #if defined(__is_libk)
-#include <driver/keyboard.h>
 #include <kernel/tty.h>
 #else
 #include <file.h>
 #endif
+
+void tcsetpgrp(int fd, pid_t pid) {
+    syscall2((uint32_t)SYSCALL::TCSETPGRP, (uint32_t)fd, (uint32_t)pid);
+}
 
 void cls() {
     #if defined(__is_libk)
@@ -34,15 +37,17 @@ static int read_one_byte(char* c) {
 
 bool getline(char* buf, uint32_t size) {
 #if defined(__is_libk)
-    keyboard_flush();
     uint32_t i = 0;
 
     while (i < size - 1) {
-        while (!keyboard_haschar()) {
-            asm volatile("pause"); 
+        terminal_flush();
+        int n = terminal_read_char();
+        if (n < 0) {
+            buf[i] = '\0';
+            return false;
         }
 
-        char c = keyboard_getchar();
+        char c = (char)n;
 
         if (c == '\b') {
             if (i == 0) continue;

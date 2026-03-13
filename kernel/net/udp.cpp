@@ -184,7 +184,7 @@ int udp_recvfrom(socket& sock, char* buffer, uint32_t size, sockaddr* peeraddr) 
         {
             SpinlockGuard guard(process_list_lock);
             process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+            insert_into_waiting_queue(sock.wait_queue, process_list[cur_process_id]);
         }
         spinlock_release(&(sock.lock), flags);
         timeout(&(sock.wait_queue), 3000);
@@ -232,7 +232,7 @@ int udp_read(socket& sock, char* buffer, uint32_t size) { // recv
         {
             SpinlockGuard guard(process_list_lock);
             process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+            insert_into_waiting_queue(sock.wait_queue, process_list[cur_process_id]);
         }
         spinlock_release(&(sock.lock), flags);
         timeout(&(sock.wait_queue), 3000);

@@ -273,9 +273,13 @@ void start_shell() {
     }
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
-    pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
-    if (shell_pid == 0) panic("Loading shell failed!");
-    waitpid(shell_pid);
+    while(1) {
+        pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
+        terminal_setforeground(shell_pid);
+        if (shell_pid == 0) panic("Loading shell failed!");
+        waitpid(shell_pid);
+    }
+
 }
 
 extern "C" void kernel_main(multiboot_info_t* mbi) {

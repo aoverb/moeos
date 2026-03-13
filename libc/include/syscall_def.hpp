@@ -12,6 +12,7 @@ enum class SYSCALL {
     TERMINAL_SET_TEXT_COLOR = 2,
     TERMINAL_GET_LINE = 3,
     TERMINAL_CLEAR = 4,
+    TCSETPGRP = 13,
     CLOCK = 25,
     SBRK = 50,
     CONNECT = 75,
@@ -36,7 +37,9 @@ enum class SYSCALL {
     EXEC = 200,
     WAITPID = 201,
     SLEEP = 202,
-    POLL = 203
+    POLL = 203,
+    SETPGID = 204,
+    GETPID = 205
 };
 
 enum SYSCALL_RET {

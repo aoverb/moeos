@@ -203,7 +203,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
         {
             SpinlockGuard guard(process_list_lock);
             process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+            insert_into_waiting_queue(sock.wait_queue, process_list[cur_process_id]);
         }
         spinlock_release(&(tcb->lock), flags);
         timeout(&(sock.wait_queue), 3000);
@@ -254,7 +254,7 @@ TCBPtr tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size) {
         {
             SpinlockGuard guard(process_list_lock);
             process_list[cur_process_id]->state = process_state::WAITING;
-            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+            insert_into_waiting_queue(sock.wait_queue, process_list[cur_process_id]);
         }
         spinlock_release(&(tcb->lock), flags);
         yield();
@@ -310,7 +310,7 @@ void wake_all_queue(socket* sock){
         SpinlockGuard guard(process_list_lock);
         PCB* cur;
         while(cur = sock->wait_queue) {
-            remove_from_process_queue(sock->wait_queue, cur->pid);
+            remove_from_waiting_queue(sock->wait_queue, cur->pid);
             cur->state = process_state::READY;
             insert_into_scheduling_queue(cur->pid);
         }
@@ -320,7 +320,7 @@ void wake_all_queue(socket* sock){
         PCB* cur;
         while((sock->poll_queue != nullptr) && (*(sock->poll_queue) != nullptr) &&
             (cur = *(sock->poll_queue))) {
-            remove_from_process_queue(*(sock->poll_queue), cur->pid);
+            remove_from_waiting_queue(*(sock->poll_queue), cur->pid);
             cur->state = process_state::READY;
             insert_into_scheduling_queue(cur->pid);
         }
@@ -425,7 +425,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             SpinlockGuard guard(process_list_lock);
             PCB* cur;
             while(cur = tcb->listener->wait_queue) {
-                remove_from_process_queue(tcb->listener->wait_queue, cur->pid);
+                remove_from_waiting_queue(tcb->listener->wait_queue, cur->pid);
                 cur->state = process_state::READY;
                 insert_into_scheduling_queue(cur->pid);
             }
@@ -444,7 +444,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             SpinlockGuard guard(process_list_lock);
             PCB* cur;
             while(cur = sock->wait_queue) {
-                remove_from_process_queue(sock->wait_queue, cur->pid);
+                remove_from_waiting_queue(sock->wait_queue, cur->pid);
                 cur->state = process_state::READY;
                 insert_into_scheduling_queue(cur->pid);
             }

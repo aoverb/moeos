@@ -49,7 +49,7 @@ void sockfs_icmp_add(int inode_id, char* buffer, size_t size) {
         SpinlockGuard guard(process_list_lock);
         PCB* cur;
         while(cur = cur_sock.wait_queue) {
-            remove_from_process_queue(cur_sock.wait_queue, cur->pid);
+            remove_from_waiting_queue(cur_sock.wait_queue, cur->pid);
             cur->state = process_state::READY;
             insert_into_scheduling_queue(cur->pid);
         }

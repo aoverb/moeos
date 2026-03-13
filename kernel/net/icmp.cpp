@@ -43,7 +43,7 @@ int icmp_read(socket& sock, char* buffer, uint32_t size) {
             {
                 SpinlockGuard guard(process_list_lock);
                 process_list[cur_process_id]->state = process_state::WAITING;
-                insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+                insert_into_waiting_queue(sock.wait_queue, process_list[cur_process_id]);
             }
             spinlock_release(&(sock.lock), flags);
             timeout(&(sock.wait_queue), 1000);
@@ -69,7 +69,7 @@ int icmp_close(socket& sock) {
     SpinlockGuard guard(sock.lock);
     PCB* cur;
     while(cur = sock.wait_queue) {
-        remove_from_process_queue(sock.wait_queue, cur->pid);
+        remove_from_waiting_queue(sock.wait_queue, cur->pid);
         cur->state = process_state::READY;
         insert_into_scheduling_queue(cur->pid);
     }

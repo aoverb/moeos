@@ -132,7 +132,7 @@ void timeout(process_queue* queue, uint32_t ms) {
         }
         process_list[pid]->state = process_state::READY;
         process_queue& pq = *((process_queue*)queue);
-        remove_from_process_queue(pq, pid);
+        remove_from_waiting_queue(pq, pid);
         spinlock_release(&process_list_lock, flags);
         insert_into_scheduling_queue(pid);
     };

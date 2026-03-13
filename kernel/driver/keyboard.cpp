@@ -1,5 +1,6 @@
 #include <driver/keyboard.h>
 #include <stdio.h>
+#include <kernel/tty.h>
 #include <kernel/hal.h>
 #include <kernel/isr.h>
 
@@ -18,59 +19,39 @@ const char scancode_to_ascii_table[128][2] = {
 };
 
 bool is_shift_pressed = false;
-
-struct round_buffer {
-    volatile char buffer[256];
-    volatile uint8_t head = 0;
-    volatile uint8_t tail = 0;
-} kbd_buffer;
-
-void rb_flush() {
-    asm volatile("cli");
-    kbd_buffer.head = kbd_buffer.tail = 0;
-    asm volatile ("sti");
-}
-
-char rb_read(round_buffer* buf) {
-    asm volatile ("cli");
-    if (buf->head == buf->tail) {
-        asm volatile ("sti");
-        return -1;
-    }
-    char re = buf->buffer[buf->head++];
-    asm volatile ("sti");
-    return re;
-    
-}
-
-void rb_write(round_buffer* buf, char data) {
-    asm volatile ("cli");
-    buf->buffer[(buf->tail)++] = data;
-    if (buf->head == buf->tail) {
-        ++(buf->head);
-    }
-    asm volatile ("sti");
-}
+bool is_ctrl_pressed = false;
 
 void keyboard_interrupt_handler(registers* /* regs */) {
     uint8_t scancode = hal_inb(0x60);
     if (scancode & KEY_RELEASED_MASK) {
-        if ((scancode ^ KEY_RELEASED_MASK) == 0x2A || (scancode ^ KEY_RELEASED_MASK) == 0x36) {
+        uint8_t released = scancode ^ KEY_RELEASED_MASK;
+        if (released == 0x2A || released == 0x36)
             is_shift_pressed = false;
-        }
+        if (released == 0x1D)
+            is_ctrl_pressed = false;
         return;
     }
+
     if (scancode == 0x2A || scancode == 0x36) {
         is_shift_pressed = true;
         return;
     }
-    rb_write(&kbd_buffer, scancode_to_ascii_table[scancode][is_shift_pressed]);
-    return;
+    if (scancode == 0x1D) {
+        is_ctrl_pressed = true;
+        return;
+    }
+
+    char c = scancode_to_ascii_table[scancode][is_shift_pressed];
+    if (c && is_ctrl_pressed) {
+        c = c & 0x1F;
+    }
+    if (c) {
+        terminal_input(c);
+    }
 }
 
 void keyboard_init() {
     printf("Keyboard initializing...");
-    rb_flush();
     register_interrupt_handler(33, keyboard_interrupt_handler);
     while (hal_inb(0x64) & 0x01) {
         hal_inb(0x60); // 读走数据，但不做任何处理，直接丢弃
@@ -78,16 +59,4 @@ void keyboard_init() {
 
     hal_enable_irq(1);
     printf("OK\n");
-}
-
-void keyboard_flush() {
-    rb_flush();
-}
-
-char keyboard_getchar() {
-    return rb_read(&kbd_buffer);
-}
-
-bool keyboard_haschar() {
-    return kbd_buffer.head != kbd_buffer.tail;
 }

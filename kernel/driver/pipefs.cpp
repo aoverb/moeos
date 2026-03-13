@@ -114,7 +114,7 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
         PCB* proc;
         while (proc = pipe->writer) {
                 proc->state = process_state::READY;
-                remove_from_process_queue(pipe->writer, proc->pid);
+                remove_from_waiting_queue(pipe->writer, proc->pid);
                 insert_into_scheduling_queue(proc->pid);
             }
         }
@@ -123,7 +123,7 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
         PCB* proc;
         while (proc = pipe->reader) {
                 proc->state = process_state::READY;
-                remove_from_process_queue(pipe->reader, proc->pid);
+                remove_from_waiting_queue(pipe->reader, proc->pid);
                 insert_into_scheduling_queue(proc->pid);
             }
         }
@@ -152,11 +152,11 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
                 PCB* proc;
                 while (proc = pipe->writer) {
                     proc->state = process_state::READY;
-                    remove_from_process_queue(pipe->writer, proc->pid);
+                    remove_from_waiting_queue(pipe->writer, proc->pid);
                     insert_into_scheduling_queue(proc->pid);
                 }
                 process_list[cur_process_id]->state = process_state::WAITING;
-                insert_into_process_queue(pipe->reader, process_list[cur_process_id]);
+                insert_into_waiting_queue(pipe->reader, process_list[cur_process_id]);
             }
             yield();
         }
@@ -169,7 +169,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
         PCB* proc;
         while (proc = pipe->writer) {
             proc->state = process_state::READY;
-            remove_from_process_queue(pipe->writer, proc->pid);
+            remove_from_waiting_queue(pipe->writer, proc->pid);
             insert_into_scheduling_queue(proc->pid);
         }
     }
@@ -192,11 +192,11 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
                 PCB* proc;
                 while (proc = pipe->reader) {
                     proc->state = process_state::READY;
-                    remove_from_process_queue(pipe->reader, proc->pid);
+                    remove_from_waiting_queue(pipe->reader, proc->pid);
                     insert_into_scheduling_queue(proc->pid);
                 }
                 process_list[cur_process_id]->state = process_state::WAITING;
-                insert_into_process_queue(pipe->writer, process_list[cur_process_id]);
+                insert_into_waiting_queue(pipe->writer, process_list[cur_process_id]);
             }
             yield();
         }
@@ -209,7 +209,7 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
         PCB* proc;
         while (proc = pipe->reader) {
             proc->state = process_state::READY;
-            remove_from_process_queue(pipe->reader, proc->pid);
+            remove_from_waiting_queue(pipe->reader, proc->pid);
             insert_into_scheduling_queue(proc->pid);
         }
     }

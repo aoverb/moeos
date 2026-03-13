@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <kernel/signal.h>
+#include <kernel/schedule.hpp>
 #include <kernel/process.hpp>
 
 inline uint32_t lowbit(uint32_t n) { return n & (-n);}
@@ -37,7 +38,6 @@ bool send_signal(pid_t pid, SIGNAL sig) {
 void do_signal(registers* regs) {
     uint32_t pending;
     {
-        SpinlockGuard guard(process_list_lock);
         pending = process_list[cur_process_id]->signal;
         process_list[cur_process_id]->signal = 0;
     }
@@ -49,7 +49,6 @@ void do_signal(registers* regs) {
             signal_handler_table[sig](regs, cur_process_id);
         }
         {
-            SpinlockGuard guard(process_list_lock);
             if (!process_list[cur_process_id] ||
                 process_list[cur_process_id]->state == process_state::ZOMBIE) {
                 break;

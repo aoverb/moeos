@@ -277,6 +277,7 @@ int v_close(PCB* proc, int fd_pos) {
 int _v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst) {
     // 调用者必须已持有 vfs_lock
     if (fd_src < 0 || fd_src >= MAX_FD_NUM || fd_dst < 0 || fd_dst >= MAX_FD_NUM) return -1;
+    if (src_proc == dst_proc && fd_src == fd_dst) return 0;
     file_description* fd_s = src_proc->fd[fd_src];
     if (!fd_s) return -1;
     if (dst_proc->fd[fd_dst]) {

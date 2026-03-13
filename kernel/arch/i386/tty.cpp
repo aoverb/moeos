@@ -2,7 +2,9 @@
 #include <kernel/tty.h>
 #include <kernel/font.h>
 #include <kernel/mm.hpp>
-#include <kernel/spinlock.hpp>
+#include <kernel/process.hpp>
+#include <kernel/signal.h>
+#include <kernel/schedule.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
 #include <stddef.h>
@@ -11,6 +13,7 @@
 extern uint32_t page_directory;
 spinlock tty_lock;
 
+static pid_t foreground_pid = 4;
 static uint32_t* fb_addr;
 static uint32_t fb_pitch;
 static uint32_t fb_bpp;
@@ -22,6 +25,7 @@ static uint32_t terminal_row = 0;
 static uint32_t terminal_col = 0;
 
 static uint32_t terminal_color = 0x00FFFFFF;
+static process_queue tty_wait_queue = nullptr;
 
 void map_lfb(uint32_t phys_addr, uint32_t size) {
     phys_addr &= ~((1 << 12) - 1);
@@ -30,6 +34,75 @@ void map_lfb(uint32_t phys_addr, uint32_t size) {
     
     for (uintptr_t i = 0; i < num_pages; ++i)
         vmm_map_page(phys_addr + i * (1 << 12), vram_addr_begin + i * (1 << 12), 0x3);
+}
+
+struct round_buffer {
+    volatile char buffer[256];
+    volatile uint8_t head = 0;
+    volatile uint8_t tail = 0;
+};
+
+static round_buffer kbd_buffer;
+
+void rb_flush() {
+    kbd_buffer.head = kbd_buffer.tail = 0;
+}
+
+char rb_read() {
+    if (kbd_buffer.head == kbd_buffer.tail) {
+        return -1;
+    }
+    char re = kbd_buffer.buffer[kbd_buffer.head++];
+    return re;
+}
+
+void rb_write(char data) {
+    kbd_buffer.buffer[(kbd_buffer.tail)++] = data;
+    if (kbd_buffer.head == kbd_buffer.tail) {
+        ++(kbd_buffer.head);
+    }
+}
+
+void terminal_flush() {
+    SpinlockGuard guard(tty_lock);
+    rb_flush();
+}
+
+void terminal_input(char c) {
+    if (c == 0x03) {
+        terminal_write("^C\n", 3);
+        if (foreground_pid == 0) return;
+        send_signal(foreground_pid, SIGNAL::SIGINT);
+        {
+            SpinlockGuard ttyguard(tty_lock);
+            SpinlockGuard guard(process_list_lock);
+            if (process_list[foreground_pid]->inwait_queue &&
+               *(process_list[foreground_pid]->inwait_queue)) {
+                remove_from_waiting_queue(*(process_list[foreground_pid]->inwait_queue), foreground_pid);
+                process_list[foreground_pid]->state = process_state::READY;
+                insert_into_scheduling_queue(foreground_pid);
+            }
+        }
+        return;
+    }
+    {
+        SpinlockGuard ttyguard(tty_lock);
+        rb_write(c);
+        {
+            SpinlockGuard guard(process_list_lock);
+            PCB* cur;
+            while(cur = tty_wait_queue) {
+                remove_from_waiting_queue(tty_wait_queue, cur->pid);
+                cur->state = process_state::READY;
+                insert_into_scheduling_queue(cur->pid);
+            }
+        }
+    }
+}
+
+void terminal_setforeground(pid_t pid) {
+    SpinlockGuard guard(tty_lock);
+    foreground_pid = pid;
 }
 
 void terminal_initialize(multiboot_info_t* mbi) {
@@ -155,4 +228,27 @@ void terminal_clear() {
     terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
     terminal_row = 0;
     terminal_col = 0;
+}
+
+int terminal_read_char() {
+    while (1) {
+        if (process_list[cur_process_id]->signal) {
+            return -1;
+        }
+        {
+            SpinlockGuard ttyguard(tty_lock);
+            if (kbd_buffer.head != kbd_buffer.tail) {
+                break;
+            }
+            {
+                SpinlockGuard guard(process_list_lock);
+                process_list[cur_process_id]->state = process_state::WAITING;
+                insert_into_waiting_queue(tty_wait_queue, process_list[cur_process_id]);
+            }
+        }
+        yield();
+    }
+    SpinlockGuard guard(tty_lock);
+    char c = rb_read();
+    return c;
 }

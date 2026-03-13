@@ -1,15 +1,20 @@
 #include <stdint.h>
 #include <kernel/tty.h>
-#include <driver/keyboard.h>
 #include <driver/devfs.hpp>
 static char line_buf[256];
 static uint32_t line_len = 0;
 static bool line_ready = false;
 
 static int console_peek() {
-    while (keyboard_haschar() && !line_ready) {
-        char c = keyboard_getchar();
+    while (!line_ready) {
+        int n = terminal_read_char();
+        if (n < 0) {
+            line_len = 0;
+            line_ready = false;
+            return 0;
+        }
 
+        char c = (char)n;
         if (c == '\b') {
             if (line_len > 0) {
                 --line_len;

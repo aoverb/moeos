@@ -65,6 +65,7 @@ typedef struct PCB {
     process_state state;
     process_queue waiting_queue;
     uint32_t signal;
+    process_queue* inwait_queue;
 
     spinlock plock;
     file_description* fd[MAX_FD_NUM];
@@ -79,6 +80,8 @@ extern spinlock process_list_lock;
 
 bool insert_into_process_queue(process_queue& queue, PCB* process);
 void remove_from_process_queue(process_queue& queue, pid_t pid);
+bool insert_into_waiting_queue(process_queue& queue, PCB* process);
+void remove_from_waiting_queue(process_queue& queue, pid_t pid);
 
 void process_init();
 

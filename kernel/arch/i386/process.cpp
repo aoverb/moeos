@@ -66,7 +66,7 @@ int waitpid(pid_t child) {
     }
 
     process_list[cur_process_id]->state = process_state::WAITING;
-    insert_into_process_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
+    insert_into_waiting_queue(child_pcb->waiting_queue, process_list[cur_process_id]);
     spinlock_release(&process_list_lock, flags);
     yield();
 
@@ -98,7 +98,7 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     new_process->plock.locked = 0;
     new_process->signal = 0;
     strcpy(new_process->cwd, process_list[cur_process_id]->cwd);
-    if (cur_process_id == 0) {
+    if (new_process->pid == 0) {
         v_open(new_process, "/dev/console", O_RDONLY);
         v_open(new_process, "/dev/console", O_WRONLY);
     } else {
@@ -325,7 +325,6 @@ pid_t create_process(const char* name, void* entry, void* args) {
 
 uint32_t exit_process(pid_t pid, int exit_code) {
     uint32_t flags = spinlock_acquire(&process_list_lock);
-    
     if (pid == 0 || process_list[pid] == nullptr) {
         spinlock_release(&process_list_lock, flags);
         return 1;
@@ -344,7 +343,7 @@ uint32_t exit_process(pid_t pid, int exit_code) {
     PCB* itr;
     while (itr = exiting_process->waiting_queue) {
         itr->state = process_state::READY;
-        remove_from_process_queue(exiting_process->waiting_queue, itr->pid);
+        remove_from_waiting_queue(exiting_process->waiting_queue, itr->pid);
         insert_into_scheduling_queue(itr->pid);
     }
     exiting_process->state = process_state::ZOMBIE;
@@ -356,6 +355,13 @@ uint32_t exit_process(pid_t pid, int exit_code) {
 
 void exit_process_wrapper() {
     exit_process(cur_process_id, 0);
+}
+
+bool insert_into_waiting_queue(process_queue& queue, PCB* process) {
+    // 调用者必须持有 process_list_lock
+    if (process == nullptr) return false;
+    process->inwait_queue = &queue;
+    return insert_into_process_queue(queue, process);
 }
 
 bool insert_into_process_queue(process_queue& queue, PCB* process) {
@@ -375,6 +381,14 @@ bool insert_into_process_queue(process_queue& queue, PCB* process) {
         queue = process;
     }
     return true;
+}
+
+void remove_from_waiting_queue(process_queue& queue, pid_t pid) {
+    // 调用者必须持有 process_list_lock
+    if (process_list[pid] == nullptr) return;
+    process_list[pid]->inwait_queue = nullptr;
+    remove_from_process_queue(queue, pid);
+    return;
 }
 
 void remove_from_process_queue(process_queue& queue, pid_t pid) {
