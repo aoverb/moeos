@@ -179,6 +179,8 @@ int tcp_ioctl(TCBPtr& tcb, const char* cmd, void* arg) {
 int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
     TCBPtr tcb = sock.data.tcp.block;
     uint32_t flags = spinlock_acquire(&(tcb->lock));
+    tcb->src_addr = (tcb->src_addr == SOCKADDR_BROADCAST_ADDR) ? getLocalNetconf()->ip.addr :
+                     tcb->src_addr;
     tcb->dst_addr = addr;
     tcb->dst_port = htons(port);
     {

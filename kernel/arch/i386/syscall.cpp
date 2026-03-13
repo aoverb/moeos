@@ -62,6 +62,24 @@ int sys_listen(interrupt_frame* reg) {
     return v_listen(current_pcb(), fd, queue_length);
 }
 
+// SENDTO(ebx = fd, ecx = buffer, edx = size, esi = sockaddr)  → returns 0 if succeeded
+int sys_sendto(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    char* buffer        = reinterpret_cast<char*>(reg->ecx);
+    uint32_t size       = reg->edx;
+    sockaddr* peeraddr  = reinterpret_cast<sockaddr*>(reg->esi);
+    return v_sendto(current_pcb(), fd, buffer, size, peeraddr);
+}
+
+// RECVFROM(ebx = fd, ecx = buffer, edx = size, esi = sockaddr)  → returns 0 if succeeded
+int sys_recvfrom(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    char* buffer        = reinterpret_cast<char*>(reg->ecx);
+    uint32_t size       = reg->edx;
+    sockaddr* peeraddr  = reinterpret_cast<sockaddr*>(reg->esi);
+    return v_recvfrom(current_pcb(), fd, buffer, size, peeraddr);
+}
+
 // CONNECT(ebx = fd, ecx = addr, edx = port)  → returns 0 if succeeded
 int sys_connect(interrupt_frame* reg) {
     int fd           = static_cast<int>(reg->ebx);
@@ -331,6 +349,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::CONNECT),  sys_connect);
     register_syscall(uint32_t(SYSCALL::LISTEN),  sys_listen);
     register_syscall(uint32_t(SYSCALL::ACCEPT),  sys_accept);
+    register_syscall(uint32_t(SYSCALL::SENDTO),  sys_sendto);
+    register_syscall(uint32_t(SYSCALL::RECVFROM),  sys_recvfrom);
     register_syscall(uint32_t(SYSCALL::IOCTL),  sys_ioctl);
     register_syscall(uint32_t(SYSCALL::STAT),     sys_stat);
     register_syscall(uint32_t(SYSCALL::MOUNT),    sys_mount);

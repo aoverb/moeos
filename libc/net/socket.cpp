@@ -13,3 +13,11 @@ int listen(int fd, size_t queue_length) {
 int accept(int fd, sockaddr* peeraddr, size_t* size) {
     return syscall3((uint32_t)SYSCALL::ACCEPT, (uint32_t)fd, (uint32_t)peeraddr, (uint32_t)size);
 }
+
+int sendto(int fd, const char* buffer, uint32_t size, sockaddr* peeraddr) {
+    return syscall4((uint32_t)SYSCALL::SENDTO, (uint32_t)fd, (uint32_t)buffer, (uint32_t)size, (uint32_t)peeraddr);
+}
+
+int recvfrom(int fd, char* buffer, uint32_t size, sockaddr* peeraddr) {
+    return syscall4((uint32_t)SYSCALL::RECVFROM, (uint32_t)fd, (uint32_t)buffer, (uint32_t)size, (uint32_t)peeraddr);
+}

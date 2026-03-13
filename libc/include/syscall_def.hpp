@@ -17,6 +17,8 @@ enum class SYSCALL {
     CONNECT = 75,
     LISTEN = 76,
     ACCEPT = 77,
+    SENDTO = 78,
+    RECVFROM = 79,
     IOCTL = 98,
     STAT = 99,
     MOUNT = 100,

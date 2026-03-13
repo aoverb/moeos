@@ -120,6 +120,99 @@ int udp_connect(socket& sock, uint32_t addr, uint16_t port) {
     return 0;
 }
 
+int udp_sendto(socket& sock, const char* buffer, uint32_t size, sockaddr* peeraddr) {
+    uint32_t dst_ip;
+    uint16_t dst_port;
+
+    if (peeraddr) {
+        dst_ip = peeraddr->addr;
+        dst_port = peeraddr->port;
+    } else {
+        SpinlockGuard guard(sock.lock);
+        if (sock.data.udp.remote_ip == 0 && sock.data.udp.remote_port == 0)
+            return -1;
+        dst_ip = sock.data.udp.remote_ip;
+        dst_port = sock.data.udp.remote_port;
+    }
+
+    uint32_t packet_size = sizeof(pseudo_ip_header) + sizeof(udp_header) + size;
+    void* packet = kmalloc(packet_size);
+    memset(packet, 0, packet_size);
+
+    pseudo_ip_header* p_header = (pseudo_ip_header*)packet;
+    udp_header* t_header = (udp_header*)((char*)packet + sizeof(pseudo_ip_header));
+
+    p_header->src_addr = (sock.data.udp.local_ip == SOCKADDR_BROADCAST_ADDR) ? getLocalNetconf()->ip.addr :
+                          sock.data.udp.local_ip;
+    p_header->dst_addr = dst_ip;
+    p_header->protocol = IP_PROTOCOL_UDP;
+    p_header->zero = 0;
+    p_header->data_length = htons(sizeof(udp_header) + size);
+
+    t_header->src_port = sock.data.udp.local_port;
+    t_header->dst_port = dst_port;
+    t_header->size = htons(sizeof(udp_header) + size);
+    t_header->checksum = 0;
+    memcpy((char*)packet + sizeof(pseudo_ip_header) + sizeof(udp_header), buffer, size);
+    t_header->checksum = checksum(packet, packet_size);
+
+    int ret = send_ipv4(ipv4addr(dst_ip), IP_PROTOCOL_UDP,
+                        t_header, sizeof(udp_header) + size);
+    kfree(packet);
+    return ret;
+}
+
+int udp_recvfrom(socket& sock, char* buffer, uint32_t size, sockaddr* peeraddr) {
+    int ret = -1;
+    uint32_t flags = spinlock_acquire(&(sock.lock));
+
+    if (sock.data.udp.pack_head) {
+        udp_pack* head = sock.data.udp.pack_head;
+        size_t loadsize = size < head->size ? size : head->size;
+        memcpy(buffer, head->data, loadsize);
+        if (peeraddr) {
+            peeraddr->addr = head->remote_ip;
+            peeraddr->port = head->remote_port;
+        }
+        kfree(head->data);
+        sock.data.udp.pack_head = head->next;
+        if (sock.data.udp.pack_head == nullptr)
+            sock.data.udp.pack_tail = nullptr;
+        kfree(head);
+        ret = loadsize;
+    } else {
+        {
+            SpinlockGuard guard(process_list_lock);
+            process_list[cur_process_id]->state = process_state::WAITING;
+            insert_into_process_queue(sock.wait_queue, process_list[cur_process_id]);
+        }
+        spinlock_release(&(sock.lock), flags);
+        timeout(&(sock.wait_queue), 3000);
+        flags = spinlock_acquire(&(sock.lock));
+
+        if (sock.data.udp.pack_head) {
+            udp_pack* head = sock.data.udp.pack_head;
+            size_t loadsize = size < head->size ? size : head->size;
+            memcpy(buffer, head->data, loadsize);
+            if (peeraddr) {
+                peeraddr->addr = head->remote_ip;
+                peeraddr->port = head->remote_port;
+            }
+            kfree(head->data);
+            sock.data.udp.pack_head = head->next;
+            if (sock.data.udp.pack_head == nullptr)
+                sock.data.udp.pack_tail = nullptr;
+            kfree(head);
+            ret = loadsize;
+        } else {
+            ret = -2; // timed out
+        }
+    }
+
+    spinlock_release(&(sock.lock), flags);
+    return ret;
+}
+
 int udp_read(socket& sock, char* buffer, uint32_t size) { // recv
     int ret = -1;
     uint32_t flags = spinlock_acquire(&(sock.lock));
@@ -172,7 +265,8 @@ int udp_write(socket& sock, const char* payload, uint32_t size) {
     pseudo_ip_header* p_header = (pseudo_ip_header*)packet;
     udp_header* t_header = (udp_header*)((char*)packet + sizeof(pseudo_ip_header));
 
-    p_header->src_addr = sock.data.udp.local_ip;
+    p_header->src_addr = (sock.data.udp.local_ip == SOCKADDR_BROADCAST_ADDR) ? getLocalNetconf()->ip.addr :
+                          sock.data.udp.local_ip;
     p_header->dst_addr = sock.data.udp.remote_ip;
     p_header->protocol = IP_PROTOCOL_UDP;
     p_header->zero = 0;
@@ -227,6 +321,8 @@ void udp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     cur->next = nullptr;
     cur->size = payload_size;
     cur->data = kmalloc(payload_size);
+    cur->remote_ip = src_ip;
+    cur->remote_port = src_port;
     memcpy(cur->data, buffer + ip_header_size + sizeof(udp_header), payload_size);
     if (target_sock->data.udp.pack_tail) {
         target_sock->data.udp.pack_tail->next = cur;

@@ -81,6 +81,8 @@ int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg);
 int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port);
 int v_listen(PCB* proc, int fd_pos, size_t queue_length);
 int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size);
+int v_sendto(PCB* proc, int fd_pos, const char* buffer, uint32_t size, sockaddr* peeraddr);
+int v_recvfrom(PCB* proc, int fd_pos, char* buffer, uint32_t size, sockaddr* peeraddr);
 int v_peek(PCB* proc, int fd_pos);
 int v_setpoll(PCB* proc, int fd_pos, process_queue* poll_queue);
 

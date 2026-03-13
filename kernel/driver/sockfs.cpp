@@ -292,6 +292,26 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
     return -1;
 }
 
+int sendto(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size, sockaddr* peeraddr) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::UDP) {
+        return udp_sendto(sock, buffer, size, peeraddr);
+    }
+    return -1;
+}
+
+int recvfrom(mounting_point* mp, uint32_t inode_id, char* buffer, uint32_t size, sockaddr* peeraddr) {
+    if (!mp->data) return -1;
+    socketfs_data* data = (socketfs_data*)mp->data;
+    socket& sock = data->sock[inode_id];
+    if (sock.ptcl == protocol::UDP) {
+        return udp_recvfrom(sock, buffer, size, peeraddr);
+    }
+    return -1;
+}
+
 static int peek(mounting_point* mp, uint32_t inode_id) {
     if (!mp->data) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
@@ -329,6 +349,7 @@ void init_sockfs() {
     sock_operations.connect = &connect;
     sock_operations.listen = &listen;
     sock_operations.accept = &accept;
-
+    sock_operations.sendto = &sendto;
+    sock_operations.recvfrom = &recvfrom;
     register_fs_operation(FS_DRIVER::SOCKFS, &sock_fs_operation);
 }

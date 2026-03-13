@@ -22,9 +22,11 @@ extern "C++" {
 using TCBPtr = shared_ptr<TCB>;
 
 struct udp_pack {
+    uint32_t size;
+    uint32_t remote_ip;
+    uint32_t remote_port;
     udp_pack* next;
     void* data;
-    uint32_t size;
 };
 
 struct socket {
@@ -56,6 +58,8 @@ struct sock_operation {
     int (*connect)(mounting_point* mp, uint32_t inode_id, const char* addr, uint16_t port);
     int (*listen)(mounting_point* mp, uint32_t inode_id, size_t queue_length);
     int (*accept)(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* size);
+    int (*sendto)(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size, sockaddr* peeraddr);
+    int (*recvfrom)(mounting_point* mp, uint32_t inode_id, char* buffer, uint32_t size, sockaddr* peeraddr);
 };
 #ifdef __cplusplus
 }

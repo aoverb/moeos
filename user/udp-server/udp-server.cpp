@@ -41,7 +41,8 @@ int main(int argc, char** argv) {
 
         // socket 有数据 → 读取并打印
         if (fds[1].revents & POLLIN) {
-            int n = read(conn, buff, sizeof(buff));
+            sockaddr addr;
+            int n = recvfrom(conn, buff, sizeof(buff), &addr);
             if (n < 0) {
                 printf("connection has been closed\n");
                 break;
@@ -49,6 +50,7 @@ int main(int argc, char** argv) {
             if (n == 0) continue;
             buff[n] = '\0';
             printf("%s\n", buff);
+            sendto(conn, buff, n, &addr);
         }
     }
 

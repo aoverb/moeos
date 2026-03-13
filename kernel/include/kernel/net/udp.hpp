@@ -14,6 +14,8 @@ int udp_read(socket& sock, char* buffer, uint32_t size);
 int udp_write(socket& sock, const char* payload, uint32_t size);
 int udp_ioctl(socket& sock, const char* cmd, void* arg);
 int udp_connect(socket& sock, uint32_t addr, uint16_t port);
+int udp_sendto(socket& sock, const char* buffer, uint32_t size, sockaddr* peeraddr);
+int udp_recvfrom(socket& sock, char* buffer, uint32_t size, sockaddr* peeraddr);
 int udp_close(socket& sock);
 
 #ifdef __cplusplus
