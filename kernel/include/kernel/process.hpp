@@ -64,6 +64,7 @@ typedef struct PCB {
     int exit_code;
     process_state state;
     process_queue waiting_queue;
+    uint32_t signal;
 
     spinlock plock;
     file_description* fd[MAX_FD_NUM];

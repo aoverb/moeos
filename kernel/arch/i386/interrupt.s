@@ -2,6 +2,7 @@
 
 .extern inner_interrupt_handler
 .extern inner_syscall_handler
+.extern do_signal
 .global common_interrupt_handler
 .global system_call_handler
 
@@ -120,6 +121,7 @@ common_interrupt_handler:
     pushl %esp
     
     call inner_interrupt_handler
+    # do_signal
     addl $4, %esp
     popl %gs
     popl %fs

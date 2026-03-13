@@ -2,13 +2,7 @@
 #define _KERNEL_ISR_H
 
 #include <stdint.h>
-
-struct registers {
-    uint32_t gs, fs, es, ds;      // 对应 pop %gs ... pop %ds
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // pusha 压入
-    uint32_t int_no, err_code;                       // 我们手动压入
-    uint32_t eip, cs, eflags, useresp, ss;           // CPU 自动压入
-};
+#include <register.h>
 
 typedef void (*interrupt_handler_t)(registers*);
 
