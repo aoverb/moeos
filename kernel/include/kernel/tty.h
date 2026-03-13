@@ -21,6 +21,7 @@ void terminal_clear();
 int terminal_read_char();
 void terminal_flush();
 void terminal_setforeground(pid_t pid);
+int terminal_read_char_for_peek();
 #ifdef __cplusplus
 }
 #endif

@@ -79,24 +79,18 @@ void terminal_input(char c) {
             if (process_list[foreground_pid]->inwait_queue &&
                *(process_list[foreground_pid]->inwait_queue)) {
                 remove_from_waiting_queue(*(process_list[foreground_pid]->inwait_queue), foreground_pid);
-                process_list[foreground_pid]->state = process_state::READY;
-                insert_into_scheduling_queue(foreground_pid);
-            }
+        }
+        process_list[foreground_pid]->state = process_state::READY;
+        // 强制把进程的左右清空，反正已经remove过了
+        process_list[foreground_pid]->prev = process_list[foreground_pid]->next = nullptr;
+        insert_into_scheduling_queue(foreground_pid);
+
         }
         return;
     }
     {
         SpinlockGuard ttyguard(tty_lock);
         rb_write(c);
-        {
-            SpinlockGuard guard(process_list_lock);
-            PCB* cur;
-            while(cur = tty_wait_queue) {
-                remove_from_waiting_queue(tty_wait_queue, cur->pid);
-                cur->state = process_state::READY;
-                insert_into_scheduling_queue(cur->pid);
-            }
-        }
     }
 }
 
@@ -240,15 +234,19 @@ int terminal_read_char() {
             if (kbd_buffer.head != kbd_buffer.tail) {
                 break;
             }
-            {
-                SpinlockGuard guard(process_list_lock);
-                process_list[cur_process_id]->state = process_state::WAITING;
-                insert_into_waiting_queue(tty_wait_queue, process_list[cur_process_id]);
-            }
         }
-        yield();
+        asm volatile ("pause");
     }
     SpinlockGuard guard(tty_lock);
+    char c = rb_read();
+    return c;
+}
+
+int terminal_read_char_for_peek() {
+    SpinlockGuard ttyguard(tty_lock);
+    if (kbd_buffer.head == kbd_buffer.tail) {
+        return 0;
+    }
     char c = rb_read();
     return c;
 }

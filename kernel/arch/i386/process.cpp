@@ -359,7 +359,7 @@ void exit_process_wrapper() {
 
 bool insert_into_waiting_queue(process_queue& queue, PCB* process) {
     // 调用者必须持有 process_list_lock
-    if (process == nullptr) return false;
+    if (process == nullptr || process->prev != nullptr || process->next != nullptr) return false;
     process->inwait_queue = &queue;
     return insert_into_process_queue(queue, process);
 }
@@ -385,7 +385,6 @@ bool insert_into_process_queue(process_queue& queue, PCB* process) {
 
 void remove_from_waiting_queue(process_queue& queue, pid_t pid) {
     // 调用者必须持有 process_list_lock
-    if (process_list[pid] == nullptr) return;
     process_list[pid]->inwait_queue = nullptr;
     remove_from_process_queue(queue, pid);
     return;

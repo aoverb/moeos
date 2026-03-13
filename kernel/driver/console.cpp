@@ -5,6 +5,10 @@ static char line_buf[256];
 static uint32_t line_len = 0;
 static bool line_ready = false;
 
+static int console_peek_() {
+    return terminal_read_char_for_peek();
+}
+
 static int console_peek() {
     while (!line_ready) {
         int n = terminal_read_char();
@@ -63,6 +67,6 @@ void init_console_dev(mounting_point* mp) {
     static dev_operation ops = {};
     ops.read  = console_read;
     ops.write = console_write;
-    ops.peek = console_peek;
+    ops.peek = console_peek_;
     register_in_devfs(mp, "console", &ops);
 }
