@@ -8,6 +8,8 @@ inline uint32_t lowbit(uint32_t n) { return n & (-n);}
 constexpr uint32_t MAX_SIGNAL = 32;
 signal_handler_t signal_handler_table[MAX_SIGNAL] = { nullptr };
 
+extern "C" void do_signal(registers* regs);
+
 void register_signal(uint8_t n, signal_handler_t handler) {
     signal_handler_table[n] = handler;
 }
@@ -39,13 +41,12 @@ void do_signal(registers* regs) {
         pending = process_list[cur_process_id]->signal;
         process_list[cur_process_id]->signal = 0;
     }
-
     while (pending) {
-        int signo = __builtin_ctz(pending);
-        pending &= ~(1u << signo);
+        int sig = __builtin_ctz(pending);
+        pending &= ~(1u << sig);
 
-        if (signal_handler_table[signo]) {
-            signal_handler_table[signo](regs, cur_process_id);
+        if (signal_handler_table[sig]) {
+            signal_handler_table[sig](regs, cur_process_id);
         }
         {
             SpinlockGuard guard(process_list_lock);

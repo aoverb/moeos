@@ -122,6 +122,7 @@ common_interrupt_handler:
     
     call inner_interrupt_handler
     # do_signal
+    call do_signal
     addl $4, %esp
     popl %gs
     popl %fs
