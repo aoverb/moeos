@@ -5,6 +5,7 @@
 #include <format.h>
 #include <file.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 extern "C" int pipe(int fds[2]);
 
@@ -265,12 +266,13 @@ bool try_exec(const char* cmd, int argc, char* argv[]) {
 
     if (!load_cmd(cmd, buffer, size))
         return false;
-
     int child_pid = exec(buffer, size, argc, argv, nullptr, 0);
     free(buffer);
 
     if (child_pid <= 0) return false;
+    tcsetpgrp(0, child_pid);
     waitpid(child_pid);
+    tcsetpgrp(0, getpid());
     return true;
 }
 
