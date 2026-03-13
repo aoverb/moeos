@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 extern "C++" {
+
 typedef struct macaddr {
     static constexpr uint64_t MASK = 0x0000FFFFFFFFFFFF; // 低6字节有效
 

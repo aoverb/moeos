@@ -8,6 +8,7 @@
 #include <kernel/net/socket.hpp>
 #include <kernel/net/icmp.hpp>
 #include <kernel/net/tcp.hpp>
+#include <kernel/net/udp.hpp>
 #include <kernel/net/ip.hpp>
 
 #include <string.h>
@@ -102,13 +103,18 @@ static int open(mounting_point* mp, const char* protocol,  uint8_t mode) {
         if (new_sock_num == 0) { // 套接字数量已到达最大值
             return -1;
         }
-        
+        int ret = 0;
         if (strcmp("icmp", protocol) == 0) {
-            icmp_init(new_sock);
+            ret = icmp_init(new_sock);
         } else if (strcmp("tcp", protocol) == 0) {
-            tcp_init(new_sock, 60001);  // TODO：应该是要有一个全局端口池分配的
-        } else {
+            ret = tcp_init(new_sock, 60001);  // TODO：应该是要有一个全局端口池分配的
+        } else if (strcmp("udp", protocol) == 0) {
+            ret = udp_init(new_sock, 60001);  // TODO：应该是要有一个全局端口池分配的
+        }else {
             return -1; // 不支持的协议
+        }
+        if (ret != 0) {
+            return ret;
         }
         return new_sock_num;
     } else { // 打开已有的套接字
@@ -125,6 +131,8 @@ static int close(mounting_point* mp, uint32_t inode_id, uint32_t) {
         return icmp_close(cur_sock);
     } else if (cur_sock.ptcl == protocol::TCP) {
         return tcp_close(cur_sock);
+    } else if (cur_sock.ptcl == protocol::UDP) {
+        return udp_close(cur_sock);
     }
     return 0;
 }
@@ -138,6 +146,8 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t, char* buffer, u
         return icmp_read(cur_sock, buffer, size);
     } else if (cur_sock.ptcl == protocol::TCP) {
         return tcp_read(cur_sock, buffer, size);
+    } else if (cur_sock.ptcl == protocol::UDP) {
+        return udp_read(cur_sock, buffer, size);
     }
     return -1;
 }
@@ -154,6 +164,8 @@ static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint
         ret = icmp_write(cur_sock, id_modified_buffer, size);
     } else if (cur_sock.ptcl == protocol::TCP) {
         ret = tcp_write(cur_sock, id_modified_buffer, size);
+    } else if (cur_sock.ptcl == protocol::UDP) {
+        ret = udp_write(cur_sock, id_modified_buffer, size);
     }
     kfree(id_modified_buffer);
     return ret;
@@ -222,6 +234,8 @@ static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* a
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::TCP) {
         return tcp_ioctl(sock.data.tcp.block, cmd, arg);
+    } else if (sock.ptcl == protocol::UDP) {
+        return udp_ioctl(sock, cmd, arg);
     }
     return -1;
 }
@@ -238,6 +252,8 @@ static int connect(mounting_point* mp, uint32_t inode_id, const char* addr, uint
         return icmp_connect(sock, trans_addr, port);
     } else if (sock.ptcl == protocol::TCP) {
         return tcp_connect(sock, trans_addr, port);
+    } else if (sock.ptcl == protocol::UDP) {
+        return udp_connect(sock, trans_addr, port);
     }
     return -1;
 }
@@ -280,8 +296,11 @@ static int peek(mounting_point* mp, uint32_t inode_id) {
     if (!mp->data) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
-    // todo: TCP看一眼缓冲区
-    return sock.data.tcp.block->window_used_size;
+    if (sock.ptcl == protocol::TCP) {
+        return sock.data.tcp.block->window_used_size;
+    } else if (sock.ptcl == protocol::UDP) {
+        return sock.data.udp.pack_head != nullptr;
+    }
 }
 
 static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {

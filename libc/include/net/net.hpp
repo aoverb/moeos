@@ -17,6 +17,44 @@ struct sockaddr {
         return addr == o.addr && port == o.port;
     }
 };
+// 约定：网络序存储
+struct conn_quadruple {
+    uint32_t local_ip;
+    uint32_t remote_ip;
+    uint16_t local_port;
+    uint16_t remote_port;
+    bool operator==(const conn_quadruple& o) const {
+        return local_ip == o.local_ip && remote_ip == o.remote_ip &&
+               local_port == o.local_port && remote_port == o.remote_port;
+    }
+} __attribute__((packed));
+
+struct conn_hasher {
+    size_t operator()(const conn_quadruple& q) const {
+        size_t seed = 0;
+        auto combine = [&](uint32_t v) {
+            // 经典的位扰动算法，防止哈希冲突
+            seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        };
+        combine(q.local_ip);
+        combine(q.remote_ip);
+        combine((uint32_t)q.local_port  << 16 | q.remote_port);
+        return seed;
+    }
+};
+
+struct sockaddr_hasher {
+    size_t operator()(const sockaddr& q) const {
+        size_t seed = 0;
+        auto combine = [&](uint32_t v) {
+            // 经典的位扰动算法，防止哈希冲突
+            seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        };
+        combine(q.addr);
+        combine(q.port);
+        return seed;
+    }
+};
 
 enum class tcb_state {
     CLOSED, SYN_SENT, ESTABLISHED, LISTEN, SYN_RCVD, FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSING, CLOSE_WAIT, LAST_ACK
@@ -33,6 +71,13 @@ enum class tcp_flags : uint8_t {
     CWR = 1 << 7
 };
 
+struct udp_header {
+    uint16_t src_port;
+    uint16_t dst_port;
+    uint16_t size;
+    uint16_t checksum;
+} __attribute__((packed));
+
 struct tcp_header {
     uint16_t src_port;
     uint16_t dst_port;
@@ -46,16 +91,17 @@ struct tcp_header {
     uint16_t urgent_ptr;
 } __attribute__((packed));
 
-struct pseudo_tcp_header {
+struct pseudo_ip_header {
     uint32_t src_addr;
     uint32_t dst_addr;
     uint8_t  zero;
     uint8_t  protocol;
-    uint16_t tcp_length;
+    uint16_t data_length;
 } __attribute__((packed));
 
 constexpr uint8_t IP_PROTOCOL_ICMP = 0x01;
 constexpr uint8_t IP_PROTOCOL_TCP = 0x06;
+constexpr uint8_t IP_PROTOCOL_UDP = 0x11;
 
 typedef struct {
     uint8_t header_len : 4;

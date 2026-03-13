@@ -6,49 +6,10 @@
 #include <format.h>
 #include <unordered_map>
 
-// 约定：网络序存储
-struct tcp_quadruple {
-    uint32_t local_ip;
-    uint32_t remote_ip;
-    uint16_t local_port;
-    uint16_t remote_port;
-    bool operator==(const tcp_quadruple& o) const {
-        return local_ip == o.local_ip && remote_ip == o.remote_ip &&
-               local_port == o.local_port && remote_port == o.remote_port;
-    }
-} __attribute__((packed));
-
-struct tcp_hasher {
-    size_t operator()(const tcp_quadruple& q) const {
-        size_t seed = 0;
-        auto combine = [&](uint32_t v) {
-            // 经典的位扰动算法，防止哈希冲突
-            seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        };
-        combine(q.local_ip);
-        combine(q.remote_ip);
-        combine((uint32_t)q.local_port  << 16 | q.remote_port);
-        return seed;
-    }
-};
-
-struct sockaddr_hasher {
-    size_t operator()(const sockaddr& q) const {
-        size_t seed = 0;
-        auto combine = [&](uint32_t v) {
-            // 经典的位扰动算法，防止哈希冲突
-            seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        };
-        combine(q.addr);
-        combine(q.port);
-        return seed;
-    }
-};
-
-spinlock map_sockaddr_lock;
-spinlock map_quad_lock;
-std::unordered_map<sockaddr, TCBPtr, sockaddr_hasher> map_sockaddr_to_sock;
-std::unordered_map<tcp_quadruple, TCBPtr, tcp_hasher> map_quad_to_sock;
+static spinlock map_sockaddr_lock;
+static spinlock map_quad_lock;
+static std::unordered_map<sockaddr, TCBPtr, sockaddr_hasher> map_sockaddr_to_sock;
+static std::unordered_map<conn_quadruple, TCBPtr, conn_hasher> map_quad_to_sock;
 
 constexpr uint32_t DEFAULT_WINDOW_SIZE = (1 << 16) - 1;
 constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
@@ -87,7 +48,7 @@ static void destroy_tcb(pid_t, void* arg) {
         TCBPtr tcb = static_cast<TCBPtr&&>(*p); // 移动出来
         {
             SpinlockGuard guard(map_quad_lock);
-            map_quad_to_sock.erase(tcp_quadruple{
+            map_quad_to_sock.erase(conn_quadruple{
                 tcb->src_addr, tcb->dst_addr, tcb->src_port, tcb->dst_port});
         }
         // tcb在此作用域结束时析构，若为最后一个引用则通过~TCB()释放window，再kfree(TCB)
@@ -104,17 +65,17 @@ static void time_wait(TCBPtr tcb) {
 }
 
 int send_tcp_pack(TCBPtr tcb, uint8_t flags, const char* payload, size_t size) {
-    void* packet = kmalloc(sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size);
-    uint32_t packet_size = sizeof(pseudo_tcp_header) + sizeof(tcp_header) + size;
+    void* packet = kmalloc(sizeof(pseudo_ip_header) + sizeof(tcp_header) + size);
+    uint32_t packet_size = sizeof(pseudo_ip_header) + sizeof(tcp_header) + size;
     memset(packet, 0, packet_size);
-    pseudo_tcp_header* p_header = (pseudo_tcp_header*)packet;
-    tcp_header* t_header = (tcp_header*)((char*)packet + sizeof(pseudo_tcp_header));
+    pseudo_ip_header* p_header = (pseudo_ip_header*)packet;
+    tcp_header* t_header = (tcp_header*)((char*)packet + sizeof(pseudo_ip_header));
 
     p_header->src_addr = tcb->src_addr;
     p_header->dst_addr = tcb->dst_addr;
     p_header->protocol = IP_PROTOCOL_TCP;
     p_header->zero = 0;
-    p_header->tcp_length = htons(sizeof(tcp_header) + size);
+    p_header->data_length = htons(sizeof(tcp_header) + size);
 
     t_header->src_port = tcb->src_port;
     t_header->dst_port = tcb->dst_port;
@@ -126,7 +87,7 @@ int send_tcp_pack(TCBPtr tcb, uint8_t flags, const char* payload, size_t size) {
     t_header->window = htons(tcb->window_size - tcb->window_used_size);
     t_header->checksum = 0;
     t_header->urgent_ptr = 0;
-    memcpy(((char*)packet + sizeof(pseudo_tcp_header) + sizeof(tcp_header)), payload, size);
+    memcpy(((char*)packet + sizeof(pseudo_ip_header) + sizeof(tcp_header)), payload, size);
     t_header->checksum = checksum(packet, packet_size);
     int ret = send_ipv4((ipv4addr(tcb->dst_addr)), IP_PROTOCOL_TCP, t_header, sizeof(tcp_header) + size);
     if (ret >= 0) {
@@ -164,7 +125,7 @@ int tcp_close(socket& sock) {
             send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
             {
                 SpinlockGuard quad_guard(map_quad_lock);
-                map_quad_to_sock.erase(tcp_quadruple{
+                map_quad_to_sock.erase(conn_quadruple{
                     child->src_addr, child->dst_addr,
                     child->src_port, child->dst_port});
             }
@@ -222,7 +183,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
     tcb->dst_port = htons(port);
     {
         SpinlockGuard guard(map_quad_lock);
-        map_quad_to_sock[tcp_quadruple {.local_ip = tcb->src_addr, .remote_ip = tcb->dst_addr,
+        map_quad_to_sock[conn_quadruple {.local_ip = tcb->src_addr, .remote_ip = tcb->dst_addr,
                                         .local_port = tcb->src_port, .remote_port = tcb->dst_port}] = tcb;
     }
     // SEND SYN
@@ -372,7 +333,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     uint16_t dst_port = header->dst_port;
 
     uint32_t flags = spinlock_acquire(&map_quad_lock);
-    auto itr = map_quad_to_sock.find(tcp_quadruple {.local_ip = dst_ip, .remote_ip = src_ip,
+    auto itr = map_quad_to_sock.find(conn_quadruple {.local_ip = dst_ip, .remote_ip = src_ip,
                                .local_port = dst_port, .remote_port = src_port});
     if (itr == map_quad_to_sock.end()) { // 没在已有的连接找到
         spinlock_release(&map_quad_lock, flags);
@@ -436,7 +397,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
 
         SpinlockGuard quadGuard(map_quad_lock);
         // SYNACK发送成功后，我们就可以把自己放入四元组了
-        map_quad_to_sock[tcp_quadruple {.local_ip = tcb->src_addr, .remote_ip = tcb->dst_addr,
+        map_quad_to_sock[conn_quadruple {.local_ip = tcb->src_addr, .remote_ip = tcb->dst_addr,
                                         .local_port = tcb->src_port, .remote_port = tcb->dst_port}] = tcb;
         return;
     }

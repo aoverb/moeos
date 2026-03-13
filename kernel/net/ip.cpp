@@ -58,6 +58,7 @@ int send_ipv4(const ipv4addr& dst_ip, uint8_t protocol,
 
 void icmp_handler(uint16_t ip_header_size, char* buffer, uint16_t size);
 void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size);
+void udp_handler(uint16_t ip_header_size, char* buffer, uint16_t size);
 
 void ip_handler(char* buffer, uint16_t size) {
     ip_header* header = reinterpret_cast<ip_header*>(buffer);
@@ -85,6 +86,8 @@ void ip_handler(char* buffer, uint16_t size) {
         icmp_handler(header_size, buffer, ip_total_len);
     } else if (header->protocol == IP_PROTOCOL_TCP){
         tcp_handler(header_size, buffer, ip_total_len);
+    } else if (header->protocol == IP_PROTOCOL_UDP){
+        udp_handler(header_size, buffer, ip_total_len);
     }
     return;
 }
