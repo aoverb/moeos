@@ -21,6 +21,7 @@
 
 #include <driver/keyboard.h>
 #include <driver/pit.h>
+#include <driver/ata.hpp>
 #include <driver/vfs.hpp>
 #include <driver/tarfs.hpp>
 #include <driver/devfs.hpp>
@@ -299,6 +300,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     keyboard_init();
     pit_init();
     syscall_init();
+    ata_init();
     fs_init(saved, mod_count);
     process_init();
     signal_init();

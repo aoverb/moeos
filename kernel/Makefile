@@ -26,7 +26,9 @@ driver/devfs.o \
 driver/sockfs.o \
 driver/console.o \
 driver/pipefs.o \
-driver/rtl8139.o
+driver/rtl8139.o \
+driver/ata.o \
+driver/block.o
 
 NET_OBJS=\
 net/arp.o \
