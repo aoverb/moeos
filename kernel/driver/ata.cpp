@@ -141,7 +141,9 @@ void ata_init() {
     bd->total_sectors = total_sectors;
     bd->sector_size = 512;
     bd->block_size = 0; // 这个我们只有在挂载后才知道
-    // bd->read = ;
+    bd->fs = file_system::UNKNOWN;
+    bd->read = &block_read;
+    bd->write = &block_write;
 
     int ret = register_block_device(bd);
     if (ret == -1) {

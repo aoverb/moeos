@@ -28,6 +28,8 @@
 #include <driver/pipefs.hpp>
 #include <driver/sockfs.hpp>
 #include <driver/rtl8139.hpp>
+#include <driver/block.hpp>
+#include <driver/ext2.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -207,6 +209,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     init_devfs();
     init_pipefs();
     init_sockfs();
+    init_ext2fs();
 
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
@@ -217,6 +220,21 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
             panic("failed to mount root!");
         } else {
             printf("Root mounted!\n");
+        }
+    }
+
+    // 现在我们自己知道只有一块盘，可以强行指定挂载，后面有多块盘就得想办法适配了
+    for (int i = 0; i < bdev_cnt; ++i) {
+        if (bdev_list[i]->fs == file_system::EXT2) {
+            ext2_data* data = (ext2_data*)kmalloc(sizeof(ext2_data));
+            data->dev = bdev_list[i];
+            mounting_point* ret = v_mount(FS_DRIVER::EXT2FS, "/ext2", data);
+            if (ret == nullptr) {
+                printf("failed to mount ext2 block device to /ext2!\n");
+            } else {
+                printf("/ext2 mounted!\n");
+            }
+            break;
         }
     }
 
@@ -301,6 +319,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     pit_init();
     syscall_init();
     ata_init();
+    block_init();
     fs_init(saved, mod_count);
     process_init();
     signal_init();
