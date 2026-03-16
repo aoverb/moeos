@@ -1,9 +1,77 @@
 #include <driver/vfs.hpp>
 #include <driver/ext2.hpp>
 #include <kernel/mm.hpp>
+#include <unordered_map>
+#include <kernel/spinlock.hpp>
 #include <stdio.h>
 
 fs_operation ext2_fs_operation;
+
+constexpr uint32_t CACHE_ENRTY_COUNT = 40;
+
+struct cache_entry {
+    int block_no;
+    char* data; // 块数据
+    cache_entry* prev;
+    cache_entry* next;
+};
+
+struct cache_data {
+    cache_entry entry[CACHE_ENRTY_COUNT];
+    std::unordered_map<int, cache_entry*> map;
+    ext2_data* mp_data;
+    cache_entry* head;
+    spinlock cacheLock;
+};
+
+void detach(cache_entry* item) {
+    if (item->prev) item->prev->next = item->next;
+    if (item->next) item->next->prev = item->prev;
+}
+
+void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
+    if (recently_used == cache_data.head) return;
+    detach(recently_used);
+    cache_data.head->prev->next = recently_used;
+    recently_used->prev = cache_data.head->prev;
+    cache_data.head->prev = recently_used;
+    recently_used->next = cache_data.head;
+    cache_data.head = recently_used;
+}
+
+void cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
+    SpinlockGuard guard(cache_data.cacheLock);
+    auto itr = cache_data.map.find(block_no);
+    if (itr != cache_data.map.end()) {
+        memcpy(block_buffer, itr->second->data, cache_data.mp_data->dev->block_size);
+        insert_into_head(cache_data, itr->second);
+        return;
+    }
+
+    cache_data.mp_data->dev->read(cache_data.mp_data->dev, block_no, block_buffer);
+
+    // 把队列里面最近没使用的记录拿出来换成自己的
+    cache_entry* least_rused = cache_data.head->prev;
+    detach(least_rused);
+    memcpy(least_rused->data, block_buffer, cache_data.mp_data->dev->block_size);
+    cache_data.map.erase(least_rused->block_no);
+    least_rused->block_no = block_no;
+    cache_data.map[block_no] = least_rused;
+    insert_into_head(cache_data, least_rused);
+}
+
+void init_cache(ext2_data* mp_data) {
+    mp_data->cache_data = new (kmalloc(sizeof(cache_data))) cache_data();
+    cache_data& cache_data = *(mp_data->cache_data);
+    cache_data.mp_data = mp_data;
+    cache_data.head = &(cache_data.entry[0]);
+    for (int i = 0; i < CACHE_ENRTY_COUNT; ++i) {
+        cache_data.entry[i].prev = &(cache_data.entry[(i - 1 + CACHE_ENRTY_COUNT) % CACHE_ENRTY_COUNT]);
+        cache_data.entry[i].next = &(cache_data.entry[(i + 1) % CACHE_ENRTY_COUNT]);
+        cache_data.entry[i].data = ((char*)kmalloc(mp_data->dev->block_size));
+        cache_data.entry[i].block_no = -1;
+    }
+}
 
 void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_idx,
     uint32_t block_count, char* buffer) {

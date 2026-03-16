@@ -73,6 +73,8 @@ struct ext2_super_block {
     uint16_t s_def_resgid;          /* 保留 GID */
 };
 
+struct cache_data;
+
 struct ext2_data {
     block_device* dev;
     ext2_super_block sb;
@@ -82,6 +84,7 @@ struct ext2_data {
 
     ext2_inode root_inode;
     uint32_t block_num[4]; // 记录每一级指针有多少个数据块，0级是直接指针
+    cache_data* cache_data;
 };
 
 void init_ext2fs();
