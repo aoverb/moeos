@@ -81,7 +81,7 @@ struct ext2_data {
     uint32_t bg_num;
 
     ext2_inode root_inode;
-    uint32_t block_num[4];
+    uint32_t block_num[4]; // 记录每一级指针有多少个数据块，0级是直接指针
 };
 
 void init_ext2fs();

@@ -1,5 +1,6 @@
 #include <driver/vfs.hpp>
 #include <driver/ext2.hpp>
+#include <kernel/mm.hpp>
 #include <stdio.h>
 
 fs_operation ext2_fs_operation;
@@ -201,6 +202,57 @@ static int mount(mounting_point* mp) {
     return 0;
 }
 
+int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
+    if (get_inode_by_id(data, inode_id, inode) < 0) {
+        kfree(inode);
+        return -1;
+    }
+
+    if (offset >= inode->i_size) {
+        kfree(inode);
+        return 0;
+    }
+
+    if (offset + size > inode->i_size) {
+        size = inode->i_size - offset;
+    }
+
+    uint32_t read_size = size;
+
+    char* tmp_block_buffer = static_cast<char*>(kmalloc(block_size));
+    // 读左端点块
+    if (offset % block_size != 0) {
+        int left_block = offset / block_size;
+        read_block_in_inode(data, inode, left_block, 1, tmp_block_buffer);
+        int left_read_size = size < block_size - (offset % block_size) ? size : block_size - (offset % block_size);
+        memcpy(buffer, tmp_block_buffer + (offset % block_size), left_read_size);
+        offset += left_read_size;
+        buffer += left_read_size;
+        size -= left_read_size;
+    }
+    
+    // 读中间的完整块
+    int mid_block = offset / block_size;
+    int mid_block_count = size / block_size;
+    read_block_in_inode(data, inode, mid_block, mid_block_count, buffer);
+    offset += mid_block_count * block_size;
+    buffer += mid_block_count * block_size;
+    size -= mid_block_count * block_size;
+
+    // 读右端点块
+    if (size != 0) {
+        int right_block = mid_block + mid_block_count;
+        read_block_in_inode(data, inode, right_block, 1, tmp_block_buffer);
+        memcpy(buffer, tmp_block_buffer, size);
+    }
+    kfree(tmp_block_buffer);
+    kfree(inode);
+    return read_size;
+}
+
 int stat(mounting_point* mp, const char* path, file_stat* out) {
     ext2_data* data = (ext2_data*)mp->data;
     if (strcmp(path, "/") == 0) {
@@ -218,7 +270,7 @@ void init_ext2fs() {
     ext2_fs_operation.mount    = &mount;
     ext2_fs_operation.unmount  = nullptr;
     ext2_fs_operation.open     = nullptr;
-    ext2_fs_operation.read     = nullptr;
+    ext2_fs_operation.read     = &read;
     ext2_fs_operation.write    = nullptr;
     ext2_fs_operation.close    = nullptr;
     ext2_fs_operation.opendir  = nullptr;
