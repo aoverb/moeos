@@ -2,6 +2,7 @@
 #define _DRIVER_EXT2_H
 
 #include <stdint.h>
+#include <driver/vfs.hpp>
 #include <driver/block.hpp>
 #ifdef __cplusplus
 extern "C" {
@@ -71,6 +72,8 @@ struct ext2_super_block {
     uint32_t s_rev_level;           /* 主版本号 */
     uint16_t s_def_resuid;          /* 保留 UID */
     uint16_t s_def_resgid;          /* 保留 GID */
+    uint32_t s_first_ino;           /* offset 84: 第一个非保留 inode */
+    uint16_t s_inode_size;          /* offset 88: 磁盘上 inode 大小 */
 };
 
 struct cache_data;
@@ -88,6 +91,7 @@ struct ext2_data {
 };
 
 void init_ext2fs();
+int ext2_read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size);
 
 #ifdef __cplusplus
 }

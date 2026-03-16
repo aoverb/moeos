@@ -193,7 +193,7 @@ static int get_inode_by_id(ext2_data* data, uint32_t id, ext2_inode* out_inode) 
     
     uint32_t inode_table_block_id = gd.bg_inode_table; // 这里拿到的是bg_inode_table开始的块号
 
-    size_t inode_size = sizeof(ext2_inode);
+    size_t inode_size = data->sb.s_inode_size;
     size_t block_size = data->dev->block_size;
     uint32_t inodes_count_in_each_block = block_size / inode_size;
 
@@ -205,7 +205,7 @@ static int get_inode_by_id(ext2_data* data, uint32_t id, ext2_inode* out_inode) 
 
     void* buffer = kmalloc(block_size);
     data->dev->read(data->dev, inode_table_block_id + block_idx,  buffer);
-    out_inode = (static_cast<ext2_inode*>(buffer) + offset);
+    *out_inode = *reinterpret_cast<ext2_inode*>((static_cast<char*>(buffer) + offset * inode_size));
     kfree(buffer);
     return 0;
 }
@@ -270,7 +270,7 @@ static int mount(mounting_point* mp) {
     return 0;
 }
 
-int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+int ext2_read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     ext2_data* data = (ext2_data*)mp->data;
     const size_t block_size = data->dev->block_size; 
     ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
@@ -338,7 +338,7 @@ void init_ext2fs() {
     ext2_fs_operation.mount    = &mount;
     ext2_fs_operation.unmount  = nullptr;
     ext2_fs_operation.open     = nullptr;
-    ext2_fs_operation.read     = &read;
+    ext2_fs_operation.read     = nullptr;
     ext2_fs_operation.write    = nullptr;
     ext2_fs_operation.close    = nullptr;
     ext2_fs_operation.opendir  = nullptr;
@@ -349,5 +349,5 @@ void init_ext2fs() {
     ext2_fs_operation.set_poll = nullptr;
     ext2_fs_operation.peek     = nullptr;
     ext2_fs_operation.sock_opr = nullptr;
-    register_fs_operation(FS_DRIVER::EXT2FS, nullptr); // 先让ext2挂载失败
+    register_fs_operation(FS_DRIVER::EXT2FS, &ext2_fs_operation); // 先让ext2挂载失败
 }
