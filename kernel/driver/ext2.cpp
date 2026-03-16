@@ -39,16 +39,18 @@ void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
     cache_data.head = recently_used;
 }
 
-void cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
+int cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
     SpinlockGuard guard(cache_data.cacheLock);
     auto itr = cache_data.map.find(block_no);
     if (itr != cache_data.map.end()) {
         memcpy(block_buffer, itr->second->data, cache_data.mp_data->dev->block_size);
         insert_into_head(cache_data, itr->second);
-        return;
+        return 0;
     }
 
-    cache_data.mp_data->dev->read(cache_data.mp_data->dev, block_no, block_buffer);
+    if (cache_data.mp_data->dev->read(cache_data.mp_data->dev, block_no, block_buffer) < 0) {
+        return -1;
+    }
 
     // 把队列里面最近没使用的记录拿出来换成自己的
     cache_entry* least_rused = cache_data.head->prev;
@@ -58,6 +60,7 @@ void cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
     least_rused->block_no = block_no;
     cache_data.map[block_no] = least_rused;
     insert_into_head(cache_data, least_rused);
+    return 0;
 }
 
 void init_cache(ext2_data* mp_data) {
@@ -81,7 +84,7 @@ void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_
         if (blk == 0) { // 空洞块，清零即可
             memset(buffer + i * block_size, 0, block_size);
         } else {
-            data->dev->read(data->dev, blk, buffer + i * block_size);
+            cache_read(*data->cache_data, blk, buffer + i * block_size);
         }
     }
     return;
@@ -96,12 +99,12 @@ void read_indirect_block(ext2_data* data, uint32_t cur_block, uint32_t depth,
         return;
     }
     if (depth == 0) { // 直接指针
-        data->dev->read(data->dev, cur_block, buffer);
+        cache_read(*data->cache_data, cur_block, buffer);
         return;
     }
 
     uint32_t* buf = (uint32_t*)kmalloc(block_size);
-    if (data->dev->read(data->dev, cur_block, buf) < 0) {
+    if (cache_read(*data->cache_data, cur_block, buf) < 0) {
         // 记录错误
         kfree(buf);
         return;
@@ -204,7 +207,7 @@ static int get_inode_by_id(ext2_data* data, uint32_t id, ext2_inode* out_inode) 
     uint32_t offset = idx_in_group % inodes_count_in_each_block;
 
     void* buffer = kmalloc(block_size);
-    data->dev->read(data->dev, inode_table_block_id + block_idx,  buffer);
+    cache_read(*data->cache_data, inode_table_block_id + block_idx,  buffer);
     *out_inode = *reinterpret_cast<ext2_inode*>((static_cast<char*>(buffer) + offset * inode_size));
     kfree(buffer);
     return 0;
@@ -266,6 +269,7 @@ static int mount(mounting_point* mp) {
     data->block_num[1] = data->block_num[0] * data->dev->block_size / sizeof(uint32_t);
     data->block_num[2] = data->block_num[1] * data->dev->block_size / sizeof(uint32_t);
     data->block_num[3] = data->block_num[2] * data->dev->block_size / sizeof(uint32_t);
+    init_cache(data);
     get_inode_by_id(data, 2, &data->root_inode);
     return 0;
 }
