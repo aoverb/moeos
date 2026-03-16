@@ -81,9 +81,7 @@ struct ext2_data {
     uint32_t bg_num;
 
     ext2_inode root_inode;
-    uint32_t blocks_in_first_class_pointer;
-    uint32_t blocks_in_second_class_pointer;
-    uint32_t blocks_in_third_class_pointer;
+    uint32_t block_num[4];
 };
 
 void init_ext2fs();
