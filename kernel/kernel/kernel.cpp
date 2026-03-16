@@ -234,11 +234,6 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
             } else {
                 printf("/ext2 mounted!\n");
             }
-            char* buffer = (char*)kmalloc(262144);
-            int len = ext2_read(ret, 76, 0, buffer, 131072);
-            if (len < 0) break;
-            buffer[len] = '\0';
-            printf("len=%d, notice: %s\n", len, buffer);
             break;
         }
     }

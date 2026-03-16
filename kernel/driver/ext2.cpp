@@ -274,7 +274,71 @@ static int mount(mounting_point* mp) {
     return 0;
 }
 
-int ext2_read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
+constexpr uint8_t FILE_TYPE_DIR = 2;
+
+int dir_lookup(ext2_data* data, uint32_t inode_id, const char* name, int insist_type = -1) {
+    if (inode_id == 0) return -1;
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
+    if (get_inode_by_id(data, inode_id, inode) < 0) {
+        kfree(inode);
+        return -1;
+    }
+
+    uint32_t offset = 0;
+    char* tmp_block_buffer = static_cast<char*>(kmalloc(block_size));
+    while (offset < inode->i_size) {
+        read_block_in_inode(data, inode, offset / block_size, 1, tmp_block_buffer);
+        ext2_dir_entry* entry = reinterpret_cast<ext2_dir_entry*>(tmp_block_buffer + offset % block_size);
+        if (entry->rec_len == 0) break;
+        if (strlen(name) == entry->name_len && strncmp(name, entry->name, strlen(name)) == 0) {
+            int inode_num = entry->inode;
+            int inode_file_type = entry->file_type;
+            kfree(inode);
+            kfree(tmp_block_buffer);
+            return (insist_type == -1 || insist_type == inode_file_type) ? inode_num : -2;
+        }
+        offset += entry->rec_len;
+    }
+    kfree(inode);
+    kfree(tmp_block_buffer);
+    return 0;
+}
+
+int relative_lookup(ext2_data* data, uint32_t inode_id, const char* path) {
+    if (strlen(path) == 0 || inode_id == 0) return inode_id;
+    const size_t block_size = data->dev->block_size; 
+    if (path[0] == '/') ++path;
+    int par_node = inode_id;
+    char name[255];
+    int name_len = 0;
+    for (int i = 0; i < strlen(path) + 1; ++i) {
+        if (path[i] == '/' || path[i] == '\0') {
+            if (name_len == 0) break;
+            name[name_len++] = '\0';
+            par_node = dir_lookup(data, par_node, name, path[i] == '/' ? FILE_TYPE_DIR : -1);
+            if (par_node <= 0) break;
+            name_len = 0;
+        } else {
+            name[name_len++] = path[i];
+        }
+    }
+    return par_node;
+}
+
+int unmount(mounting_point* mp) {
+    return -1;
+}
+
+constexpr uint32_t ROOT_INODE_NO = 2;
+
+int open(mounting_point* mp, const char* path, uint8_t mode) {
+    ext2_data* data = (ext2_data*)mp->data;
+    int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
+    return inode_no <= 0 ? -1 : inode_no;
+}
+
+int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     ext2_data* data = (ext2_data*)mp->data;
     const size_t block_size = data->dev->block_size; 
     ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
@@ -325,33 +389,123 @@ int ext2_read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buff
     return read_size;
 }
 
+int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
+    return -1;
+}
+
+int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
+    return 0;
+}
+
+constexpr uint32_t MODE_FTYPE_DIR = 4;
+
 int stat(mounting_point* mp, const char* path, file_stat* out) {
     ext2_data* data = (ext2_data*)mp->data;
     if (strcmp(path, "/") == 0) {
         out->group_id = (data->root_inode.i_gid_high << 16) | data->root_inode.i_gid;
+        out->owner_id = (data->root_inode.i_uid_high << 16) | data->root_inode.i_uid;
         out->size = data->root_inode.i_fsize;
         out->mode = data->root_inode.i_mode;
         out->last_modified = data->root_inode.i_mtime;
         out->type = 0;
         return 0;
     }
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
+    int inode_id = relative_lookup(data, ROOT_INODE_NO, path);
+    if (inode_id <= 0) return -1;
+    if (get_inode_by_id(data, inode_id, inode) < 0) {
+        kfree(inode);
+        return -1;
+    }
+    out->group_id = (inode->i_gid_high << 16) | inode->i_gid;
+    out->size = inode->i_size;
+    out->mode = inode->i_mode;
+    out->last_modified = inode->i_mtime;
+    out->name[0] = '\0';
+    out->owner_name[0] = '\0';
+    out->group_name[0] = '\0';
+    out->owner_id = (inode->i_uid_high << 16) | inode->i_uid;
+    out->type = (inode->i_mode & 0xF000) >> 12 == MODE_FTYPE_DIR ? 0 : 1;
+    kfree(inode);
+    return 0;
+}
+
+int opendir(mounting_point* mp, const char* path) {
+    ext2_data* data = (ext2_data*)mp->data;
+    int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
+    return inode_no == 0 ? -1 : inode_no;
+}
+
+int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
+    if (inode_id == 0) return -1;
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
+    if (get_inode_by_id(data, inode_id, inode) < 0) {
+        kfree(inode);
+        return -1;
+    }
+    
+    uint32_t read_offset = 0;
+    char* tmp_block_buffer = static_cast<char*>(kmalloc(block_size));
+    while (read_offset < inode->i_size) {
+        read_block_in_inode(data, inode, read_offset / block_size, 1, tmp_block_buffer);
+        ext2_dir_entry* entry = reinterpret_cast<ext2_dir_entry*>(tmp_block_buffer + read_offset % block_size);
+        if (entry->rec_len == 0) break;
+        if (entry->inode != 0 && offset-- == 0) {
+            out->inode = entry->inode;
+            strncpy(out->name, entry->name, entry->name_len);
+            out->name[entry->name_len] = '\0';
+            out->type = entry->file_type;
+            kfree(inode);
+            kfree(tmp_block_buffer);
+            return 1;
+        }
+        read_offset += entry->rec_len;
+    }
+    kfree(inode);
+    kfree(tmp_block_buffer);
+    return 0;
+}
+
+int closedir(mounting_point* mp, uint32_t inode_id) {
+    return 0;
+}
+
+int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
+    return -1;
+}
+
+int peek(mounting_point* mp, uint32_t inode_id) {
+    if (inode_id == 0) return -1;
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size;
+    ext2_inode* inode = static_cast<ext2_inode*>(kmalloc(sizeof(ext2_inode)));
+    get_inode_by_id(data, inode_id, inode);
+    int size = inode->i_size;
+    kfree(inode);
+    return size;
+}
+
+int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
     return -1;
 }
 
 void init_ext2fs() {
     ext2_fs_operation.mount    = &mount;
-    ext2_fs_operation.unmount  = nullptr;
-    ext2_fs_operation.open     = nullptr;
-    ext2_fs_operation.read     = nullptr;
-    ext2_fs_operation.write    = nullptr;
-    ext2_fs_operation.close    = nullptr;
-    ext2_fs_operation.opendir  = nullptr;
-    ext2_fs_operation.readdir  = nullptr;
-    ext2_fs_operation.closedir = nullptr;
+    ext2_fs_operation.unmount  = &unmount;
+    ext2_fs_operation.open     = &open;
+    ext2_fs_operation.read     = &read;
+    ext2_fs_operation.write    = &write;
+    ext2_fs_operation.close    = &close;
+    ext2_fs_operation.opendir  = &opendir;
+    ext2_fs_operation.readdir  = &readdir;
+    ext2_fs_operation.closedir = &closedir;
     ext2_fs_operation.stat     = &stat;
-    ext2_fs_operation.ioctl    = nullptr;
-    ext2_fs_operation.set_poll = nullptr;
-    ext2_fs_operation.peek     = nullptr;
+    ext2_fs_operation.ioctl    = &ioctl;
+    ext2_fs_operation.set_poll = &set_poll;
+    ext2_fs_operation.peek     = &peek;
     ext2_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::EXT2FS, &ext2_fs_operation); // 先让ext2挂载失败
 }

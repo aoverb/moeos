@@ -2,11 +2,18 @@
 #define _DRIVER_EXT2_H
 
 #include <stdint.h>
-#include <driver/vfs.hpp>
 #include <driver/block.hpp>
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct ext2_dir_entry {
+    uint32_t inode;
+    uint16_t rec_len;
+    uint8_t  name_len;
+    uint8_t  file_type;   // 1=普通文件, 2=目录, 7=符号链接 ...
+    char     name[];      // 不以 \0 结尾！
+};
 
 struct ext2_inode {
     uint16_t  i_mode;
@@ -91,7 +98,6 @@ struct ext2_data {
 };
 
 void init_ext2fs();
-int ext2_read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size);
 
 #ifdef __cplusplus
 }
