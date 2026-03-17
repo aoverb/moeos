@@ -290,7 +290,7 @@ static size_t read_block_in_inode(ext2_data* data, const ext2_inode* inode,
     if (block_idx < data->block_num[3]) {
         uint32_t read_count = (data->block_num[3] - block_idx) < block_count ?
             (data->block_num[3] - block_idx) : block_count;
-        read_indirect_block(data, inode->i_block[14], 3, block_idx, read_count, buffer);;
+        read_indirect_block(data, inode->i_block[14], 3, block_idx, read_count, buffer);
         block_count -= read_count;
         total_read_count += read_count;
         block_idx = 0;
@@ -301,6 +301,52 @@ static size_t read_block_in_inode(ext2_data* data, const ext2_inode* inode,
 }
 
 constexpr uint32_t SECTOR_SIZE = 512;
+
+static int get_phys_block_no_in_inode(ext2_data* data, ext2_inode* inode, uint32_t idx) {
+    const size_t block_size = data->dev->block_size; 
+    const size_t blkcnt_per_block = block_size / 4;
+    if (idx < 12) { // 可以通过加直接指针解决
+        return inode->i_block[idx];
+    }
+
+    idx -= 12;
+
+    if (idx < data->block_num[1]) {
+        if (inode->i_block[12] == 0) return 0;
+        auto direct_ptr = get_cache_ptr(*data->cache_data, inode->i_block[12]);
+        return *((uint32_t*)direct_ptr.get() + idx);
+    }
+
+    idx -= data->block_num[1];
+    if (idx < data->block_num[2]) {
+        if (inode->i_block[13] == 0) return 0;
+        auto first_class_ptr = get_cache_ptr(*data->cache_data, inode->i_block[13]);
+        uint32_t* first_class = (uint32_t*)first_class_ptr.get() +
+            idx / blkcnt_per_block;
+        if (*first_class == 0) return 0;
+        auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
+        return *((uint32_t*)direct_ptr.get() + idx % blkcnt_per_block);
+    }
+
+    idx -= data->block_num[2];
+    if (idx < data->block_num[3]) {
+        if (inode->i_block[14] == 0) return 0;
+        auto second_class_ptr = get_cache_ptr(*data->cache_data, inode->i_block[14]);
+        uint32_t* second_class = (uint32_t*)second_class_ptr.get() +
+                                  idx / blkcnt_per_block / blkcnt_per_block;
+        if (*second_class == 0) return 0;
+        auto first_class_ptr = get_cache_ptr(*data->cache_data, *second_class);
+        uint32_t* first_class = (uint32_t*)first_class_ptr.get() +
+            (idx / blkcnt_per_block) % blkcnt_per_block;
+        if (*first_class == 0) return 0;
+        auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
+        return *((uint32_t*)direct_ptr.get() + idx % blkcnt_per_block);
+
+    }
+
+    return 0;
+}
+
 // 在insert_idx插入一个指定的物理块，如果这个地方已经有一个物理块，函数返回-1
 static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
     uint32_t block_no, uint32_t insert_idx) {
@@ -581,6 +627,65 @@ int relative_lookup(ext2_data* data, uint32_t inode_id, const char* path) {
         }
     }
     return par_node;
+}
+
+int add_entry_to_dir(ext2_data* data, uint32_t dir_inode_no, uint32_t entry_inode_no, uint8_t file_type,
+    const char* name) {
+    ext2_inode dir_inode;
+    if (get_inode_by_id(data, dir_inode_no, &dir_inode) < 0) {
+        return -1;
+    }
+    uint16_t rec_len;
+    rec_len = sizeof(entry_inode_no) + sizeof(rec_len) + sizeof(file_type) + sizeof(uint8_t) + // 最后一个是name_len
+              + strlen(name);
+    rec_len = (rec_len + 3) / 4 * 4; // 四字节对齐
+
+    const size_t block_size = data->dev->block_size; 
+
+    uint32_t block_num = (dir_inode.i_size + block_size - 1) / block_size;
+    for (int i = 0; i < block_num; ++i) {
+        uint32_t read_offset = 0;
+        int phys_block_no = get_phys_block_no_in_inode(data, &dir_inode, i);
+        auto cache_ptr = get_cache_ptr(*data->cache_data, phys_block_no);
+        while (read_offset < block_size) {
+            ext2_dir_entry* entry = reinterpret_cast<ext2_dir_entry*>(cache_ptr.get() + read_offset);
+            size_t old_entry_actual_len = (8 + entry->name_len + 3) / 4 * 4;
+            if (entry->rec_len == 0) break;
+            if (entry->rec_len > old_entry_actual_len && entry->rec_len - old_entry_actual_len >= rec_len) {
+                ext2_dir_entry* new_entry = (ext2_dir_entry*)(cache_ptr.get() + read_offset + old_entry_actual_len);
+                new_entry->file_type = file_type;
+                new_entry->inode = entry_inode_no;
+                memcpy(new_entry->name, name, strlen(name));
+                new_entry->name_len = strlen(name);
+                // 记得更新旧条目的rec_len
+                
+                size_t remain_len = entry->rec_len - old_entry_actual_len;
+                entry->rec_len = old_entry_actual_len;
+                new_entry->rec_len = remain_len;
+                taint(*data->cache_data, phys_block_no);
+                return 0;
+            }
+            read_offset += entry->rec_len;
+        }
+    }
+
+    // 找不到可写的地方，插入新块写入
+    int new_blk = block_alloc(data);
+    if (new_blk < 0) return -1;
+    insert_block_in_inode(data, &dir_inode, new_blk, block_num);
+    auto cache_ptr = get_cache_ptr(*data->cache_data, new_blk);
+    memset(cache_ptr.get(), 0, block_size);
+    ext2_dir_entry* new_entry = (ext2_dir_entry*)cache_ptr.get();
+    new_entry->file_type = file_type;
+    new_entry->inode = entry_inode_no;
+    memcpy(new_entry->name, name, strlen(name));
+    new_entry->name_len = strlen(name);
+    new_entry->rec_len = block_size;
+    taint(*data->cache_data, new_blk);
+
+    dir_inode.i_size += block_size;
+    set_inode_by_id(data, dir_inode_no, &dir_inode);
+    return 0;
 }
 
 int unmount(mounting_point* mp) {
