@@ -43,6 +43,7 @@ void taint(cache_data& cache_data, int block_no) {
 void detach(cache_entry* item) {
     if (item->prev) item->prev->next = item->next;
     if (item->next) item->next->prev = item->prev;
+    item->prev = item->next = nullptr;
 }
 
 void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
