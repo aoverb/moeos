@@ -72,8 +72,11 @@ public:
         rhs.raw = nullptr;
         rhs.cb = nullptr;
     }
-    shared_ptr<T> get() {
-        return *this;
+    T* get() {
+        return raw;
+    }
+    int refcnt() {
+        return refcnt;
     }
     T* operator->() const {
         return raw;

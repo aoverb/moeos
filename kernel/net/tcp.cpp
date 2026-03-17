@@ -122,7 +122,7 @@ int tcp_close(socket& sock) {
         while (!tcb->accepted_queue.empty()) {
             TCBPtr child = tcb->accepted_queue.front();
             tcb->accepted_queue.pop_into(child);
-            send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+            send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
             {
                 SpinlockGuard quad_guard(map_quad_lock);
                 map_quad_to_sock.erase(conn_quadruple{
@@ -142,7 +142,7 @@ int tcp_close(socket& sock) {
                 if (child->listener == &sock &&
                     child->state == tcb_state::SYN_RCVD) {
                     it = map_quad_to_sock.erase(it);
-                    send_tcp_pack(child.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+                    send_tcp_pack(child, (uint8_t)tcp_flags::RST, nullptr, 0);
                     // child的shared_ptr在此作用域结束时自动释放
                 } else {
                     ++it;
@@ -152,10 +152,10 @@ int tcp_close(socket& sock) {
     }
     // 连接关闭都发不出去也太衰了，但这里也只有三次机会
     if (tcb->state == tcb_state::ESTABLISHED) {
-        send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::FIN_WAIT1;
     } else if (tcb->state == tcb_state::CLOSE_WAIT) {
-        send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
+        send_tcp_pack(tcb, ((uint8_t)tcp_flags::FIN | (uint8_t)tcp_flags::ACK), nullptr, 0);
         tcb->state = tcb_state::LAST_ACK;
     } else {
         time_wait(tcb);
@@ -171,7 +171,7 @@ int tcp_bind(TCBPtr tcb, sockaddr* bind_conf) {
 
 int tcp_ioctl(TCBPtr& tcb, const char* cmd, void* arg) {
     if (strcmp(cmd, "SOCK_IOC_BIND") == 0) {
-        return tcp_bind(tcb.get(), reinterpret_cast<sockaddr*>(arg));
+        return tcp_bind(tcb, reinterpret_cast<sockaddr*>(arg));
     }
     return -1;
 }
@@ -189,7 +189,7 @@ int tcp_connect(socket& sock, uint32_t addr, uint16_t port) {
                                         .local_port = tcb->src_port, .remote_port = tcb->dst_port}] = tcb;
     }
     // SEND SYN
-    if (send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::SYN, nullptr, 0) < 0) {
+    if (send_tcp_pack(tcb, (uint8_t)tcp_flags::SYN, nullptr, 0) < 0) {
         spinlock_release(&(tcb->lock), flags);
         return -1;
     }
@@ -300,7 +300,7 @@ int tcp_read(socket& sock, char* buffer, uint32_t size) {
 
 int tcp_write(socket& sock, char* buffer, uint32_t size) {
     TCBPtr tcb = sock.data.tcp.block;
-    int ret = send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, buffer, size);
+    int ret = send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, buffer, size);
     return ret;
 }
 
@@ -382,13 +382,13 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             if (listener_tcb->accepted_queue.size() + listener_tcb->pending_count >=
                 listener_tcb->accepted_queue_size) {
                 // 接受队列满了，重置连接
-                send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::RST, nullptr, 0);
+                send_tcp_pack(tcb, (uint8_t)tcp_flags::RST, nullptr, 0);
                 // tcb的shared_ptr在此作用域结束时自动释放（~TCB()会kfree(window)）
                 return;
             }
             listener_tcb->pending_count++;
         }
-        if (send_tcp_pack(tcb.get(), ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0) < 0) {
+        if (send_tcp_pack(tcb, ((uint8_t)tcp_flags::SYN | (uint8_t)tcp_flags::ACK), nullptr, 0) < 0) {
             {
                 SpinlockGuard listener_guard(listener_tcb->lock);
                 listener_tcb->pending_count--;
@@ -438,7 +438,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
             break;
         }
         tcb->ack = ntohl(header->seq_num) + 1; // 下一次希望收到的：SYN出来的序列号，加一个虚拟字节
-        send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
+        send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
         tcb->state = tcb_state::ESTABLISHED;
         {
             SpinlockGuard guard(process_list_lock);
@@ -453,7 +453,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
     case tcb_state::TIME_WAIT:
         if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) {
             // 这回不用加ACK了，我们之前肯定加过了
-            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
             // 这里不重置定时器，就相当于定时器是限定"尝试发送所有的最后一个ACK"的尝试周期
             // 你也可以重置，这样每次尝试发最后一个ACK都是独立计时的，我这里就简单实现了
         }
@@ -478,7 +478,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         } else if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 如果收到了FIN但是没有ACK，那就是刚好对端也在关闭连接
             tcb->state = tcb_state::CLOSING; // 那就转成CLOSING
             tcb->ack = ntohl(header->seq_num) + 1; // FIN会占一个虚拟字节
-            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
             // 注意这里虽然还是会跑到下面，但是会因为不带ACK，对方的数据被丢弃。
             // 不过如果真是这样，对方在FIN_WAIT1的时候同时发FIN，还不带ACK地把数据发过来，也太不讲规矩了吧。
             // 这种情况下，他的数据丢掉就丢掉了。
@@ -518,11 +518,11 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
         tcb->window_used_size += payload_size;
         tcb->window_tail = (tcb->window_tail + payload_size) % tcb->window_size;
         tcb->ack += payload_size;
-        send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0);
+        send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0);
         wake_all_queue(sock);
         if ((header->flags & (uint8_t)tcp_flags::FIN) != 0) { // 对端通知，后面不发数据了
             tcb->ack += 1;
-            send_tcp_pack(tcb.get(), (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
+            send_tcp_pack(tcb, (uint8_t)tcp_flags::ACK, nullptr, 0); // 好
             if (tcb->state == tcb_state::FIN_WAIT2) { // 如果我们实际上是FIN_WAIT2
                 tcb->state = tcb_state::TIME_WAIT;
                 time_wait(tcb);
