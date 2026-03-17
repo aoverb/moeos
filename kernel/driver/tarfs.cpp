@@ -301,7 +301,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
     return tar_read(data, inode_id, offset, buffer, size);
 }
 
-static int write(mounting_point*, uint32_t, const char*, uint32_t) {
+static int write(mounting_point*, uint32_t, uint32_t, const char*, uint32_t) {
     // read-only filesystem
     return -1;
 }

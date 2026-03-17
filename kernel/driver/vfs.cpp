@@ -237,6 +237,7 @@ int v_read(PCB* proc, int fd_pos, char* buffer, uint32_t size) {
 int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size) {
     mounting_point* mp;
     uint32_t inode_id;
+    uint32_t offset;
 
     {
         SpinlockGuard guard(vfs_lock);
@@ -247,10 +248,18 @@ int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size) {
             if (!fd || !fd->mp) return -1;
             mp = fd->mp;
             inode_id = fd->inode_id;
+            offset = fd->offset;
         }
     }
 
-    return mp->operations->write(mp, inode_id, buffer, size);
+    int ret = mp->operations->write(mp, inode_id, offset, buffer, size);
+
+    if (ret > 0) {
+        SpinlockGuard guard(proc->plock);
+        proc->fd[fd_pos]->offset += ret;
+    }
+
+    return ret;
 }
 
 // 调用者必须已持有 vfs_lock

@@ -152,7 +152,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t, char* buffer, u
     return -1;
 }
 
-static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
+static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     if (!mp->data || (MAX_SOCK_NUM <= inode_id)) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
     if (data->sock[inode_id].valid == 0) return -1;

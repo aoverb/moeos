@@ -62,7 +62,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
     return item->entry[inode_id].opr->read(buffer, offset, size);
 }
 
-static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
+static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
     return item->entry[inode_id].opr->write(buffer, size);

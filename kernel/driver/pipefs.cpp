@@ -176,7 +176,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     return read_cnt;
 }
 
-static int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
+static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     if (!mp->data) return -1;
     pipe_data* data = reinterpret_cast<pipe_data*>(mp->data);
     if (!data->entry[inode_id]) return -1;

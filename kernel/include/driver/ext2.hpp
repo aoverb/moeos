@@ -90,7 +90,7 @@ struct ext2_data {
     ext2_super_block sb;
     uint32_t sb_block_num;
     uint32_t sb_offset;
-    
+    uint32_t inode_size;
     ext2_group_desc* gdt;
     uint32_t bg_num;
 

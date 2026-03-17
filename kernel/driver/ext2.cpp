@@ -117,10 +117,10 @@ int block_alloc(ext2_data* data) {
         if (gd.bg_free_blocks_count == 0) continue;
         shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_block_bitmap);
         for (int j = 0; j < block_size; ++j) {
-            if (cache_ptr.get()[j] == 0xFF) continue;
+            if ((uint8_t)cache_ptr.get()[j] == 0xFF) continue;
             // 找到了空闲的块
             // 下面找到最低的0在哪个位置
-            int pos =  __builtin_ctz(~cache_ptr.get()[j]);
+            int pos = __builtin_ctz(~(uint8_t)cache_ptr.get()[j]);
             cache_ptr.get()[j] |= (1 << pos);
             taint(*data->cache_data, gd.bg_block_bitmap);
             --gd.bg_free_blocks_count;
@@ -154,10 +154,10 @@ int inode_alloc(ext2_data* data) {
         if (gd.bg_free_inodes_count == 0) continue;
         shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_inode_bitmap);
         for (int j = 0; j < data->sb.s_inodes_per_group / 8; ++j) {
-            if (cache_ptr.get()[j] == 0xFF) continue;
+            if ((uint8_t)cache_ptr.get()[j] == 0xFF) continue;
             // 找到了空闲的inode
             // 下面找到最低的0在哪个位置
-            int pos =  __builtin_ctz(~cache_ptr.get()[j]);
+            int pos = __builtin_ctz(~(uint8_t)cache_ptr.get()[j]);
             cache_ptr.get()[j] |= (1 << pos);
             taint(*data->cache_data, gd.bg_inode_bitmap);
             --gd.bg_free_inodes_count;
@@ -474,7 +474,7 @@ static int set_inode_by_id(ext2_data* data, uint32_t id, const ext2_inode* in_in
     
     uint32_t inode_table_block_id = gd.bg_inode_table; // 这里拿到的是bg_inode_table开始的块号
 
-    size_t inode_size = data->sb.s_inode_size;
+    size_t inode_size = data->inode_size;
     size_t block_size = data->dev->block_size;
     uint32_t inodes_count_in_each_block = block_size / inode_size;
 
@@ -503,7 +503,7 @@ static int get_inode_by_id(ext2_data* data, uint32_t id, ext2_inode* out_inode) 
     
     uint32_t inode_table_block_id = gd.bg_inode_table; // 这里拿到的是bg_inode_table开始的块号
 
-    size_t inode_size = data->sb.s_inode_size;
+    size_t inode_size = data->inode_size;
     size_t block_size = data->dev->block_size;
     uint32_t inodes_count_in_each_block = block_size / inode_size;
 
@@ -539,6 +539,11 @@ static int mount(mounting_point* mp) {
 
     ext2_super_block& sb = data->sb;
 
+    if (data->sb.s_rev_level >= 1) {
+        data->inode_size = data->sb.s_inode_size;
+    } else {
+        data->inode_size = 128;
+    }
     // 检查魔数...
     if (sb.s_magic != 0xEF53) {
         return -1;
@@ -807,8 +812,41 @@ int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, u
     return read_size;
 }
 
-int write(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size) {
-    return -1;
+int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode inode;
+    get_inode_by_id(data, inode_id, &inode);
+
+    uint32_t begin_block = offset / block_size;
+    uint32_t cur_offset = offset % block_size;
+    uint32_t end_block = (offset + size + block_size - 1) / block_size;
+    int written = 0;
+    for (int i = begin_block; i < end_block; ++i) {
+        int phys_block;
+        if ((phys_block = get_phys_block_no_in_inode(data, &inode, i)) == 0) {
+            phys_block = block_alloc(data);
+            if (phys_block < 0) return -1;
+            insert_block_in_inode(data, &inode, phys_block, i);
+        }
+        auto cur_block = get_cache_ptr(*data->cache_data, phys_block);
+        size_t write_size = (block_size - cur_offset) < size ? (block_size - cur_offset) : size;
+        memcpy(cur_block.get() + cur_offset, buffer, write_size);
+        taint(*data->cache_data, phys_block);
+        buffer += write_size;
+        size -= write_size;
+        written += write_size;
+        cur_offset = 0;
+    }
+    uint32_t new_end = offset + written;
+    if (new_end > inode.i_size) {
+        inode.i_size = new_end;
+    }
+        
+    set_inode_by_id(data, inode_id, &inode);
+    flush_all_block(*data->cache_data);
+    flush_metadata(data);
+    return written;
 }
 
 int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {

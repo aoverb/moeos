@@ -44,7 +44,7 @@ struct fs_operation {
     int (*open)(mounting_point* mp, const char* path, uint8_t mode);
     int (*close)(mounting_point* mp, uint32_t inode_id, uint32_t mode);
     int (*read)(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size);
-    int (*write)(mounting_point* mp, uint32_t inode_id, const char* buffer, uint32_t size);
+    int (*write)(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size);
     int (*opendir)(mounting_point* mp, const char* path);
     int (*readdir)(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out);
     int (*closedir)(mounting_point* mp, uint32_t inode_id);
