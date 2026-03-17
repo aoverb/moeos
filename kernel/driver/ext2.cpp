@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <kernel/spinlock.hpp>
 #include <stdio.h>
+#include <shared_ptr>
 
 fs_operation ext2_fs_operation;
 
@@ -11,9 +12,10 @@ constexpr uint32_t CACHE_ENRTY_COUNT = 40;
 
 struct cache_entry {
     int block_no;
-    char* data; // 块数据
+    shared_ptr<char> data; // 块数据
     cache_entry* prev;
     cache_entry* next;
+    bool dirty;
 };
 
 struct cache_data {
@@ -23,6 +25,20 @@ struct cache_data {
     cache_entry* head;
     spinlock cacheLock;
 };
+
+void flush_block(cache_data& cache_data, cache_entry* cache) {
+    if (cache->block_no == -1 || !cache->dirty) return;
+    cache_data.mp_data->dev->write(cache_data.mp_data->dev, cache->block_no, cache->data.get());
+}
+
+void taint(cache_data& cache_data, int block_no) {
+    SpinlockGuard guard(cache_data.cacheLock);
+    const auto& itr = cache_data.map.find(block_no);
+    if (itr == cache_data.map.end()) {
+        return;
+    }
+    itr->second->dirty = true;
+}
 
 void detach(cache_entry* item) {
     if (item->prev) item->prev->next = item->next;
@@ -39,27 +55,33 @@ void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
     cache_data.head = recently_used;
 }
 
-int cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
+shared_ptr<char> get_cache_ptr(cache_data& cache_data, int block_no) {
     SpinlockGuard guard(cache_data.cacheLock);
     auto itr = cache_data.map.find(block_no);
     if (itr != cache_data.map.end()) {
-        memcpy(block_buffer, itr->second->data, cache_data.mp_data->dev->block_size);
         insert_into_head(cache_data, itr->second);
-        return 0;
-    }
-
-    if (cache_data.mp_data->dev->read(cache_data.mp_data->dev, block_no, block_buffer) < 0) {
-        return -1;
+        return itr->second->data;
     }
 
     // 把队列里面最近没使用的记录拿出来换成自己的
     cache_entry* least_rused = cache_data.head->prev;
+    // 写回到磁盘
+    flush_block(cache_data, least_rused);
+    if (cache_data.mp_data->dev->read(cache_data.mp_data->dev, block_no, least_rused->data.get()) < 0) {
+        return nullptr;
+    }
     detach(least_rused);
-    memcpy(least_rused->data, block_buffer, cache_data.mp_data->dev->block_size);
     cache_data.map.erase(least_rused->block_no);
     least_rused->block_no = block_no;
     cache_data.map[block_no] = least_rused;
     insert_into_head(cache_data, least_rused);
+    return least_rused->data;
+}
+
+int cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
+    shared_ptr<char> ptr = get_cache_ptr(cache_data, block_no);
+    if (!ptr) return -1;
+    memcpy(block_buffer, ptr.get(), cache_data.mp_data->dev->block_size);
     return 0;
 }
 
@@ -73,7 +95,82 @@ void init_cache(ext2_data* mp_data) {
         cache_data.entry[i].next = &(cache_data.entry[(i + 1) % CACHE_ENRTY_COUNT]);
         cache_data.entry[i].data = ((char*)kmalloc(mp_data->dev->block_size));
         cache_data.entry[i].block_no = -1;
+        cache_data.entry[i].dirty = false;
     }
+}
+
+// 注意：每次单次、批量调用alloc/free之后，需要调用flush metadata刷新元数据里面的块计数/inode计数
+int block_alloc(ext2_data* data) {
+    const size_t block_size = data->dev->block_size; 
+    for (int i = 0; i < data->bg_num; ++i) {
+        ext2_group_desc& gd = data->gdt[i];
+        if (gd.bg_free_blocks_count == 0) continue;
+        shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_block_bitmap);
+        for (int j = 0; j < block_size; ++j) {
+            if (cache_ptr.get()[j] == 0xFF) continue;
+            // 找到了空闲的块
+            // 下面找到最低的0在哪个位置
+            int pos =  __builtin_ctz(~cache_ptr.get()[j]);
+            cache_ptr.get()[j] |= (1 << pos);
+            taint(*data->cache_data, gd.bg_block_bitmap);
+            --gd.bg_free_blocks_count;
+            --data->sb.s_free_blocks_count;
+            return (i * data->sb.s_blocks_per_group +
+            j * 8 + pos +
+            data->sb.s_first_data_block);
+        }
+    }
+    return -1;
+}
+
+void block_free(ext2_data* data, int block_no) {
+    // block_no反推所在组
+    if (block_no == -1) return;
+    block_no -= data->sb.s_first_data_block;
+    int grp_no = block_no / data->sb.s_blocks_per_group;
+    int offset = (block_no % data->sb.s_blocks_per_group) / 8;
+    int bit_pos = (block_no % data->sb.s_blocks_per_group) % 8;
+    ext2_group_desc& gd = data->gdt[grp_no];
+    shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_block_bitmap);
+    cache_ptr.get()[offset] &= ~(1 << bit_pos);
+    ++gd.bg_free_blocks_count;
+    ++data->sb.s_free_blocks_count;
+    taint(*data->cache_data, gd.bg_block_bitmap);
+}
+
+int inode_alloc(ext2_data* data) {
+    for (int i = 0; i < data->bg_num; ++i) {
+        ext2_group_desc& gd = data->gdt[i];
+        if (gd.bg_free_inodes_count == 0) continue;
+        shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_inode_bitmap);
+        for (int j = 0; j < data->sb.s_inodes_per_group / 8; ++j) {
+            if (cache_ptr.get()[j] == 0xFF) continue;
+            // 找到了空闲的inode
+            // 下面找到最低的0在哪个位置
+            int pos =  __builtin_ctz(~cache_ptr.get()[j]);
+            cache_ptr.get()[j] |= (1 << pos);
+            taint(*data->cache_data, gd.bg_inode_bitmap);
+            --gd.bg_free_inodes_count;
+            --data->sb.s_free_inodes_count;
+            return (i * data->sb.s_inodes_per_group +
+            j * 8 + pos) + 1;
+        }
+    }
+    return -1;
+}
+
+void inode_free(ext2_data* data, int inode_no) {
+    if (inode_no <= 0) return;
+    inode_no -= 1;
+    int grp_no = inode_no / data->sb.s_inodes_per_group;
+    int offset = (inode_no % data->sb.s_inodes_per_group) / 8;
+    int bit_pos = (inode_no % data->sb.s_inodes_per_group) % 8;
+    ext2_group_desc& gd = data->gdt[grp_no];
+    shared_ptr<char> cache_ptr = get_cache_ptr(*data->cache_data, gd.bg_inode_bitmap);
+    cache_ptr.get()[offset] &= ~(1 << bit_pos);
+    ++gd.bg_free_inodes_count;
+    ++data->sb.s_free_inodes_count;
+    taint(*data->cache_data, gd.bg_inode_bitmap);
 }
 
 void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_idx,
@@ -88,6 +185,25 @@ void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_
         }
     }
     return;
+}
+
+void flush_metadata(ext2_data* data) {
+    // 写元数据不走缓存
+    // 刷新超级块
+    void* sb_buffer = kmalloc(data->dev->block_size);
+    data->dev->read(data->dev, data->sb_block_num, sb_buffer);
+    memcpy((char*)sb_buffer + data->sb_offset, &data->sb, sizeof(ext2_super_block));
+    data->dev->write(data->dev, data->sb_block_num, sb_buffer);
+    kfree(sb_buffer);
+    // 刷新组描述符
+    uint32_t bg_block_num = (data->bg_num * sizeof(ext2_group_desc) + data->dev->block_size - 1) / data->dev->block_size;
+
+    // 一个块最多可以读出 data->dev->block_size / sizeof(ext2_group_desc) 个组描述符
+    uint32_t gd_per_block = (data->dev->block_size / sizeof(ext2_group_desc));
+    
+    for (int blk_idx = 0; blk_idx < bg_block_num; ++blk_idx) {
+        data->dev->write(data->dev, data->sb_block_num + 1 + blk_idx, (void*)&data->gdt[blk_idx * gd_per_block]); // 组描述符表所在的块紧跟超级块所在的块
+    }
 }
 
 // block_idx是相对于这个块来说的其叶子块（即直接指针块）的索引，block_count粒度也是如此
@@ -218,15 +334,15 @@ static int mount(mounting_point* mp) {
     ext2_data* data = (ext2_data*)mp->data;
 
     // 读取超级块，超级块是在0号块之后偏移1024字节处
-    uint32_t sb_block_num = 1024 / data->dev->block_size;
-    uint32_t sb_offset = 1024 % data->dev->block_size;
+    data->sb_block_num = 1024 / data->dev->block_size;
+    data->sb_offset = 1024 % data->dev->block_size;
     void* buffer = kmalloc(data->dev->block_size);
-    int ret = data->dev->read(data->dev, sb_block_num, buffer);
+    int ret = data->dev->read(data->dev, data->sb_block_num, buffer);
     if (ret < 0) {
         kfree(buffer);
         return -1; // 读取超级块失败
     }
-    ext2_super_block* ext2_sb = reinterpret_cast<ext2_super_block*>((char*)buffer + sb_offset);
+    ext2_super_block* ext2_sb = reinterpret_cast<ext2_super_block*>((char*)buffer + data->sb_offset);
     data->sb = *ext2_sb;
     kfree(buffer);
 
@@ -240,9 +356,14 @@ static int mount(mounting_point* mp) {
     // 我们可以不做...
     // sb.s_state...
 
+    // 初始化块缓存
+    init_cache(data);
     // 缓存组描述符表
     data->bg_num = (sb.s_blocks_count + sb.s_blocks_per_group - 1) / sb.s_blocks_per_group;
-    data->gdt = (ext2_group_desc*)kmalloc(sizeof(ext2_group_desc) * data->bg_num);
+    uint32_t gdt_alloc = ((sizeof(ext2_group_desc) * data->bg_num + data->dev->block_size - 1) /
+                         data->dev->block_size) * data->dev->block_size;
+    data->gdt = (ext2_group_desc*)kmalloc(gdt_alloc);
+    memset(data->gdt, 0, gdt_alloc);
 
     // 读多少个块才能把所有的块组描述符读出来？
     uint32_t bg_block_num = (data->bg_num * sizeof(ext2_group_desc) + data->dev->block_size - 1) / data->dev->block_size;
@@ -253,7 +374,7 @@ static int mount(mounting_point* mp) {
     uint32_t gd_per_block = (data->dev->block_size / sizeof(ext2_group_desc));
     for (int blk_idx = 0; blk_idx < bg_block_num; ++blk_idx) {
         void* gd_buffer = kmalloc(data->dev->block_size);
-        data->dev->read(data->dev, sb_block_num + 1 + blk_idx, gd_buffer); // 组描述符表所在的块紧跟超级块所在的块
+        cache_read(*data->cache_data, data->sb_block_num + 1 + blk_idx, gd_buffer); // 组描述符表所在的块紧跟超级块所在的块
         
         for (int i = 0; i < gd_per_block; ++i) {
             data->gdt[gd_idx++] = ((ext2_group_desc*)gd_buffer)[i];
@@ -269,7 +390,7 @@ static int mount(mounting_point* mp) {
     data->block_num[1] = data->block_num[0] * data->dev->block_size / sizeof(uint32_t);
     data->block_num[2] = data->block_num[1] * data->dev->block_size / sizeof(uint32_t);
     data->block_num[3] = data->block_num[2] * data->dev->block_size / sizeof(uint32_t);
-    init_cache(data);
+    
     get_inode_by_id(data, 2, &data->root_inode);
     return 0;
 }

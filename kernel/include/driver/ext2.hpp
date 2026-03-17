@@ -88,7 +88,9 @@ struct cache_data;
 struct ext2_data {
     block_device* dev;
     ext2_super_block sb;
-
+    uint32_t sb_block_num;
+    uint32_t sb_offset;
+    
     ext2_group_desc* gdt;
     uint32_t bg_num;
 
