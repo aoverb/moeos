@@ -9,6 +9,11 @@
 
 extern "C" int pipe(int fds[2]);
 
+#define O_RDONLY  0x01
+#define O_WRONLY  0x02
+#define O_RDWR    0x03
+#define O_CREATE  0x04
+
 constexpr uint8_t PATH_LIST_SIZE = 2;
 constexpr const char* PATH[PATH_LIST_SIZE] = {
     "/usr/bin/",
@@ -84,6 +89,25 @@ int split_pipeline(char* tokens[], int token_count, stage stages[], int max_stag
     return n + 1;
 }
 
+// ─── 重定向解析 ───
+// 从 tokens 中找到 ">"，提取文件名，并将其从 token 列表中移除
+// 返回重定向文件名，nullptr 表示无重定向，(char*)-1 表示语法错误
+
+char* extract_redirect(char* tokens[], int& token_count) {
+    for (int i = 0; i < token_count; i++) {
+        if (strcmp(tokens[i], ">") == 0) {
+            if (i + 1 >= token_count) return (char*)-1;
+            char* filename = tokens[i + 1];
+            // 把后面的 token 往前挪，覆盖 > 和 filename
+            for (int j = i; j + 2 < token_count; j++)
+                tokens[j] = tokens[j + 2];
+            token_count -= 2;
+            return filename;
+        }
+    }
+    return nullptr;
+}
+
 // ─── 路径搜索 + 加载文件到内存 ───
 // 成功返回 buffer 和 size，调用者负责 free
 
@@ -93,7 +117,7 @@ bool load_cmd(const char* cmd, char*& buf_out, int& size_out) {
 
     auto try_path = [&](const char* path) -> bool {
         if (stat(path, &fst) == -1) return false;
-        int fd = open(path, 1);
+        int fd = open(path, O_RDONLY);
         if (fd == -1) return false;
         char* buffer = (char*)malloc(fst.size);
         if (!buffer) { close(fd); return false; }
@@ -123,7 +147,7 @@ bool load_cmd(const char* cmd, char*& buf_out, int& size_out) {
 
 // ─── 管道执行核心 ───
 
-bool exec_pipeline(stage stages[], int stage_count) {
+bool exec_pipeline(stage stages[], int stage_count, int redir_fd = -1) {
     int pipes[MAX_PIPELINE][2];
     int pids[MAX_PIPELINE];
 
@@ -165,6 +189,11 @@ bool exec_pipeline(stage stages[], int stage_count) {
         if (i < stage_count - 1) {
             remaps[remap_count].child_fd  = 1;           // stdout
             remaps[remap_count].parent_fd = pipes[i][1];
+            remap_count++;
+        } else if (redir_fd >= 0) {
+            // 最后一个 stage，重定向 stdout 到文件
+            remaps[remap_count].child_fd  = 1;
+            remaps[remap_count].parent_fd = redir_fd;
             remap_count++;
         }
 
@@ -260,13 +289,23 @@ bool exec_bidir(stage& left, stage& right) {
 
 // ─── 单命令执行 (无管道) ───
 
-bool try_exec(const char* cmd, int argc, char* argv[]) {
+bool try_exec(const char* cmd, int argc, char* argv[], int redir_fd = -1) {
     char* buffer = nullptr;
     int size = 0;
 
     if (!load_cmd(cmd, buffer, size))
         return false;
-    int child_pid = exec(buffer, size, argc, argv, nullptr, 0);
+
+    fd_remap remaps[1];
+    int remap_count = 0;
+
+    if (redir_fd >= 0) {
+        remaps[0].child_fd  = 1;        // stdout
+        remaps[0].parent_fd = redir_fd;
+        remap_count = 1;
+    }
+
+    int child_pid = exec(buffer, size, argc, argv, remaps, remap_count);
     free(buffer);
 
     if (child_pid <= 0) return false;
@@ -319,8 +358,6 @@ int main(int argc_main, char** argv_main) {
     char* tokens[MAX_ARGS];
     stage stages[MAX_PIPELINE];
 
-    // printf("Shell is running in user addr: %x\n", &main);
-
     while (1) {
         set_color(0x39C5BB);
         printf("root@");
@@ -348,6 +385,7 @@ int main(int argc_main, char** argv_main) {
             printf("! Feel free!\n");
             printf("Built-in: help, exit, cd\n");
             printf("Pipe: cmd1 | cmd2 | cmd3\n");
+            printf("Redirect: cmd > file\n");
 
         } else if (strcmp(cmd, "exit") == 0) {
             print_rumia_text();
@@ -358,6 +396,41 @@ int main(int argc_main, char** argv_main) {
             builtin_cd(token_count, tokens);
 
         } else {
+            // ── 解析输出重定向 ──
+            char* redir_file = extract_redirect(tokens, token_count);
+            int redir_fd = -1;
+
+            if (redir_file == (char*)-1) {
+                print_rumia_text();
+                printf(": syntax error near '>'\n");
+                printf("\n");
+                continue;
+            }
+
+            if (redir_file) {
+                char redir_path[MAX_PATH];
+                if (redir_file[0] == '/') {
+                    // 绝对路径，直接使用
+                    snprintf(redir_path, sizeof(redir_path), "%s", redir_file);
+                } else {
+                    // 相对路径，拼上 cwd
+                    snprintf(redir_path, sizeof(redir_path), "%s/%s", cwd, redir_file);
+                }
+                redir_fd = open(redir_path, O_WRONLY | O_CREATE);
+                if (redir_fd < 0) {
+                    printf("rumia: cannot open '%s' for writing\n", redir_file);
+                    printf("\n");
+                    continue;
+                }
+            }
+
+            if (token_count == 0) {
+                if (redir_fd >= 0) close(redir_fd);
+                printf("\n");
+                continue;
+            }
+            cmd = tokens[0];
+
             // 先检查是否是双向管道
             int bidir_pos = -1;
             for (int i = 0; i < token_count; i++) {
@@ -388,21 +461,23 @@ int main(int argc_main, char** argv_main) {
                     exec_bidir(left_stage, right_stage);
                 }
             } else {
-                    // 原有的单向管道逻辑
-                    int n = split_pipeline(tokens, token_count, stages, MAX_PIPELINE);
-                    
+                // 原有的单向管道逻辑
+                int n = split_pipeline(tokens, token_count, stages, MAX_PIPELINE);
+
                 if (n < 0) {
                     print_rumia_text();
                     printf(": syntax error near '|'\n");
                 } else if (n == 1) {
-                    if (!try_exec(cmd, stages[0].argc, stages[0].argv)) {
+                    if (!try_exec(cmd, stages[0].argc, stages[0].argv, redir_fd)) {
                         print_rumia_text();
                         printf(": Unknown command '%s'!\n", cmd);
                     }
                 } else {
-                    exec_pipeline(stages, n);
+                    exec_pipeline(stages, n, redir_fd);
                 }
             }
+
+            if (redir_fd >= 0) close(redir_fd);
         }
 
         printf("\n");
