@@ -299,6 +299,141 @@ static size_t read_block_in_inode(ext2_data* data, const ext2_inode* inode,
     return total_read_count;
 }
 
+constexpr uint32_t SECTOR_SIZE = 512;
+// 在insert_idx插入一个指定的物理块，如果这个地方已经有一个物理块，函数返回-1
+static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
+    uint32_t block_no, uint32_t insert_idx) {
+    const size_t block_size = data->dev->block_size; 
+    const size_t blkcnt_per_block = block_size / 4;
+    const ext2_super_block& sb = data->sb;
+    if (insert_idx < 12) { // 可以通过加直接指针解决
+        if (inode->i_block[insert_idx] != 0) return -1;
+        inode->i_block[insert_idx] = block_no;
+        inode->i_blocks += block_size / SECTOR_SIZE;
+        return 0;
+    }
+
+    insert_idx -= 12;
+
+    if (insert_idx < data->block_num[1]) {
+        if (inode->i_block[12] == 0) {
+            if (sb.s_free_blocks_count == 0) return -1;
+            inode->i_block[12] = block_alloc(data);
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            memset(get_cache_ptr(*data->cache_data, inode->i_block[12]).get(), 0, block_size);
+        }
+        auto direct_ptr = get_cache_ptr(*data->cache_data, inode->i_block[12]);
+        if (*((uint32_t*)direct_ptr.get() + insert_idx) != 0) return -1;
+        *((uint32_t*)direct_ptr.get() + insert_idx) = block_no;
+        taint(*data->cache_data, inode->i_block[12]);
+        inode->i_blocks += block_size / SECTOR_SIZE;
+        return 0;
+    }
+
+    insert_idx -= data->block_num[1];
+    if (insert_idx < data->block_num[2]) {
+        if (inode->i_block[13] == 0) {
+            if (sb.s_free_blocks_count < 2) return -1;
+            inode->i_block[13] = block_alloc(data); // 为二级指针分配空间
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            memset(get_cache_ptr(*data->cache_data, inode->i_block[13]).get(), 0, block_size);
+            taint(*data->cache_data, inode->i_block[13]);
+        }
+        // 这里必须拷贝一份指针来确保我们的缓存块和对应的指针不会被释放掉
+        // 只要不是生命周期原地结束的裸指针，都得这么做
+        auto first_class_ptr = get_cache_ptr(*data->cache_data, inode->i_block[13]);
+        uint32_t* first_class = (uint32_t*)first_class_ptr.get() +
+            insert_idx / blkcnt_per_block;
+        if (*first_class == 0) {
+            if (sb.s_free_blocks_count == 0) return -1;
+            *first_class = block_alloc(data);
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            memset(get_cache_ptr(*data->cache_data, *first_class).get(), 0, block_size);
+            taint(*data->cache_data, inode->i_block[13]);
+            taint(*data->cache_data, *first_class);
+        }
+        auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
+        if (*((uint32_t*)direct_ptr.get() +
+            insert_idx % blkcnt_per_block) != 0) return -1;
+        *((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) = block_no;
+        taint(*data->cache_data, *first_class);
+        inode->i_blocks += block_size / SECTOR_SIZE;
+        return 0;
+    }
+
+    insert_idx -= data->block_num[2];
+    if (insert_idx < data->block_num[3]) {
+        if (inode->i_block[14] == 0) {
+            if (sb.s_free_blocks_count < 3) return -1;
+            inode->i_block[14] = block_alloc(data); // 为三级指针分配空间
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            memset(get_cache_ptr(*data->cache_data, inode->i_block[14]).get(), 0, block_size);
+            taint(*data->cache_data, inode->i_block[14]);
+        }
+        auto second_class_ptr = get_cache_ptr(*data->cache_data, inode->i_block[14]);
+        uint32_t* second_class = (uint32_t*)second_class_ptr.get() +
+                                  insert_idx / blkcnt_per_block / blkcnt_per_block;
+        if (*second_class == 0) {
+            if (sb.s_free_blocks_count < 2) return -1;
+            *second_class = block_alloc(data);
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            taint(*data->cache_data, inode->i_block[14]);
+            memset(get_cache_ptr(*data->cache_data, *second_class).get(), 0, block_size);
+            taint(*data->cache_data, *second_class);
+        }
+        auto first_class_ptr = get_cache_ptr(*data->cache_data, *second_class);
+        uint32_t* first_class = (uint32_t*)first_class_ptr.get() +
+            (insert_idx / blkcnt_per_block) % blkcnt_per_block;
+        if (*first_class == 0) {
+            if (sb.s_free_blocks_count == 0) return -1;
+            *first_class = block_alloc(data);
+            inode->i_blocks += block_size / SECTOR_SIZE;
+            taint(*data->cache_data, *second_class);
+            memset(get_cache_ptr(*data->cache_data, *first_class).get(), 0, block_size);
+            taint(*data->cache_data, *first_class);
+        }
+        auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
+        if (*((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) != 0) {
+            return -1;
+        }
+        *((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) = block_no;
+        taint(*data->cache_data, *first_class);
+        inode->i_blocks += block_size / SECTOR_SIZE;
+        return 0;
+    }
+
+    return -1;
+}
+
+static int set_inode_by_id(ext2_data* data, uint32_t id, const ext2_inode* in_inode) {
+    if (id == 0) return -1;
+    ext2_super_block& sb = data->sb;
+    uint32_t inodes_per_group = sb.s_inodes_per_group;
+    // 先算算我在哪个组
+    uint32_t idx = id - 1;
+    
+    uint32_t group_idx = idx / inodes_per_group;
+    
+    ext2_group_desc& gd = data->gdt[group_idx];
+    
+    uint32_t inode_table_block_id = gd.bg_inode_table; // 这里拿到的是bg_inode_table开始的块号
+
+    size_t inode_size = data->sb.s_inode_size;
+    size_t block_size = data->dev->block_size;
+    uint32_t inodes_count_in_each_block = block_size / inode_size;
+
+    // 我们还得算一个相对的id，也就是在这个块组里面的id
+    uint32_t idx_in_group = idx % inodes_per_group;
+
+    uint32_t block_idx = idx_in_group / inodes_count_in_each_block;
+    uint32_t offset = idx_in_group % inodes_count_in_each_block;
+
+    *reinterpret_cast<ext2_inode*>((get_cache_ptr(*data->cache_data, inode_table_block_id + block_idx).get() +
+        offset * inode_size)) = *in_inode;
+    taint(*data->cache_data, inode_table_block_id + block_idx);
+    return 0;
+}
+
 static int get_inode_by_id(ext2_data* data, uint32_t id, ext2_inode* out_inode) {
     if (id == 0) return -1;
     ext2_super_block& sb = data->sb;
@@ -525,7 +660,7 @@ int stat(mounting_point* mp, const char* path, file_stat* out) {
     if (strcmp(path, "/") == 0) {
         out->group_id = (data->root_inode.i_gid_high << 16) | data->root_inode.i_gid;
         out->owner_id = (data->root_inode.i_uid_high << 16) | data->root_inode.i_uid;
-        out->size = data->root_inode.i_fsize;
+        out->size = data->root_inode.i_size;
         out->mode = data->root_inode.i_mode;
         out->last_modified = data->root_inode.i_mtime;
         out->type = 0;
