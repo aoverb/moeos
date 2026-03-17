@@ -29,6 +29,15 @@ struct cache_data {
 void flush_block(cache_data& cache_data, cache_entry* cache) {
     if (cache->block_no == -1 || !cache->dirty) return;
     cache_data.mp_data->dev->write(cache_data.mp_data->dev, cache->block_no, cache->data.get());
+    cache->dirty = false;
+}
+
+void flush_all_block(cache_data& cache_data) {
+    SpinlockGuard guard(cache_data.cacheLock);
+    for (int i = 0; i < CACHE_ENRTY_COUNT; ++i) {
+        flush_block(cache_data, &cache_data.entry[i]);
+        cache_data.entry[i].dirty = false;
+    }
 }
 
 void taint(cache_data& cache_data, int block_no) {
@@ -577,6 +586,7 @@ static int mount(mounting_point* mp) {
     return 0;
 }
 
+constexpr uint8_t FILE_TYPE_FILE = 1;
 constexpr uint8_t FILE_TYPE_DIR = 2;
 
 int dir_lookup(ext2_data* data, uint32_t inode_id, const char* name, int insist_type = -1) {
@@ -692,12 +702,58 @@ int unmount(mounting_point* mp) {
     return -1;
 }
 
+void init_inode(ext2_inode& inode, uint8_t type) {
+    memset(&inode, 0, sizeof(inode));
+    // inode.i_atime = inode.i_ctime = inode.i_dtime = inode.i_mtime = 0; // todo: 我现在还不支持获取时间...
+    inode.i_mode = (type == FILE_TYPE_DIR) ? 0x4000 | 0755 : 0x8000 | 0644;
+    inode.i_links_count = 1;
+}
+
+void split_path(const char* full_path, char* path, char* name) {
+    int last_slash = 0;
+    for (int i = strlen(full_path); i >= 0; --i) {
+        if (full_path[i] == '/') {
+            last_slash = i;
+            break;
+        }
+    }
+    if (last_slash == 0) { // 根目录
+        strcpy(path, "/");
+    } else {
+        strncpy(path, full_path, last_slash);
+        path[last_slash] = '\0';
+    }
+    strcpy(name, full_path + last_slash + 1);
+}
+
 constexpr uint32_t ROOT_INODE_NO = 2;
 
 int open(mounting_point* mp, const char* path, uint8_t mode) {
+    if (strlen(path) >= 256) return -1; // 不支持这么长的路径
     ext2_data* data = (ext2_data*)mp->data;
+    if (path[0] != '/') return -1;
+    char par_path[256];
+    char name[256];
+    split_path(path, par_path, name);
+    if (name[0] == '\0') return -1;
     int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
-    return inode_no <= 0 ? -1 : inode_no;
+    if (inode_no <= 0 && (mode & O_CREATE) == 0) return -1;
+    if (inode_no > 0) {
+        return inode_no;
+    }
+    int path_inode_no = relative_lookup(data, ROOT_INODE_NO, par_path);
+    if (path_inode_no <= 0) {
+        return -1; // 路径都不存在，没救了
+    }
+    int new_inode_no = inode_alloc(data);
+    if (new_inode_no <= 0) return -1;
+    ext2_inode new_inode;
+    init_inode(new_inode, FILE_TYPE_FILE);
+    set_inode_by_id(data, new_inode_no, &new_inode);
+    add_entry_to_dir(data, path_inode_no, new_inode_no, FILE_TYPE_FILE, name);
+    flush_all_block(*data->cache_data);
+    flush_metadata(data);
+    return new_inode_no;
 }
 
 int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
