@@ -197,6 +197,11 @@ void terminal_scroll() {
 void terminal_write(const char* data, size_t size) {
     SpinlockGuard guard(tty_lock);
     for (size_t i = 0; i < size; i++) {
+        if (terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0) terminal_fill_rect(terminal_col * FONT_WIDTH, 
+                            terminal_row * FONT_HEIGHT, 
+                            FONT_WIDTH, 
+                            FONT_HEIGHT, 
+                            0x00000000);
         if (data[i] == '\b') {
             if (terminal_col == 0 && terminal_row == 0) {
                 return;
@@ -210,7 +215,7 @@ void terminal_write(const char* data, size_t size) {
                               terminal_row * FONT_HEIGHT, 
                               FONT_WIDTH, 
                               FONT_HEIGHT, 
-                              0x00000000);
+                              0x00FFFFFF);
             continue;
         }
         if (data[i] == '\n') {
@@ -242,6 +247,11 @@ void terminal_write(const char* data, size_t size) {
         const uint8_t* glyph = font_8x16[c];
         if (terminal_get_setting().c_lflag & ECHO)
             terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
+        if (terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0) terminal_fill_rect(terminal_col * FONT_WIDTH, 
+                        terminal_row * FONT_HEIGHT, 
+                        FONT_WIDTH, 
+                        FONT_HEIGHT, 
+                        0x00FFFFFF);
     }
 }
 
