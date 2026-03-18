@@ -27,7 +27,8 @@ net/socket.o \
 qrcodegen/qrcodegen.o \
 assert/assert.o \
 math/math.o \
-unistd/pid.o
+unistd/pid.o \
+time/time.o
 
 SYSROOT?=
 

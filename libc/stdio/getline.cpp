@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <syscall_def.hpp>
 #if defined(__is_libk)
 #include <kernel/tty.h>
@@ -9,6 +11,21 @@
 
 void tcsetpgrp(int fd, pid_t pid) {
     syscall2((uint32_t)SYSCALL::TCSETPGRP, (uint32_t)fd, (uint32_t)pid);
+}
+
+int tcgetattr(int fd, struct termios *t) {
+    return ioctl(fd, TCGETS, t);
+}
+
+int tcsetattr(int fd, int action, const struct termios *t) {
+    unsigned long req;
+    switch (action) {
+    case TCSANOW:   req = TCSETS;  break;
+    case TCSADRAIN: req = TCSETSW; break;
+    case TCSAFLUSH: req = TCSETSF; break;
+    default:        return -1;
+    }
+    return ioctl(fd, req, (void*)t);
 }
 
 void cls() {

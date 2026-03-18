@@ -1,5 +1,9 @@
 #include <stdlib.h>
 #include <syscall_def.hpp>
+
+int errno = 0;
+extern "C" void __gxx_personality_v0() {} // todo: 临时规避
+
 int _exit(int status) {
     return syscall1((uint32_t)SYSCALL::EXIT, (uint32_t)status);
 }
