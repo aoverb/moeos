@@ -105,6 +105,13 @@ void terminal_setforeground(pid_t pid) {
     foreground_pid = pid;
 }
 
+void terminal_getwinsize(winsize& w) {
+    w.ws_col = terminal_cols;
+    w.ws_row = terminal_rows;
+    w.ws_xpixel = fb_width;
+    w.ws_ypixel = fb_height;
+}
+
 void terminal_initialize(multiboot_info_t* mbi) {
     fb_addr = (uint32_t*)(uintptr_t)mbi->framebuffer_addr;
     fb_pitch = mbi->framebuffer_pitch;

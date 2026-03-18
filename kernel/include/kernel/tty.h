@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/ioctl.h>
 
 /* 如果是 C++ 环境，告诉编译器这部分按 C 的链接规则处理 */
 #ifdef __cplusplus
@@ -21,6 +22,7 @@ void terminal_clear();
 int terminal_read_char();
 void terminal_flush();
 void terminal_setforeground(pid_t pid);
+void terminal_getwinsize(winsize& w);
 int terminal_read_char_for_peek();
 #ifdef __cplusplus
 }

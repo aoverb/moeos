@@ -12,6 +12,7 @@ struct dev_operation {
     int (*write)(const char* buffer, uint32_t size);
     int (*set_poll)(process_queue* poll_queue);
     int (*peek)();
+    int (*ioctl)(uint32_t request, void* arg);
 };
 
 void init_devfs();

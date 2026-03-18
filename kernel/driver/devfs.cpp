@@ -125,6 +125,13 @@ static int stat(mounting_point* mp, const char* path, file_stat* out) {
     return -1;
 }
 
+static int ioctl(mounting_point* mp, uint32_t inode_id, uint32_t request, void* arg) {
+    if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
+    dev_item* item = reinterpret_cast<dev_item*>(mp->data);
+    if (item->entry[inode_id].opr->ioctl == nullptr) return -1;
+    return item->entry[inode_id].opr->ioctl(request, arg);
+}
+
 static int opendir(mounting_point*, const char*) {
     return 0;
 }
