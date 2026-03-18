@@ -3,6 +3,7 @@
 #include <kernel/panic.h>
 #include <kernel/schedule.hpp>
 #include <kernel/spinlock.hpp>
+#include <kernel/tty.h>
 #include <driver/pit.h>
 #include <string.h>
 #include <stdio.h>
@@ -73,6 +74,10 @@ int waitpid(pid_t child) {
     flags = spinlock_acquire(&process_list_lock);
     int exit_code = child_pcb->exit_code;
     free_pcb(process_list[child]);
+    termios default_setting = {};
+    default_setting.c_lflag = ECHO | ICANON | ISIG;
+    terminal_apply_setting(default_setting);
+    terminal_flush();
     spinlock_release(&process_list_lock, flags);
     return exit_code;
 }
