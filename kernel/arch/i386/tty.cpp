@@ -5,6 +5,7 @@
 #include <kernel/process.hpp>
 #include <kernel/ksignal.h>
 #include <kernel/schedule.hpp>
+#include <kernel/timer.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
 #include <stddef.h>
@@ -26,6 +27,17 @@ static uint32_t terminal_col = 0;
 
 static uint32_t terminal_color = 0x00FFFFFF;
 static process_queue tty_wait_queue = nullptr;
+
+static termios setting;
+
+static uint32_t read_wait_time = 100;
+
+const termios& terminal_get_setting() {
+    return setting;
+}
+void terminal_apply_setting(const termios& s) {
+    setting = s;
+}
 
 void map_lfb(uint32_t phys_addr, uint32_t size) {
     phys_addr &= ~((1 << 12) - 1);
@@ -69,7 +81,7 @@ void terminal_flush() {
 }
 
 void terminal_input(char c) {
-    if (c == 0x03) {
+    if (c == 0x03 && (setting.c_lflag & ISIG)) {
         terminal_write("^C\n", 3);
         if (foreground_pid == 0) return;
         send_signal(foreground_pid, SIGINT);
@@ -130,6 +142,8 @@ void terminal_initialize(multiboot_info_t* mbi) {
     uint32_t lfb_size = mbi->framebuffer_pitch * mbi->framebuffer_height;
     map_lfb(lfb_physical_addr, lfb_size);
     fb_addr = (uint32_t*)(uintptr_t)0xD0000000;
+
+    setting.c_lflag |= (ECHO | ICANON | ISIG);
 }
 
 void terminal_setcolor(uint32_t color) {
@@ -226,7 +240,8 @@ void terminal_write(const char* data, size_t size) {
         }
         unsigned char c = (unsigned char)data[i];
         const uint8_t* glyph = font_8x16[c];
-        terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
+        if (terminal_get_setting().c_lflag & ECHO)
+            terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
     }
 }
 
@@ -237,7 +252,13 @@ void terminal_clear() {
     terminal_col = 0;
 }
 
+void terminal_set_read_wait_time(uint32_t ms) {
+    read_wait_time = ms;
+}
+
 int terminal_read_char() {
+    bool raw = (setting.c_lflag & ICANON) == 0;
+
     while (1) {
         if (process_list[cur_process_id]->signal) {
             return -1;
@@ -253,12 +274,23 @@ int terminal_read_char() {
                 insert_into_waiting_queue(tty_wait_queue, process_list[cur_process_id]);
             }
         }
-        yield();
+        if (raw && setting.c_cc[VMIN] == 0) {
+            // VMIN=0: 超时等待，没数据就返回 -1
+            timeout(&tty_wait_queue, read_wait_time);
+            SpinlockGuard ttyguard(tty_lock);
+            if (kbd_buffer.head == kbd_buffer.tail) {
+                return -1;
+            }
+            break;
+        } else {
+            yield();
+        }
     }
     SpinlockGuard guard(tty_lock);
     char c = rb_read();
     return c;
 }
+
 int terminal_read_char_for_peek() {
     SpinlockGuard ttyguard(tty_lock);
     if (kbd_buffer.head == kbd_buffer.tail) {

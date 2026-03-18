@@ -11,7 +11,6 @@ static bool line_ready = false;
 static termios next_setting;
 static uint8_t has_next_setting_flag = 0; // 2代表丢弃所有输入
 
-static termios setting;
 static int console_peek_() {
     return terminal_read_char_for_peek();
 }
@@ -50,6 +49,12 @@ static int console_peek() {
 }
 
 static int console_read(char* buffer, uint32_t offset, uint32_t size) {
+    if ((terminal_get_setting().c_lflag & ICANON) == 0) {
+        int c = terminal_read_char();
+        if (c < 0) return 0;
+        buffer[0] = (char)c;
+        return 1;
+    }
     while (!line_ready) {
         console_peek();
         if (!line_ready)
@@ -68,8 +73,7 @@ static int console_read(char* buffer, uint32_t offset, uint32_t size) {
 static int console_write(const char* buffer, uint32_t size) {
     terminal_write(buffer, size);
     if (has_next_setting_flag > 1) {
-        setting = next_setting;
-        memcpy(setting.c_cc, next_setting.c_cc, NCCS);
+        terminal_apply_setting(next_setting);
         if (has_next_setting_flag == 2) {
             terminal_flush();
         }
@@ -83,18 +87,17 @@ static int console_ioctl(uint32_t request, void* arg) {
     switch (request)
     {
     case TCGETS:
-        setting = *(termios*)arg;
+        *(termios*)arg = terminal_get_setting();
         break;
     case TCSETS:
-        next_setting = *(termios*)arg;
-        has_next_setting_flag = 1;
+        terminal_apply_setting(*(termios*)arg);
         break;
     case TCSETSW:
         next_setting = *(termios*)arg;
         has_next_setting_flag = 2;
         break;
     case TCSETSF:
-        next_setting = *(termios*)arg;
+        terminal_apply_setting(*(termios*)arg);
         terminal_flush();
         break;
     case TIOCGWINSZ:

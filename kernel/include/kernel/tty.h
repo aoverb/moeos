@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 
 /* 如果是 C++ 环境，告诉编译器这部分按 C 的链接规则处理 */
 #ifdef __cplusplus
@@ -22,8 +23,11 @@ void terminal_clear();
 int terminal_read_char();
 void terminal_flush();
 void terminal_setforeground(pid_t pid);
-void terminal_getwinsize(winsize& w);
 int terminal_read_char_for_peek();
+void terminal_set_read_wait_time(uint32_t ms);
+const termios& terminal_get_setting();
+void terminal_apply_setting(const termios& w);
+void terminal_getwinsize(winsize& w);
 #ifdef __cplusplus
 }
 #endif
