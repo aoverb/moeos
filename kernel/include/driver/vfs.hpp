@@ -52,7 +52,7 @@ struct fs_operation {
     int (*unlink)(mounting_point* mp, const char* path);
     int (*mkdir)(mounting_point* mp, const char* path);
     int (*rename)(mounting_point*, const char* old_path, const char* new_path);
-    int (*ioctl)(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg);
+    int (*ioctl)(mounting_point* mp, uint32_t inode_id, uint32_t request, void* arg);
     int (*peek)(mounting_point* mp, uint32_t inode_id);
     int (*set_poll)(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue);
     sock_operation* sock_opr;
@@ -81,7 +81,7 @@ int v_closedir(PCB* proc, int fd_pos);
 int v_stat(const char* path, file_stat* out);
 int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
 int v_dup(PCB* src_proc, int fd_src, PCB* dst_proc);
-int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg);
+int v_ioctl(PCB* proc, int fd_pos, uint32_t request, void* arg);
 int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port);
 int v_listen(PCB* proc, int fd_pos, size_t queue_length);
 int v_accept(PCB* proc, int fd_pos, sockaddr* peeraddr, size_t* size);

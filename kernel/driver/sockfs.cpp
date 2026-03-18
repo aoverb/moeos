@@ -228,14 +228,14 @@ static int closedir(mounting_point*, uint32_t) {
     return 0;
 }
 
-static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
+static int ioctl(mounting_point* mp, uint32_t inode_id, uint32_t request, void* arg) {
     if (!mp->data) return -1;
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::TCP) {
-        return tcp_ioctl(sock.data.tcp.block, cmd, arg);
+        return tcp_ioctl(sock.data.tcp.block, request, arg);
     } else if (sock.ptcl == protocol::UDP) {
-        return udp_ioctl(sock, cmd, arg);
+        return udp_ioctl(sock, request, arg);
     }
     return -1;
 }

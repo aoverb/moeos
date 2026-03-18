@@ -13,7 +13,7 @@
 #include <kernel/schedule.hpp>
 #include <kernel/process.h>
 #include <kernel/syscall.h>
-#include <kernel/signal.h>
+#include <kernel/ksignal.h>
 #include <kernel/panic.h>
 #include <kernel/net/net.hpp>
 #include <kernel/timer.hpp>

@@ -1,7 +1,7 @@
 #include "idt.h"
 #include <stdio.h>
 #include <string.h>
-#include <kernel/signal.h>
+#include <kernel/ksignal.h>
 #include <kernel/schedule.hpp>
 #include <kernel/process.hpp>
 
@@ -22,16 +22,16 @@ void sigint_handler(registers*, pid_t pid) {
 
 void signal_init() {
     printf("signal initializing...");
-    register_signal(uint32_t(SIGNAL::SIGINT), sigint_handler);
+    register_signal(uint32_t(SIGINT), sigint_handler);
     printf("OK\n");
 }
 
-bool send_signal(pid_t pid, SIGNAL sig) {
+bool send_signal(pid_t pid, uint32_t sig) {
     SpinlockGuard guard(process_list_lock);
     if (!process_list[pid]) {
         return false;
     }
-    process_list[pid]->signal |= (1 << (uint32_t)sig);
+    process_list[pid]->signal |= (1 << sig);
     return true;
 }
 

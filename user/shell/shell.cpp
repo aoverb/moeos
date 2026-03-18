@@ -6,6 +6,7 @@
 #include <file.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <termios.h>
 
 extern "C" int pipe(int fds[2]);
 

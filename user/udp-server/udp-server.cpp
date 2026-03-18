@@ -1,5 +1,6 @@
 #include <net/net.hpp>
 #include <net/socket.hpp>
+#include <sys/ioctl.h>
 #include <file.h>
 #include <stdio.h>
 #include <format.h>
@@ -15,7 +16,7 @@ int main(int argc, char** argv) {
     sockaddr bindaddr;
     bindaddr.addr = SOCKADDR_BROADCAST_ADDR;
     bindaddr.port = htons(9999);
-    if (ioctl(conn, "SOCK_IOC_BIND", &bindaddr) < 0) {
+    if (ioctl(conn, SOCK_IOC_BIND, &bindaddr) < 0) {
         printf("failed to bind %s:%d", ntohl(bindaddr.addr), ntohs(bindaddr.port));
         return 0;
     }

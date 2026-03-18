@@ -1058,7 +1058,7 @@ static int closedir(mounting_point* mp, uint32_t inode_id) {
     return 0;
 }
 
-static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
+static int ioctl(mounting_point* mp, uint32_t inode_id, uint32_t request, void* arg) {
     return -1;
 }
 

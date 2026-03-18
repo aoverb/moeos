@@ -6,10 +6,6 @@ int poll(pollfd* fds, uint32_t fd_num, uint32_t timeout) {
     return syscall3((uint32_t)SYSCALL::POLL, (uint32_t)fds, (uint32_t)fd_num, (uint32_t)timeout);
 }
 
-int ioctl(int fd, char* cmd, void* arg) {
-    return syscall3((uint32_t)SYSCALL::IOCTL, (uint32_t)fd, (uint32_t)cmd, (uint32_t)arg);
-}
-
 int stat(const char* path, file_stat* stat) {
     return syscall2((uint32_t)SYSCALL::STAT, (uint32_t)path, (uint32_t)stat);
 }

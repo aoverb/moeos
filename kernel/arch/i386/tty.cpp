@@ -3,7 +3,7 @@
 #include <kernel/font.h>
 #include <kernel/mm.hpp>
 #include <kernel/process.hpp>
-#include <kernel/signal.h>
+#include <kernel/ksignal.h>
 #include <kernel/schedule.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
@@ -72,7 +72,7 @@ void terminal_input(char c) {
     if (c == 0x03) {
         terminal_write("^C\n", 3);
         if (foreground_pid == 0) return;
-        send_signal(foreground_pid, SIGNAL::SIGINT);
+        send_signal(foreground_pid, SIGINT);
         {
             SpinlockGuard ttyguard(tty_lock);
             SpinlockGuard guard(process_list_lock);

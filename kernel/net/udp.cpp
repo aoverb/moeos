@@ -92,8 +92,8 @@ int udp_close(socket& sock) {
     return 0;
 }
 
-int udp_ioctl(socket& sock, const char* cmd, void* arg) {
-    if (strcmp(cmd, "SOCK_IOC_BIND") == 0) {
+int udp_ioctl(socket& sock, uint32_t request, void* arg) {
+    if (request == SOCK_IOC_BIND) {
         return udp_bind(sock, reinterpret_cast<sockaddr*>(arg));
     }
     return -1;

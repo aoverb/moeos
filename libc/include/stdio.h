@@ -14,7 +14,6 @@ int putchar(int);
 int puts(const char*);
 bool getline(char* buf, uint32_t size);
 void cls();
-void tcsetpgrp(int fd, pid_t pid);
 
 #ifdef __cplusplus
 }

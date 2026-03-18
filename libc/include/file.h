@@ -13,6 +13,21 @@ extern "C" {
 #define O_RDWR    0x03
 #define O_CREATE  0x04
 
+/* open() 文件创建标志 */
+#define O_CREAT      0x0040   /* 文件不存在则创建 */
+#define O_EXCL       0x0080   /* 与 O_CREAT 一起用，文件已存在则失败 */
+#define O_TRUNC      0x0200   /* 截断为零长度 */
+#define O_APPEND     0x0400   /* 追加模式 */
+ 
+/* open() 非阻塞 */
+#define O_NONBLOCK   0x0800
+ 
+/* 文件权限位（mode_t，用于 open 第三个参数） */
+#define S_IRUSR      0400
+#define S_IWUSR      0200
+#define S_IRGRP      0040
+#define S_IROTH      0004
+
 struct file_stat {
     uint32_t size;
     uint8_t  type;
@@ -26,7 +41,6 @@ struct file_stat {
     char     link_name[100];
 };
 
-int ioctl(int fd, char* cmd, void* arg);
 int stat(const char* path, file_stat* stat);
 int mount(uint32_t driver, const char* mount_path, void* device_data);
 int unmount(const char* mount_path);

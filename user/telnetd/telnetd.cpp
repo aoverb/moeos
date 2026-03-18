@@ -1,6 +1,7 @@
 #include <net/net.hpp>
 #include <net/socket.hpp>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 #include <file.h>
 #include <stdio.h>
 #include <format.h>
@@ -177,7 +178,7 @@ int main(int argc, char** argv) {
     sockaddr bindaddr;
     bindaddr.addr = SOCKADDR_BROADCAST_ADDR;
     bindaddr.port = 23;
-    if (ioctl(conn, "SOCK_IOC_BIND", &bindaddr) < 0) {
+    if (ioctl(conn, SOCK_IOC_BIND, &bindaddr) < 0) {
         printf("telnetd: failed to bind 0.0.0.0:23!\n");
         return 0;
     }

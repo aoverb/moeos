@@ -88,12 +88,12 @@ int sys_connect(interrupt_frame* reg) {
     return v_connect(current_pcb(), fd, addr, port);
 }
 
-// IOCTL(ebx = fd, ecx = cmd, edx = arg)  → returns 0 if succeeded
+// IOCTL(ebx = fd, ecx = request, edx = arg)  → returns 0 if succeeded
 int sys_ioctl(interrupt_frame* reg) {
     int fd          = static_cast<int>(reg->ebx);
-    const char* cmd = reinterpret_cast<char*>(reg->ecx);
+    const uint32_t request = reg->ecx;
     void* arg       = reinterpret_cast<void*>(reg->edx);
-    return v_ioctl(current_pcb(), fd, cmd, arg);
+    return v_ioctl(current_pcb(), fd, request, arg);
 }
 
 // STAT(ebx = path, ecx = &file_stat)

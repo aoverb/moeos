@@ -440,14 +440,14 @@ int v_rename(const char* old_path, const char* new_path) {
 }
 
 
-int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg) {
+int v_ioctl(PCB* proc, int fd_pos, uint32_t request, void* arg) {
     SpinlockGuard guard(vfs_lock);
     if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
     file_description*& fd = proc->fd[fd_pos];
     if (!fd) return -1;
     mounting_point* mp = fd->mp;
     if (!mp || !(mp->operations->ioctl)) return -1;
-    return mp->operations->ioctl(mp, fd->inode_id, cmd, arg);
+    return mp->operations->ioctl(mp, fd->inode_id, request, arg);
 }
 
 int v_connect(PCB* proc, int fd_pos, const char* addr, uint16_t port) {

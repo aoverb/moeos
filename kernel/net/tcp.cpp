@@ -169,8 +169,8 @@ int tcp_bind(TCBPtr tcb, sockaddr* bind_conf) {
     return 0;
 }
 
-int tcp_ioctl(TCBPtr& tcb, const char* cmd, void* arg) {
-    if (strcmp(cmd, "SOCK_IOC_BIND") == 0) {
+int tcp_ioctl(TCBPtr& tcb, uint32_t request, void* arg) {
+    if (request == SOCK_IOC_BIND) {
         return tcp_bind(tcb, reinterpret_cast<sockaddr*>(arg));
     }
     return -1;
