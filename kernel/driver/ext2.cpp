@@ -26,13 +26,13 @@ struct cache_data {
     spinlock cacheLock;
 };
 
-void flush_block(cache_data& cache_data, cache_entry* cache) {
+static void flush_block(cache_data& cache_data, cache_entry* cache) {
     if (cache->block_no == -1 || !cache->dirty) return;
     cache_data.mp_data->dev->write(cache_data.mp_data->dev, cache->block_no, cache->data.get());
     cache->dirty = false;
 }
 
-void flush_all_block(cache_data& cache_data) {
+static void flush_all_block(cache_data& cache_data) {
     SpinlockGuard guard(cache_data.cacheLock);
     for (int i = 0; i < CACHE_ENRTY_COUNT; ++i) {
         flush_block(cache_data, &cache_data.entry[i]);
@@ -40,7 +40,7 @@ void flush_all_block(cache_data& cache_data) {
     }
 }
 
-void taint(cache_data& cache_data, int block_no) {
+static void taint(cache_data& cache_data, int block_no) {
     SpinlockGuard guard(cache_data.cacheLock);
     const auto& itr = cache_data.map.find(block_no);
     if (itr == cache_data.map.end()) {
@@ -49,13 +49,13 @@ void taint(cache_data& cache_data, int block_no) {
     itr->second->dirty = true;
 }
 
-void detach(cache_entry* item) {
+static void detach(cache_entry* item) {
     if (item->prev) item->prev->next = item->next;
     if (item->next) item->next->prev = item->prev;
     item->prev = item->next = nullptr;
 }
 
-void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
+static void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
     if (recently_used == cache_data.head) return;
     detach(recently_used);
     cache_data.head->prev->next = recently_used;
@@ -65,7 +65,7 @@ void insert_into_head(cache_data& cache_data, cache_entry* recently_used) {
     cache_data.head = recently_used;
 }
 
-shared_ptr<char> get_cache_ptr(cache_data& cache_data, int block_no) {
+static shared_ptr<char> get_cache_ptr(cache_data& cache_data, int block_no) {
     SpinlockGuard guard(cache_data.cacheLock);
     auto itr = cache_data.map.find(block_no);
     if (itr != cache_data.map.end()) {
@@ -88,14 +88,14 @@ shared_ptr<char> get_cache_ptr(cache_data& cache_data, int block_no) {
     return least_rused->data;
 }
 
-int cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
+static int cache_read(cache_data& cache_data, int block_no, void* block_buffer) {
     shared_ptr<char> ptr = get_cache_ptr(cache_data, block_no);
     if (!ptr) return -1;
     memcpy(block_buffer, ptr.get(), cache_data.mp_data->dev->block_size);
     return 0;
 }
 
-void init_cache(ext2_data* mp_data) {
+static void init_cache(ext2_data* mp_data) {
     mp_data->cache_data = new (kmalloc(sizeof(cache_data))) cache_data();
     cache_data& cache_data = *(mp_data->cache_data);
     cache_data.mp_data = mp_data;
@@ -110,7 +110,7 @@ void init_cache(ext2_data* mp_data) {
 }
 
 // 注意：每次单次、批量调用alloc/free之后，需要调用flush metadata刷新元数据里面的块计数/inode计数
-int block_alloc(ext2_data* data) {
+static int block_alloc(ext2_data* data) {
     const size_t block_size = data->dev->block_size; 
     for (int i = 0; i < data->bg_num; ++i) {
         ext2_group_desc& gd = data->gdt[i];
@@ -133,9 +133,9 @@ int block_alloc(ext2_data* data) {
     return -1;
 }
 
-void block_free(ext2_data* data, int block_no) {
+static void block_free(ext2_data* data, int block_no) {
     // block_no反推所在组
-    if (block_no == -1) return;
+    if (block_no <= 0) return;
     block_no -= data->sb.s_first_data_block;
     int grp_no = block_no / data->sb.s_blocks_per_group;
     int offset = (block_no % data->sb.s_blocks_per_group) / 8;
@@ -148,7 +148,7 @@ void block_free(ext2_data* data, int block_no) {
     taint(*data->cache_data, gd.bg_block_bitmap);
 }
 
-int inode_alloc(ext2_data* data) {
+static int inode_alloc(ext2_data* data) {
     for (int i = 0; i < data->bg_num; ++i) {
         ext2_group_desc& gd = data->gdt[i];
         if (gd.bg_free_inodes_count == 0) continue;
@@ -169,7 +169,7 @@ int inode_alloc(ext2_data* data) {
     return -1;
 }
 
-void inode_free(ext2_data* data, int inode_no) {
+static void inode_free(ext2_data* data, int inode_no) {
     if (inode_no <= 0) return;
     inode_no -= 1;
     int grp_no = inode_no / data->sb.s_inodes_per_group;
@@ -183,7 +183,7 @@ void inode_free(ext2_data* data, int inode_no) {
     taint(*data->cache_data, gd.bg_inode_bitmap);
 }
 
-void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_idx,
+static void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_idx,
     uint32_t block_count, char* buffer) {
     const size_t block_size = data->dev->block_size;
     for (int i = 0; i < block_count; ++i) {
@@ -197,7 +197,7 @@ void read_direct_block(ext2_data* data, const ext2_inode* inode, uint32_t block_
     return;
 }
 
-void flush_metadata(ext2_data* data) {
+static void flush_metadata(ext2_data* data) {
     // 写元数据不走缓存
     // 刷新超级块
     void* sb_buffer = kmalloc(data->dev->block_size);
@@ -217,7 +217,7 @@ void flush_metadata(ext2_data* data) {
 }
 
 // block_idx是相对于这个块来说的其叶子块（即直接指针块）的索引，block_count粒度也是如此
-void read_indirect_block(ext2_data* data, uint32_t cur_block, uint32_t depth, 
+static void read_indirect_block(ext2_data* data, uint32_t cur_block, uint32_t depth, 
     uint32_t block_idx, uint32_t block_count, char* buffer) {
     const size_t block_size = data->dev->block_size;
     if (cur_block == 0) {
@@ -357,13 +357,14 @@ static int get_phys_block_no_in_inode(ext2_data* data, ext2_inode* inode, uint32
 }
 
 // 在insert_idx插入一个指定的物理块，如果这个地方已经有一个物理块，函数返回-1
+// 如果replace为true，强制替换，注意，替换不会自动释放原有的物理块！
 static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
-    uint32_t block_no, uint32_t insert_idx) {
+    uint32_t block_no, uint32_t insert_idx, bool replace = false) {
     const size_t block_size = data->dev->block_size; 
     const size_t blkcnt_per_block = block_size / 4;
     const ext2_super_block& sb = data->sb;
     if (insert_idx < 12) { // 可以通过加直接指针解决
-        if (inode->i_block[insert_idx] != 0) return -1;
+        if (inode->i_block[insert_idx] != 0 && !replace) return -1;
         inode->i_block[insert_idx] = block_no;
         inode->i_blocks += block_size / SECTOR_SIZE;
         return 0;
@@ -379,7 +380,7 @@ static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
             memset(get_cache_ptr(*data->cache_data, inode->i_block[12]).get(), 0, block_size);
         }
         auto direct_ptr = get_cache_ptr(*data->cache_data, inode->i_block[12]);
-        if (*((uint32_t*)direct_ptr.get() + insert_idx) != 0) return -1;
+        if (*((uint32_t*)direct_ptr.get() + insert_idx) != 0 && !replace) return -1;
         *((uint32_t*)direct_ptr.get() + insert_idx) = block_no;
         taint(*data->cache_data, inode->i_block[12]);
         inode->i_blocks += block_size / SECTOR_SIZE;
@@ -410,7 +411,7 @@ static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
         }
         auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
         if (*((uint32_t*)direct_ptr.get() +
-            insert_idx % blkcnt_per_block) != 0) return -1;
+            insert_idx % blkcnt_per_block) != 0 && !replace) return -1;
         *((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) = block_no;
         taint(*data->cache_data, *first_class);
         inode->i_blocks += block_size / SECTOR_SIZE;
@@ -449,7 +450,7 @@ static size_t insert_block_in_inode(ext2_data* data, ext2_inode* inode,
             taint(*data->cache_data, *first_class);
         }
         auto direct_ptr = get_cache_ptr(*data->cache_data, *first_class);
-        if (*((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) != 0) {
+        if (*((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) != 0 && !replace) {
             return -1;
         }
         *((uint32_t*)direct_ptr.get() + insert_idx % blkcnt_per_block) = block_no;
@@ -711,7 +712,7 @@ void init_inode(ext2_inode& inode, uint8_t type) {
     memset(&inode, 0, sizeof(inode));
     // inode.i_atime = inode.i_ctime = inode.i_dtime = inode.i_mtime = 0; // todo: 我现在还不支持获取时间...
     inode.i_mode = (type == FILE_TYPE_DIR) ? 0x4000 | 0755 : 0x8000 | 0644;
-    inode.i_links_count = 1;
+    inode.i_links_count = (type == FILE_TYPE_DIR) ? 2 : 1;
 }
 
 void split_path(const char* full_path, char* path, char* name) {
@@ -733,7 +734,23 @@ void split_path(const char* full_path, char* path, char* name) {
 
 constexpr uint32_t ROOT_INODE_NO = 2;
 
-int open(mounting_point* mp, const char* path, uint8_t mode) {
+static int create(ext2_data* data, const char* path, const char* name, int type) {
+    int path_inode_no = relative_lookup(data, ROOT_INODE_NO, path);
+    if (path_inode_no <= 0) {
+        return -1; // 路径都不存在，没救了
+    }
+    int new_inode_no = inode_alloc(data);
+    if (new_inode_no <= 0) return -1;
+    ext2_inode new_inode;
+    init_inode(new_inode, type);
+    set_inode_by_id(data, new_inode_no, &new_inode);
+    add_entry_to_dir(data, path_inode_no, new_inode_no, type, name);
+    flush_all_block(*data->cache_data);
+    flush_metadata(data);
+    return new_inode_no;
+}
+
+static int open(mounting_point* mp, const char* path, uint8_t mode) {
     if (strlen(path) >= 256) return -1; // 不支持这么长的路径
     ext2_data* data = (ext2_data*)mp->data;
     if (path[0] != '/') return -1;
@@ -742,23 +759,11 @@ int open(mounting_point* mp, const char* path, uint8_t mode) {
     split_path(path, par_path, name);
     if (name[0] == '\0') return -1;
     int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
-    if (inode_no <= 0 && (mode & O_CREATE) == 0) return -1;
     if (inode_no > 0) {
         return inode_no;
     }
-    int path_inode_no = relative_lookup(data, ROOT_INODE_NO, par_path);
-    if (path_inode_no <= 0) {
-        return -1; // 路径都不存在，没救了
-    }
-    int new_inode_no = inode_alloc(data);
-    if (new_inode_no <= 0) return -1;
-    ext2_inode new_inode;
-    init_inode(new_inode, FILE_TYPE_FILE);
-    set_inode_by_id(data, new_inode_no, &new_inode);
-    add_entry_to_dir(data, path_inode_no, new_inode_no, FILE_TYPE_FILE, name);
-    flush_all_block(*data->cache_data);
-    flush_metadata(data);
-    return new_inode_no;
+    if (inode_no <= 0 && (mode & O_CREATE) == 0) return -1;
+    return create(data, par_path, name, FILE_TYPE_FILE);
 }
 
 int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
@@ -812,11 +817,13 @@ int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, u
     return read_size;
 }
 
-int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
+static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     ext2_data* data = (ext2_data*)mp->data;
     const size_t block_size = data->dev->block_size; 
     ext2_inode inode;
-    get_inode_by_id(data, inode_id, &inode);
+    if (get_inode_by_id(data, inode_id, &inode) < 0) {
+        return -1;
+    }
 
     uint32_t begin_block = offset / block_size;
     uint32_t cur_offset = offset % block_size;
@@ -849,13 +856,136 @@ int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* bu
     return written;
 }
 
-int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
+static int remove_entry_from_dir(ext2_data* data, uint32_t dir_inode_no, uint32_t entry_inode_no) {
+    ext2_inode dir_inode;
+    if (get_inode_by_id(data, dir_inode_no, &dir_inode) < 0) {
+        return -1;
+    }
+
+    const size_t block_size = data->dev->block_size; 
+
+    uint32_t block_num = (dir_inode.i_size + block_size - 1) / block_size;
+    for (int i = 0; i < block_num; ++i) {
+        uint32_t read_offset = 0;
+        uint32_t last_offset = 0;
+        int phys_block_no = get_phys_block_no_in_inode(data, &dir_inode, i);
+        auto cache_ptr = get_cache_ptr(*data->cache_data, phys_block_no);
+        while (read_offset < block_size) {
+            ext2_dir_entry* entry = reinterpret_cast<ext2_dir_entry*>(cache_ptr.get() + read_offset);
+            if (entry->rec_len == 0) break;
+            if (entry->inode == entry_inode_no) {
+                if (last_offset == read_offset) { // 我就是第一项
+                    entry->inode = 0;  // 标记为已删除，保留空间
+                    taint(*data->cache_data, phys_block_no);
+                    return 0;
+                }
+                ext2_dir_entry* last_entry = reinterpret_cast<ext2_dir_entry*>(cache_ptr.get() + last_offset);
+                last_entry->rec_len += entry->rec_len;
+                taint(*data->cache_data, phys_block_no);
+                return 0;
+            }
+            last_offset = read_offset;
+            read_offset += entry->rec_len;
+        }
+    }
+
+    return -1; // 找不到对应条目
+}
+
+static void free_block_tree(ext2_data* data, uint32_t inode_no, int depth) {
+    if (inode_no == 0) return;
+    if (depth > 0) {
+        auto cache_ptr = get_cache_ptr(*data->cache_data, inode_no);
+        for (int i = 0; i < data->dev->block_size / 4; ++i) {
+            free_block_tree(data, *(reinterpret_cast<uint32_t*>(cache_ptr.get()) + i), depth - 1);
+        }
+    }
+    block_free(data, inode_no);
+}
+
+static int ext2_unlink(mounting_point* mp, uint32_t inode_id) {
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size; 
+    ext2_inode inode;
+    if (get_inode_by_id(data, inode_id, &inode) < 0) {
+        return -1;
+    }
+
+    if (--inode.i_links_count != 0) {
+        set_inode_by_id(data, inode_id, &inode);
+        return 0;
+    }
+    for (int i = 0; i < 12; ++i) free_block_tree(data, inode.i_block[i], 0);
+    free_block_tree(data, inode.i_block[12], 1);
+    free_block_tree(data, inode.i_block[13], 2);
+    free_block_tree(data, inode.i_block[14], 3);
+    memset(&inode, 0, sizeof(inode));
+    set_inode_by_id(data, inode_id, &inode);
+    inode_free(data, inode_id);
+    
+    return 0;
+}
+
+static int unlink(mounting_point* mp, const char* path) {
+    ext2_data* data = (ext2_data*)mp->data;
+    const size_t block_size = data->dev->block_size; 
+    int inode_id = relative_lookup(data, ROOT_INODE_NO, path);
+    if (inode_id <= 0) {
+        return -1;
+    }
+    char dir_path[256];
+    char name[256];
+    split_path(path, dir_path, name);
+    int dir_inode_id = relative_lookup(data, ROOT_INODE_NO, dir_path);
+    remove_entry_from_dir(data, dir_inode_id, inode_id);
+    ext2_unlink(mp, inode_id);
+    flush_all_block(*data->cache_data);
+    flush_metadata(data);
+    return 0;
+}
+
+static int mkdir(mounting_point* mp, const char* path) {
+    if (strlen(path) > 255) return -1;
+    char make_path[256];
+    strcpy(make_path, path);
+    if (make_path[strlen(make_path) - 1] == '/') make_path[strlen(make_path) - 1] = '\0';
+    char dir_path[256];
+    char name[256];
+    split_path(make_path, dir_path, name);
+    if (strlen(name) == 0) return -1;
+    if (strcmp(name, "..") == 0 || strcmp(name, ".") == 0) return -1; // 不合法的名字
+    ext2_data* data = (ext2_data*)mp->data;
+    int dir_inode_id = relative_lookup(data, ROOT_INODE_NO, dir_path);
+    if (dir_inode_id <= 0) {
+        return -1;
+    }
+    int new_inode_id = inode_alloc(data);
+    if (new_inode_id < 0) return -1;
+    
+    ext2_inode inode;
+    init_inode(inode, FILE_TYPE_DIR);
+    add_entry_to_dir(data, dir_inode_id, new_inode_id, FILE_TYPE_DIR, name);
+    set_inode_by_id(data, new_inode_id, &inode);
+    add_entry_to_dir(data, new_inode_id, new_inode_id, FILE_TYPE_DIR, ".");
+    add_entry_to_dir(data, new_inode_id, dir_inode_id, FILE_TYPE_DIR, "..");
+
+    ext2_inode par_inode;
+    get_inode_by_id(data, dir_inode_id, &par_inode);
+    ++par_inode.i_links_count;
+    set_inode_by_id(data, dir_inode_id, &par_inode);
+
+    flush_all_block(*data->cache_data);
+    flush_metadata(data);
+    return 0;
+}
+
+static int close(mounting_point* mp, uint32_t inode_id, uint32_t mode) {
     return 0;
 }
 
 constexpr uint32_t MODE_FTYPE_DIR = 4;
 
-int stat(mounting_point* mp, const char* path, file_stat* out) {
+static int stat(mounting_point* mp, const char* path, file_stat* out) {
     ext2_data* data = (ext2_data*)mp->data;
     if (strcmp(path, "/") == 0) {
         out->group_id = (data->root_inode.i_gid_high << 16) | data->root_inode.i_gid;
@@ -887,13 +1017,13 @@ int stat(mounting_point* mp, const char* path, file_stat* out) {
     return 0;
 }
 
-int opendir(mounting_point* mp, const char* path) {
+static int opendir(mounting_point* mp, const char* path) {
     ext2_data* data = (ext2_data*)mp->data;
     int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
     return inode_no == 0 ? -1 : inode_no;
 }
 
-int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
+static int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out) {
     if (inode_id == 0) return -1;
     ext2_data* data = (ext2_data*)mp->data;
     const size_t block_size = data->dev->block_size; 
@@ -925,15 +1055,15 @@ int readdir(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out)
     return 0;
 }
 
-int closedir(mounting_point* mp, uint32_t inode_id) {
+static int closedir(mounting_point* mp, uint32_t inode_id) {
     return 0;
 }
 
-int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
+static int ioctl(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg) {
     return -1;
 }
 
-int peek(mounting_point* mp, uint32_t inode_id) {
+static int peek(mounting_point* mp, uint32_t inode_id) {
     if (inode_id == 0) return -1;
     ext2_data* data = (ext2_data*)mp->data;
     const size_t block_size = data->dev->block_size;
@@ -944,7 +1074,7 @@ int peek(mounting_point* mp, uint32_t inode_id) {
     return size;
 }
 
-int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
+static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
     return -1;
 }
 
@@ -962,6 +1092,9 @@ void init_ext2fs() {
     ext2_fs_operation.ioctl    = &ioctl;
     ext2_fs_operation.set_poll = &set_poll;
     ext2_fs_operation.peek     = &peek;
+    ext2_fs_operation.unlink   = &unlink;
+    ext2_fs_operation.mkdir    = &mkdir;
+    ext2_fs_operation.rename   = nullptr;
     ext2_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::EXT2FS, &ext2_fs_operation); // 先让ext2挂载失败
 }

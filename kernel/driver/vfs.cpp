@@ -416,6 +416,30 @@ int v_stat(const char* path, file_stat* out) {
     return mp->operations->stat(mp, get_mounting_relative_path(mp, path), out);
 }
 
+int v_unlink(const char* path) {
+    SpinlockGuard guard(vfs_lock);
+    mounting_point* mp = get_mounting_point(path);
+    if (!mp || !mp->operations->unlink) return -1;
+    return mp->operations->unlink(mp, get_mounting_relative_path(mp, path));
+}
+
+int v_mkdir(const char* path) {
+    SpinlockGuard guard(vfs_lock);
+    mounting_point* mp = get_mounting_point(path);
+    if (!mp || !mp->operations->mkdir) return -1;
+    return mp->operations->mkdir(mp, get_mounting_relative_path(mp, path));
+}
+
+int v_rename(const char* old_path, const char* new_path) {
+    SpinlockGuard guard(vfs_lock);
+    mounting_point* mp_old = get_mounting_point(old_path);
+    mounting_point* mp_new = get_mounting_point(new_path);
+    if (!mp_old || mp_new != mp_old || !mp_old->operations->rename) return -1; // todo：暂不支持跨文件系统rename
+    return mp_old->operations->rename(mp_old, get_mounting_relative_path(mp_old, old_path),
+        get_mounting_relative_path(mp_new, new_path));
+}
+
+
 int v_ioctl(PCB* proc, int fd_pos, const char* cmd, void* arg) {
     SpinlockGuard guard(vfs_lock);
     if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;

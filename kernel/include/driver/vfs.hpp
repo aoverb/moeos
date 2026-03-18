@@ -49,6 +49,9 @@ struct fs_operation {
     int (*readdir)(mounting_point* mp, uint32_t inode_id, uint32_t offset, dirent* out);
     int (*closedir)(mounting_point* mp, uint32_t inode_id);
     int (*stat)(mounting_point* mp, const char* path, file_stat* out);
+    int (*unlink)(mounting_point* mp, const char* path);
+    int (*mkdir)(mounting_point* mp, const char* path);
+    int (*rename)(mounting_point*, const char* old_path, const char* new_path);
     int (*ioctl)(mounting_point* mp, uint32_t inode_id, const char* cmd, void* arg);
     int (*peek)(mounting_point* mp, uint32_t inode_id);
     int (*set_poll)(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue);
@@ -86,6 +89,9 @@ int v_sendto(PCB* proc, int fd_pos, const char* buffer, uint32_t size, sockaddr*
 int v_recvfrom(PCB* proc, int fd_pos, char* buffer, uint32_t size, sockaddr* peeraddr);
 int v_peek(PCB* proc, int fd_pos);
 int v_setpoll(PCB* proc, int fd_pos, process_queue* poll_queue);
+int v_unlink(const char* path);
+int v_mkdir(const char* path);
+int v_rename(const char* old_path, const char* new_path);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);
