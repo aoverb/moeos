@@ -15,6 +15,8 @@
 extern uint32_t page_directory;
 spinlock tty_lock;
 
+
+
 static pid_t foreground_pid = 4;
 static uint32_t* fb_addr;
 static uint32_t fb_pitch;
@@ -27,6 +29,9 @@ static uint32_t terminal_row = 0;
 static uint32_t terminal_col = 0;
 
 static uint32_t terminal_color = 0x00FFFFFF;
+static uint32_t terminal_bg_color = 0x00000000;
+static bool terminal_reverse = false;
+
 static process_queue tty_wait_queue = nullptr;
 
 static termios setting;
@@ -157,14 +162,14 @@ void terminal_putpixel(int x, int y, uint32_t color) {
 }
 
 
-void terminal_draw_char(int x, int y, const uint8_t* font_char, uint32_t color) {
+void terminal_draw_char(int x, int y, const uint8_t* font_char, uint32_t fg, uint32_t bg) {
     // 控制台绘制字体的逻辑不应该依赖于字体的具体实现！需要重构。但是现在只是用来简单输出字符，刚刚好够用。
     for (int row = 0; row < FONT_HEIGHT; row++) {
         for (int col = 0; col < FONT_WIDTH; col++) {
             if (font_char[row] & (0x80 >> col)) {
-                terminal_putpixel(x + col, y + row, color);
+                terminal_putpixel(x + col, y + row, fg);
             } else {
-                terminal_putpixel(x + col, y + row, 0x00000000);
+                terminal_putpixel(x + col, y + row, bg);
             }
         }
     }
@@ -191,8 +196,9 @@ void terminal_scroll() {
     }
     
     // 清空最后一行
+    uint32_t bg = terminal_reverse ? terminal_color : terminal_bg_color;
     terminal_fill_rect(0, (terminal_rows - 1) * FONT_HEIGHT, 
-                      fb_width, FONT_HEIGHT, 0x00000000);
+                      fb_width, FONT_HEIGHT, bg);
     
     terminal_row = terminal_rows - 1;
 }
@@ -211,6 +217,8 @@ static uint8_t params_idx = 0;
 void terminal_write(const char* data, size_t size) {
     SpinlockGuard guard(tty_lock);
     for (size_t i = 0; i < size; i++) {
+        uint32_t fg = terminal_reverse ? terminal_bg_color : terminal_color;
+        uint32_t bg = terminal_reverse ? terminal_color : terminal_bg_color;
         if (state == ESC) {
             if (data[i] == '[') {
                 state = CSI;
@@ -252,7 +260,7 @@ void terminal_write(const char* data, size_t size) {
                 param[param_len] = '\0';
                 int mode = param_len > 0 ? atoi(param) : 0;
                 if (mode == 2) {
-                    terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
+                    terminal_fill_rect(0, 0, fb_width, fb_height, bg);
                     terminal_row = 0;
                     terminal_col = 0;
                     param_len = 0;
@@ -263,12 +271,12 @@ void terminal_write(const char* data, size_t size) {
                 terminal_fill_rect(terminal_col * FONT_WIDTH,
                                 terminal_row * FONT_HEIGHT,
                                 fb_width - terminal_col * FONT_WIDTH,
-                                FONT_HEIGHT, 0x00000000); // 先到行尾
+                                FONT_HEIGHT, bg); // 先到行尾
                 if (terminal_row + 1 < terminal_rows) {
                     terminal_fill_rect(0,
                                     (terminal_row + 1) * FONT_HEIGHT,
                                     fb_width,
-                                    fb_height - (terminal_row + 1) * FONT_HEIGHT, 0x00000000); // 再到屏幕末尾
+                                    fb_height - (terminal_row + 1) * FONT_HEIGHT, bg); // 再到屏幕末尾
                 }
                 param_len = 0;
                 state = NORMAL;
@@ -277,16 +285,70 @@ void terminal_write(const char* data, size_t size) {
                 terminal_fill_rect(terminal_col * FONT_WIDTH,
                                 terminal_row * FONT_HEIGHT,
                                 fb_width - terminal_col * FONT_WIDTH,
-                                FONT_HEIGHT, 0x00000000);
+                                FONT_HEIGHT, bg);
                 param_len = 0;
                 state = NORMAL;
                 continue;
             } else if (data[i] == 'm') {
                 param[param_len] = '\0';
                 if (param_len > 0) params[params_idx++] = atoi(param);
-                int code = (params_idx > 0) ? params[0] : 0;
-                if (code == 0 || code == 39) terminal_color = 0x00FFFFFF;
-                else if (code == 7) { /* TODO: 反显 */ }
+
+                // 无参数等价于 0（重置）
+                if (params_idx == 0) {
+                    params[0] = 0;
+                    params_idx = 1;
+                }
+
+                for (int p = 0; p < params_idx; p++) {
+                    switch (params[p]) {
+                    case 0:  // 重置
+                        terminal_color = 0x00FFFFFF;
+                        terminal_bg_color = 0x00000000;
+                        terminal_reverse = false;
+                        break;
+                    case 1:  // 加粗，先忽略
+                        break;
+                    case 7:  // 反显
+                        terminal_reverse = true;
+                        break;
+                    case 27: // 取消反显
+                        terminal_reverse = false;
+                        break;
+                    // 标准色 (30-37)
+                    case 30: terminal_color = 0x00414868; break; // 黑（深蓝灰）
+                    case 31: terminal_color = 0x00F7768E; break; // 红（樱花粉红）
+                    case 32: terminal_color = 0x009ECE6A; break; // 绿（抹茶绿）
+                    case 33: terminal_color = 0x00E0AF68; break; // 黄（琥珀）
+                    case 34: terminal_color = 0x007AA2F7; break; // 蓝（钴蓝）
+                    case 35: terminal_color = 0x00BB9AF7; break; // 洋红（薰衣草紫）
+                    case 36: terminal_color = 0x007DCFFF; break; // 青（天空蓝）
+                    case 37: terminal_color = 0x00A9B1D6; break; // 白（月光灰）
+                    case 39: terminal_color = 0x00C0CAF5; break; // 默认前景
+
+                    // 标准背景色 (40-49)
+                    case 40: terminal_bg_color = 0x001A1B26; break;
+                    case 41: terminal_bg_color = 0x00F7768E; break;
+                    case 42: terminal_bg_color = 0x009ECE6A; break;
+                    case 43: terminal_bg_color = 0x00E0AF68; break;
+                    case 44: terminal_bg_color = 0x007AA2F7; break;
+                    case 45: terminal_bg_color = 0x00BB9AF7; break;
+                    case 46: terminal_bg_color = 0x007DCFFF; break;
+                    case 47: terminal_bg_color = 0x00A9B1D6; break;
+                    case 49: terminal_bg_color = 0x00000000; break;
+
+                    // 亮色前景 (90-97)
+                    case 90: terminal_color = 0x00565F89; break; // 亮黑（注释灰）
+                    case 91: terminal_color = 0x00FF9E9E; break; // 亮红
+                    case 92: terminal_color = 0x00C3E88D; break; // 亮绿
+                    case 93: terminal_color = 0x00FFD580; break; // 亮黄
+                    case 94: terminal_color = 0x0082AAFF; break; // 亮蓝
+                    case 95: terminal_color = 0x00C3A6FF; break; // 亮洋红
+                    case 96: terminal_color = 0x00B4F9F8; break; // 亮青
+                    case 97: terminal_color = 0x00C0CAF5; break; // 亮白
+                    default: break;
+                    }
+                }
+
                 param_len = 0;
                 params_idx = 0;
                 state = NORMAL;
@@ -309,7 +371,7 @@ void terminal_write(const char* data, size_t size) {
                     if (terminal_row < terminal_rows && terminal_col < terminal_cols)
                         terminal_fill_rect(terminal_col * FONT_WIDTH,
                                         terminal_row * FONT_HEIGHT,
-                                        FONT_WIDTH, FONT_HEIGHT, 0x00000000);
+                                        FONT_WIDTH, FONT_HEIGHT, bg);
                 }
                 param_len = 0;
                 state = NORMAL;
@@ -321,7 +383,7 @@ void terminal_write(const char* data, size_t size) {
                     if (terminal_row < terminal_rows && terminal_col < terminal_cols)
                         terminal_fill_rect(terminal_col * FONT_WIDTH,
                                         terminal_row * FONT_HEIGHT,
-                                        FONT_WIDTH, FONT_HEIGHT, 0x00FFFFFF);
+                                        FONT_WIDTH, FONT_HEIGHT, fg);
                 }
                 param_len = 0;
                 state = NORMAL;
@@ -344,7 +406,7 @@ void terminal_write(const char* data, size_t size) {
                             terminal_row * FONT_HEIGHT, 
                             FONT_WIDTH, 
                             FONT_HEIGHT, 
-                            0x00000000);
+                            bg);
         if (data[i] == '\r') {
             terminal_col = 0;
             continue;
@@ -362,7 +424,7 @@ void terminal_write(const char* data, size_t size) {
                               terminal_row * FONT_HEIGHT, 
                               FONT_WIDTH, 
                               FONT_HEIGHT, 
-                              show_cursor ? 0x00FFFFFF : 0x0);
+                              show_cursor ? fg : bg);
             continue;
         }
         if (data[i] == '\n') {
@@ -392,19 +454,20 @@ void terminal_write(const char* data, size_t size) {
         }
         unsigned char c = (unsigned char)data[i];
         const uint8_t* glyph = font_8x16[c];
-        terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
+        terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, fg, bg);
         if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0)
             terminal_fill_rect(terminal_col * FONT_WIDTH, 
                         terminal_row * FONT_HEIGHT, 
                         FONT_WIDTH, 
                         FONT_HEIGHT, 
-                        0x00FFFFFF);
+                        fg);
     }
 }
 
 void terminal_clear() {
     SpinlockGuard guard(tty_lock);
-    terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
+    uint32_t bg = terminal_reverse ? terminal_color : terminal_bg_color;
+    terminal_fill_rect(0, 0, fb_width, fb_height, bg);
     terminal_row = 0;
     terminal_col = 0;
 }
