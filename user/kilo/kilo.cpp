@@ -207,6 +207,8 @@ void disableRawMode(int fd) {
     if (E.rawmode) {
         tcsetattr(fd,TCSAFLUSH,&orig_termios);
         E.rawmode = 0;
+        write(STDOUT_FILENO, "\x1b[2J", 4);
+        write(STDOUT_FILENO, "\x1b[H", 3);
     }
 }
 

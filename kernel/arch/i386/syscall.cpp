@@ -122,7 +122,12 @@ int sys_open(interrupt_frame* reg) {
     SpinlockGuard guard(process_list_lock);
     const char* path = reinterpret_cast<const char*>(reg->ebx);
     uint8_t mode     = static_cast<uint8_t>(reg->ecx);
-    return v_open(current_pcb(), path, mode);
+    PCB* cur_pcb = current_pcb();
+    
+    char resolved[MAX_PATH_LEN];
+    resolve_path(cur_pcb->cwd, path, resolved);
+
+    return v_open(current_pcb(), resolved, mode);
 }
 
 // READ(ebx = fd, ecx = buffer, edx = size)  → returns bytes read

@@ -128,11 +128,10 @@ static inline int _fmt_itoa(char *buf, long long val)
 /* ========================================================================= */
 /*  Core formatted output: vsnprintf                                         */
 /* ========================================================================= */
-
 static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 {
-    size_t pos = 0;   /* 当前写入位置 */
-    int    total = 0; /* 理论输出总长（即使被截断） */
+    size_t pos = 0;
+    int    total = 0;
 
     #define _FMT_PUT(ch) do {               \
         if (pos + 1 < size) buf[pos] = (ch);\
@@ -145,7 +144,7 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             fmt++;
             continue;
         }
-        fmt++; /* skip '%' */
+        fmt++;
 
         /* --- flags --- */
         int  left_justify = 0;
@@ -159,13 +158,38 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 
         /* --- width --- */
         int width = 0;
-        while (*fmt >= '0' && *fmt <= '9') {
-            width = width * 10 + (*fmt - '0');
+        if (*fmt == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left_justify = 1; width = -width; }
             fmt++;
+        } else {
+            while (*fmt >= '0' && *fmt <= '9') {
+                width = width * 10 + (*fmt - '0');
+                fmt++;
+            }
+        }
+
+        /* --- precision --- */
+        int has_prec  = 0;
+        int precision = -1;
+        if (*fmt == '.') {
+            has_prec  = 1;
+            precision = 0;
+            fmt++;
+            if (*fmt == '*') {
+                precision = va_arg(ap, int);
+                if (precision < 0) { has_prec = 0; precision = -1; }
+                fmt++;
+            } else {
+                while (*fmt >= '0' && *fmt <= '9') {
+                    precision = precision * 10 + (*fmt - '0');
+                    fmt++;
+                }
+            }
         }
 
         /* --- length modifier --- */
-        int length = 0; /* 0=int, 1=long, 2=long long */
+        int length = 0;
         while (*fmt == 'l') { length++; fmt++; }
 
         /* --- specifier --- */
@@ -180,6 +204,21 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             else if (length == 1) v = va_arg(ap, long);
             else                  v = va_arg(ap, int);
             slen = _fmt_itoa(numbuf, v);
+            if (has_prec) {
+                int digits = (numbuf[0] == '-') ? slen - 1 : slen;
+                if (precision > digits) {
+                    char tmp[65];
+                    int ti = 0;
+                    if (numbuf[0] == '-') tmp[ti++] = '-';
+                    for (int p = 0; p < precision - digits; p++) tmp[ti++] = '0';
+                    int src = (numbuf[0] == '-') ? 1 : 0;
+                    for (int p = src; p < slen; p++) tmp[ti++] = numbuf[p];
+                    tmp[ti] = '\0';
+                    for (int p = 0; p <= ti; p++) numbuf[p] = tmp[p];
+                    slen = ti;
+                }
+                pad_char = ' ';
+            }
             break;
         }
         case 'u': {
@@ -225,6 +264,7 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             s = va_arg(ap, const char *);
             if (!s) s = "(null)";
             slen = (int)strlen(s);
+            if (has_prec && precision < slen) slen = precision;
             break;
         }
         case 'c': {
@@ -239,7 +279,6 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
             slen = 1;
             break;
         default:
-            /* 未知格式符：原样输出 */
             _FMT_PUT('%');
             _FMT_PUT(*fmt);
             fmt++;
@@ -251,7 +290,6 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
         int pad = (width > slen) ? (width - slen) : 0;
 
         if (!left_justify) {
-            /* 对于 '0' 填充的负数，先输出 '-' 再填 '0' */
             if (pad_char == '0' && slen > 0 && s[0] == '-') {
                 _FMT_PUT('-');
                 s++; slen--;
@@ -264,14 +302,12 @@ static inline int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
         }
     }
 
-    /* NUL terminate */
     if (size > 0)
         buf[(pos < size) ? pos : size - 1] = '\0';
 
     #undef _FMT_PUT
     return total;
 }
-
 /* ========================================================================= */
 /*  Core formatted input: vsscanf                                            */
 /* ========================================================================= */

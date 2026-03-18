@@ -159,10 +159,13 @@ void* realloc(void* ptr, size_t new_size) {
         return nullptr;
     }
 
+    block_t block = (block_t)ptr - 1;
+    size_t old_size = block_size(block);
+
     void* new_ptr = malloc(new_size);
     if (!new_ptr) return nullptr;
 
-    memcpy(new_ptr, ptr, new_size); // todo: 最好能知道旧block大小
+    memcpy(new_ptr, ptr, old_size < new_size ? old_size : new_size);
     free(ptr);
     return new_ptr;
 }

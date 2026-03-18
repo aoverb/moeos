@@ -8,6 +8,7 @@
 #include <kernel/timer.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
+#include <ctype.h>
 #include <stddef.h>
 #include <stdint.h> // for uint8_t etc.
 
@@ -29,7 +30,7 @@ static uint32_t terminal_color = 0x00FFFFFF;
 static process_queue tty_wait_queue = nullptr;
 
 static termios setting;
-
+static bool show_cursor = true;
 static uint32_t read_wait_time = 100;
 
 const termios& terminal_get_setting() {
@@ -160,8 +161,10 @@ void terminal_draw_char(int x, int y, const uint8_t* font_char, uint32_t color) 
     // 控制台绘制字体的逻辑不应该依赖于字体的具体实现！需要重构。但是现在只是用来简单输出字符，刚刚好够用。
     for (int row = 0; row < FONT_HEIGHT; row++) {
         for (int col = 0; col < FONT_WIDTH; col++) {
-            if ((font_char[row] & (0x80 >> col))) {
+            if (font_char[row] & (0x80 >> col)) {
                 terminal_putpixel(x + col, y + row, color);
+            } else {
+                terminal_putpixel(x + col, y + row, 0x00000000);
             }
         }
     }
@@ -194,14 +197,144 @@ void terminal_scroll() {
     terminal_row = terminal_rows - 1;
 }
 
+const uint8_t NORMAL = 0;
+const uint8_t ESC = 1;
+const uint8_t CSI = 2;
+const uint8_t CSI_PRIV = 3;
+static uint8_t state = 0;
+
+constexpr uint8_t PARAMS_LENGTH = 4;
+static char param[16];
+static uint8_t param_len = 0;
+static uint32_t params[PARAMS_LENGTH];
+static uint8_t params_idx = 0;
 void terminal_write(const char* data, size_t size) {
     SpinlockGuard guard(tty_lock);
     for (size_t i = 0; i < size; i++) {
-        if (terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0) terminal_fill_rect(terminal_col * FONT_WIDTH, 
+        if (state == ESC) {
+            if (data[i] == '[') {
+                state = CSI;
+                continue;
+            }
+            state = NORMAL;
+            continue;
+        }
+
+        if (state == CSI) {
+            if (isdigit(data[i])) {
+                param[param_len++] = data[i];
+            } else if (data[i] == ';') { // 多个参数
+                param[param_len] = '\0';
+                params[params_idx++ % PARAMS_LENGTH] = atoi(param);
+                param_len = 0;
+            } else if (data[i] == '?') { // CSI_PRIV模式
+                param_len = 0;
+                memset(params, 0, sizeof(params));
+                state = CSI_PRIV;
+            } else if (data[i] == 'H') {
+                param[param_len] = '\0';
+                if (param_len > 0) params[params_idx++] = atoi(param);
+                
+                // one-based
+                int row = (params_idx > 0 && params[0] > 0) ? params[0] - 1 : 0;
+                int col = (params_idx > 1 && params[1] > 0) ? params[1] - 1 : 0;
+                
+                if (row >= (int)terminal_rows) row = terminal_rows - 1;
+                if (col >= (int)terminal_cols) col = terminal_cols - 1;
+                
+                terminal_row = row;
+                terminal_col = col;
+                param_len = 0;
+                params_idx = 0;
+                state = NORMAL;
+                continue;
+            } else if (data[i] == 'J') { // 清屏
+                param[param_len] = '\0';
+                int mode = param_len > 0 ? atoi(param) : 0;
+                if (mode == 2) {
+                    terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
+                    terminal_row = 0;
+                    terminal_col = 0;
+                }
+                param_len = 0;
+                state = NORMAL;
+                continue;
+            } else if (data[i] == 'K') {
+                terminal_fill_rect(terminal_col * FONT_WIDTH,
+                                terminal_row * FONT_HEIGHT,
+                                fb_width - terminal_col * FONT_WIDTH,
+                                FONT_HEIGHT, 0x00000000);
+                param_len = 0;
+                state = NORMAL;
+                continue;
+            } else if (data[i] == 'm') {
+                param[param_len] = '\0';
+                if (param_len > 0) params[params_idx++] = atoi(param);
+                int code = (params_idx > 0) ? params[0] : 0;
+                if (code == 0 || code == 39) terminal_color = 0x00FFFFFF;
+                else if (code == 7) { /* TODO: 反显 */ }
+                param_len = 0;
+                params_idx = 0;
+                state = NORMAL;
+                continue;
+            } else {
+                param_len = 0;
+                state = NORMAL;
+            }
+            continue;
+        }
+
+        if (state == CSI_PRIV) {
+            if (isdigit(data[i])) {
+                param[param_len++] = data[i];
+            } else if (data[i] == 'l') {
+                param[param_len] = '\0';
+                params[params_idx % PARAMS_LENGTH] = atoi(param);
+                if (params[params_idx % PARAMS_LENGTH] == 25) {
+                    show_cursor = false;
+                    if (terminal_row < terminal_rows && terminal_col < terminal_cols)
+                        terminal_fill_rect(terminal_col * FONT_WIDTH,
+                                        terminal_row * FONT_HEIGHT,
+                                        FONT_WIDTH, FONT_HEIGHT, 0x00000000);
+                }
+                param_len = 0;
+                state = NORMAL;
+            } else if (data[i] == 'h') {
+                param[param_len] = '\0';
+                params[params_idx % PARAMS_LENGTH] = atoi(param);
+                if (params[params_idx % PARAMS_LENGTH] == 25) {
+                    show_cursor = true;
+                    if (terminal_row < terminal_rows && terminal_col < terminal_cols)
+                        terminal_fill_rect(terminal_col * FONT_WIDTH,
+                                        terminal_row * FONT_HEIGHT,
+                                        FONT_WIDTH, FONT_HEIGHT, 0x00FFFFFF);
+                }
+                param_len = 0;
+                state = NORMAL;
+            } else {
+                param_len = 0;
+                state = NORMAL;
+            }
+            continue;
+        }
+
+        if (data[i] == '\x1b') {
+            state = ESC;
+            params_idx = 0;
+            memset(params, 0, sizeof(params));
+            continue;
+        }
+
+        if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0)
+            terminal_fill_rect(terminal_col * FONT_WIDTH, 
                             terminal_row * FONT_HEIGHT, 
                             FONT_WIDTH, 
                             FONT_HEIGHT, 
                             0x00000000);
+        if (data[i] == '\r') {
+            terminal_col = 0;
+            continue;
+        }
         if (data[i] == '\b') {
             if (terminal_col == 0 && terminal_row == 0) {
                 return;
@@ -215,7 +348,7 @@ void terminal_write(const char* data, size_t size) {
                               terminal_row * FONT_HEIGHT, 
                               FONT_WIDTH, 
                               FONT_HEIGHT, 
-                              0x00FFFFFF);
+                              show_cursor ? 0x00FFFFFF : 0x0);
             continue;
         }
         if (data[i] == '\n') {
@@ -245,9 +378,9 @@ void terminal_write(const char* data, size_t size) {
         }
         unsigned char c = (unsigned char)data[i];
         const uint8_t* glyph = font_8x16[c];
-        if (terminal_get_setting().c_lflag & ECHO)
-            terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
-        if (terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0) terminal_fill_rect(terminal_col * FONT_WIDTH, 
+        terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, terminal_color);
+        if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0)
+            terminal_fill_rect(terminal_col * FONT_WIDTH, 
                         terminal_row * FONT_HEIGHT, 
                         FONT_WIDTH, 
                         FONT_HEIGHT, 

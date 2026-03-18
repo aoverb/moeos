@@ -28,21 +28,21 @@ static int console_peek() {
         if (c == '\b') {
             if (line_len > 0) {
                 --line_len;
-                terminal_write("\b", 1);   // 回显退格
+                if (terminal_get_setting().c_lflag & ECHO) terminal_write("\b", 1);   // 回显退格
             }
             continue;
         }
 
         if (c == '\n') {
             line_buf[line_len++] = '\n';
-            terminal_write("\n", 1);   // 回显换行
+            if (terminal_get_setting().c_lflag & ECHO) terminal_write("\n", 1);   // 回显换行
             line_ready = true;
             break;
         }
 
         if (c >= 32 && c <= 126 && line_len < sizeof(line_buf) - 1) {
             line_buf[line_len++] = c;
-            terminal_write(&c, 1);     // 回显可见字符
+            if (terminal_get_setting().c_lflag & ECHO) terminal_write(&c, 1);     // 回显可见字符
         }
     }
     return line_ready ? (int)line_len : 0;

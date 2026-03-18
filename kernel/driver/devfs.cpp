@@ -162,7 +162,7 @@ void init_devfs() {
     dev_fs_operation.readdir = &readdir;
     dev_fs_operation.closedir = &closedir;
     dev_fs_operation.stat = &stat;
-    dev_fs_operation.ioctl = nullptr;
+    dev_fs_operation.ioctl = &ioctl;
     dev_fs_operation.sock_opr = nullptr;
     dev_fs_operation.set_poll = &set_poll;
     dev_fs_operation.peek = &peek;

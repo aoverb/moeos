@@ -385,6 +385,7 @@ void init_tarfs() {
     tar_fs_operation.peek = &peek;
     tar_fs_operation.set_poll = nullptr;
     tar_fs_operation.ioctl = nullptr;
+    tar_fs_operation.truncate = nullptr;
     tar_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::TARFS, &tar_fs_operation);
 }
