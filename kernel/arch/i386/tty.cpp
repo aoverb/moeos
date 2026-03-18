@@ -231,7 +231,7 @@ void terminal_write(const char* data, size_t size) {
                 param_len = 0;
                 memset(params, 0, sizeof(params));
                 state = CSI_PRIV;
-            } else if (data[i] == 'H') {
+            } else if (data[i] == 'H') { // 设置光标位置
                 param[param_len] = '\0';
                 if (param_len > 0) params[params_idx++] = atoi(param);
                 
@@ -255,11 +255,25 @@ void terminal_write(const char* data, size_t size) {
                     terminal_fill_rect(0, 0, fb_width, fb_height, 0x00000000);
                     terminal_row = 0;
                     terminal_col = 0;
+                    param_len = 0;
+                    state = NORMAL;
+                    continue;
+                }
+                // 清除光标到屏幕末尾
+                terminal_fill_rect(terminal_col * FONT_WIDTH,
+                                terminal_row * FONT_HEIGHT,
+                                fb_width - terminal_col * FONT_WIDTH,
+                                FONT_HEIGHT, 0x00000000); // 先到行尾
+                if (terminal_row + 1 < terminal_rows) {
+                    terminal_fill_rect(0,
+                                    (terminal_row + 1) * FONT_HEIGHT,
+                                    fb_width,
+                                    fb_height - (terminal_row + 1) * FONT_HEIGHT, 0x00000000); // 再到屏幕末尾
                 }
                 param_len = 0;
                 state = NORMAL;
                 continue;
-            } else if (data[i] == 'K') {
+            } else if (data[i] == 'K') { // 清除光标到行尾
                 terminal_fill_rect(terminal_col * FONT_WIDTH,
                                 terminal_row * FONT_HEIGHT,
                                 fb_width - terminal_col * FONT_WIDTH,
