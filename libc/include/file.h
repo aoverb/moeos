@@ -36,6 +36,7 @@ int write(int fd, const char* buffer, uint32_t size);
 int close(int fd);
 int exec(void* code, uint32_t code_size, int argc, char** argv,
     fd_remap* remaps = nullptr, int remap_cnt = 0);
+int unlink(const char* path);
 
 typedef struct {
     char     name[256];
@@ -46,6 +47,7 @@ typedef struct {
 int opendir(const char* path);
 int readdir(int fd, dirent* out);
 int closedir(int fd);
+int mkdir(const char* path);
 int chdir(const char* path);
 int getcwd(char* buf, uint32_t size);
 

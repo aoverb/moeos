@@ -200,6 +200,28 @@ int sys_getcwd(interrupt_frame* reg) {
     return 0;
 }
 
+// SYS_UNLINK(ebx = path)  → 0 on success, -1 on end/error
+int sys_unlink(interrupt_frame* reg) {
+    const char* path = reinterpret_cast<const char*>(reg->ebx);
+    PCB* cur_pcb = current_pcb();
+    
+    char resolved[MAX_PATH_LEN];
+    resolve_path(cur_pcb->cwd, path, resolved);
+    file_stat st;
+    if (v_stat(resolved, &st) != 0) return -1;
+    return v_unlink(resolved);
+}
+
+// MKDIR(ebx = path)  → 0 on success, -1 on end/error
+int sys_mkdir(interrupt_frame* reg) {
+    const char* path = reinterpret_cast<const char*>(reg->ebx);
+    PCB* cur_pcb = current_pcb();
+    
+    char resolved[MAX_PATH_LEN];
+    resolve_path(cur_pcb->cwd, path, resolved);
+    return v_mkdir(resolved);
+}
+
 // EXEC(ebx = code, ecx = code_size, edx = argc, esi = argv, ebp = remaps, edi = remap_cnt)
 int sys_exec(interrupt_frame* reg) {
     void*      code      = reinterpret_cast<void*>(reg->ebx);
@@ -387,6 +409,8 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::CLOSEDIR), sys_closedir);
     register_syscall(uint32_t(SYSCALL::CHDIR),    sys_chdir);
     register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
+    register_syscall(uint32_t(SYSCALL::UNLINK),    sys_unlink);
+    register_syscall(uint32_t(SYSCALL::MKDIR),   sys_mkdir);
     register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);

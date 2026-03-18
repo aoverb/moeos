@@ -33,6 +33,8 @@ enum class SYSCALL {
     CLOSEDIR = 108,
     CHDIR = 109,
     GETCWD = 110,
+    UNLINK = 111,
+    MKDIR = 112,
     PIPE = 199,
     EXEC = 200,
     WAITPID = 201,

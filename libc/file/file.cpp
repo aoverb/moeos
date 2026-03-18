@@ -67,3 +67,11 @@ int exec(void* code, uint32_t code_size, int argc, char** argv, fd_remap* remaps
                               (uint32_t)remaps,
                               (uint32_t)remap_cnt);
 }
+
+int unlink(const char* path) {
+    return syscall1((uint32_t)SYSCALL::UNLINK, (uint32_t)path);
+}
+
+int mkdir(const char* path) {
+    return syscall1((uint32_t)SYSCALL::MKDIR, (uint32_t)path);
+}

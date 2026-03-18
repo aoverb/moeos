@@ -961,7 +961,6 @@ static int mkdir(mounting_point* mp, const char* path) {
     }
     int new_inode_id = inode_alloc(data);
     if (new_inode_id < 0) return -1;
-    
     ext2_inode inode;
     init_inode(inode, FILE_TYPE_DIR);
     add_entry_to_dir(data, dir_inode_id, new_inode_id, FILE_TYPE_DIR, name);

@@ -419,14 +419,14 @@ int v_stat(const char* path, file_stat* out) {
 int v_unlink(const char* path) {
     SpinlockGuard guard(vfs_lock);
     mounting_point* mp = get_mounting_point(path);
-    if (!mp || !mp->operations->unlink) return -1;
+    if (!mp || !(mp->operations->unlink)) return -1;
     return mp->operations->unlink(mp, get_mounting_relative_path(mp, path));
 }
 
 int v_mkdir(const char* path) {
     SpinlockGuard guard(vfs_lock);
     mounting_point* mp = get_mounting_point(path);
-    if (!mp || !mp->operations->mkdir) return -1;
+    if (!mp || !(mp->operations->mkdir)) return -1;
     return mp->operations->mkdir(mp, get_mounting_relative_path(mp, path));
 }
 
