@@ -20,6 +20,7 @@ sys/ioctl.o \
 stdio/setcolor.o \
 stdio/getline.o \
 stdlib/malloc.o \
+stdlib/exit.o \
 elf/elf.o \
 net/net.o \
 net/socket.o \

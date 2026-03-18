@@ -3,6 +3,7 @@
 // ===========================================================================
 
 #include "string"
+#include "errno.h"
 #include <string.h>  // strlen, strcmp, memcpy
 
 namespace std {
@@ -98,6 +99,35 @@ bool string::operator!=(const char* s) const { return !(*this == s); }
 void swap(string& a, string& b) noexcept {
     std::swap(a.data_, b.data_);
     std::swap(a.len_,  b.len_);
+}
+
+extern "C" const char* strerror(int errnum) {
+    switch (errnum) {
+    case 0:      return "Success";
+    case EINTR:  return "Interrupted system call";
+    case EAGAIN: return "Resource temporarily unavailable";
+    case EBADF:  return "Bad file descriptor";
+    case ENOMEM: return "Out of memory";
+    case EACCES: return "Permission denied";
+    case ENOENT: return "No such file or directory";
+    case EEXIST: return "File exists";
+    case EINVAL: return "Invalid argument";
+    case ENOSPC: return "No space left on device";
+    case EROFS:  return "Read-only file system";
+    case ENOSYS: return "Function not implemented";
+    default:     return "Unknown error";
+    }
+}
+
+extern "C" char* strstr(const char* haystack, const char* needle) {
+    if (!*needle) return (char*)haystack;
+    for (; *haystack; haystack++) {
+        const char* h = haystack;
+        const char* n = needle;
+        while (*h && *n && *h == *n) { h++; n++; }
+        if (!*n) return (char*)haystack;
+    }
+    return nullptr;
 }
 
 } // namespace std

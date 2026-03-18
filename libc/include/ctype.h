@@ -8,5 +8,7 @@ static inline int isalpha(int c)  { return (c >= 'A' && c <= 'Z') || (c >= 'a' &
 static inline int isalnum(int c)  { return isalpha(c) || isdigit(c); }
 static inline int toupper(int c)  { return (c >= 'a' && c <= 'z') ? c - 32 : c; }
 static inline int tolower(int c)  { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
-
+static inline int isprint(int c)  { return (c >= 0x20 && c <= 0x7E);}
+static inline int isupper(int c)  { return (c >= 'A' && c <= 'Z'); }
+static inline int islower(int c)  { return (c >= 'a' && c <= 'z'); }
 #endif

@@ -439,6 +439,27 @@ int v_rename(const char* old_path, const char* new_path) {
         get_mounting_relative_path(mp_new, new_path));
 }
 
+int v_truncate(PCB* proc, int fd_pos, uint32_t length) {
+    mounting_point* mp;
+    uint32_t inode_id;
+
+    {
+        SpinlockGuard guard(vfs_lock);
+        if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+        {
+            SpinlockGuard guard(proc->plock);
+            file_description* fd = proc->fd[fd_pos];
+            if (!fd || !fd->mp) return -1;
+            mp = fd->mp;
+            inode_id = fd->inode_id;
+        }
+    }
+
+    int ret = mp->operations->truncate(mp, inode_id, length);
+
+    return ret;
+}
+
 
 int v_ioctl(PCB* proc, int fd_pos, uint32_t request, void* arg) {
     SpinlockGuard guard(vfs_lock);

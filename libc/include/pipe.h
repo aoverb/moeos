@@ -4,11 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <syscall_def.hpp>
-
-#define O_RDONLY  0x01
-#define O_WRONLY  0x02
-#define O_RDWR    0x03
-#define O_CREATE  0x04
+#include <fnctl.h>
 
 #ifdef __cplusplus
 extern "C" {

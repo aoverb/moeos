@@ -1,62 +1,48 @@
-#ifndef _TERMIOS_H
-#define _TERMIOS_H
-
-#include <stdint.h>
-
-typedef uint32_t tcflag_t;
-typedef uint8_t  cc_t;
-typedef uint32_t speed_t;
-
-/* c_cc 数组大小与索引 */
-#define NCCS    16
-#define VMIN     0
-#define VTIME    1
-#define VINTR    2
-#define VEOF     3
-#define VERASE   4
-
-/* c_iflag 位 */
-#define BRKINT   0x0001
-#define ICRNL    0x0002   /* 将输入 CR 映射为 NL */
-#define INPCK    0x0004
-#define ISTRIP   0x0008
-#define IXON     0x0010   /* 启用 XON/XOFF 流控 */
-
-/* c_oflag 位 */
-#define OPOST    0x0001   /* 输出后处理 */
-
-/* c_cflag 位 */
-#define CS8      0x0010   /* 8-bit 字符 */
-#define CSIZE    0x0030   /* 字符大小掩码 */
-
-/* c_lflag 位 */
-#define ECHO     0x0001   /* 回显 */
-#define ICANON   0x0002   /* 规范模式（行缓冲） */
-#define ISIG     0x0004   /* 启用信号（Ctrl+C 等） */
-#define IEXTEN   0x0008   /* 扩展输入处理 */
-
-/* tcsetattr 的 optional_actions */
-#define TCSANOW     0     /* 立即生效 */
-#define TCSADRAIN   1     /* 等输出完成后生效 */
-#define TCSAFLUSH   2     /* 等输出完成 + 丢弃未读输入 */
-
-struct termios {
-    tcflag_t c_iflag;     /* 输入模式 */
-    tcflag_t c_oflag;     /* 输出模式 */
-    tcflag_t c_cflag;     /* 控制模式 */
-    tcflag_t c_lflag;     /* 本地模式 */
-    cc_t     c_cc[NCCS];  /* 控制字符 */
-};
+#ifndef _ERRNO_H
+#define _ERRNO_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int tcgetattr(int fd, struct termios *termios_p);
-int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
+extern int errno;
+
+#define EPERM        1   /* 操作不允许 */
+#define ENOENT       2   /* 文件或目录不存在 */
+#define ESRCH        3   /* 进程不存在 */
+#define EINTR        4   /* 系统调用被信号中断 */
+#define EIO          5   /* I/O 错误 */
+#define ENXIO        6   /* 设备不存在 */
+#define E2BIG        7   /* 参数列表过长 */
+#define ENOEXEC      8   /* 可执行格式错误 */
+#define EBADF        9   /* 无效文件描述符 */
+#define ECHILD      10   /* 没有子进程 */
+#define EAGAIN      11   /* 资源暂时不可用 */
+#define ENOMEM      12   /* 内存不足 */
+#define EACCES      13   /* 权限不足 */
+#define EFAULT      14   /* 无效地址 */
+#define EBUSY       16   /* 设备或资源忙 */
+#define EEXIST      17   /* 文件已存在 */
+#define EXDEV       18   /* 跨设备链接 */
+#define ENODEV      19   /* 设备不存在 */
+#define ENOTDIR     20   /* 不是目录 */
+#define EISDIR      21   /* 是目录 */
+#define EINVAL      22   /* 无效参数 */
+#define ENFILE      23   /* 系统文件表溢出 */
+#define EMFILE      24   /* 打开的文件过多 */
+#define ENOTTY      25   /* 不是终端设备 */
+#define EFBIG       27   /* 文件过大 */
+#define ENOSPC      28   /* 磁盘空间不足 */
+#define ESPIPE      29   /* 非法 seek */
+#define EROFS       30   /* 只读文件系统 */
+#define EPIPE       32   /* 管道破裂 */
+#define EDOM        33   /* 数学参数超出范围 */
+#define ERANGE      34   /* 结果超出范围 */
+#define ENOSYS      38   /* 系统调用未实现 */
+#define ENOTEMPTY   39   /* 目录非空 */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _TERMIOS_H */
+#endif /* _ERRNO_H */

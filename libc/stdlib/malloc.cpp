@@ -152,6 +152,21 @@ void* malloc(size_t size) {
     return new_block + 1;
 }
 
+void* realloc(void* ptr, size_t new_size) {
+    if (!ptr) return malloc(new_size);
+    if (new_size == 0) {
+        free(ptr);
+        return nullptr;
+    }
+
+    void* new_ptr = malloc(new_size);
+    if (!new_ptr) return nullptr;
+
+    memcpy(new_ptr, ptr, new_size); // todo: 最好能知道旧block大小
+    free(ptr);
+    return new_ptr;
+}
+
 void free(void* ptr) {
     if (!ptr) return;
     block_t block = (block_t)ptr - 1;

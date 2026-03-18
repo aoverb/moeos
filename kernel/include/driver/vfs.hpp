@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <kernel/net/socket.hpp>
 #include <kernel/process.hpp>
+#include <fnctl.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,7 @@ struct fs_operation {
     int (*stat)(mounting_point* mp, const char* path, file_stat* out);
     int (*unlink)(mounting_point* mp, const char* path);
     int (*mkdir)(mounting_point* mp, const char* path);
+    int (*truncate)(mounting_point* mp, uint32_t inode_id, uint32_t new_size);
     int (*rename)(mounting_point*, const char* old_path, const char* new_path);
     int (*ioctl)(mounting_point* mp, uint32_t inode_id, uint32_t request, void* arg);
     int (*peek)(mounting_point* mp, uint32_t inode_id);
@@ -92,6 +94,7 @@ int v_setpoll(PCB* proc, int fd_pos, process_queue* poll_queue);
 int v_unlink(const char* path);
 int v_mkdir(const char* path);
 int v_rename(const char* old_path, const char* new_path);
+int v_truncate(PCB* proc, int fd_pos, uint32_t length);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);

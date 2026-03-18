@@ -133,6 +133,13 @@ int sys_read(interrupt_frame* reg) {
     return v_read(current_pcb(), fd, buffer, size);
 }
 
+// TRUNCATE(ebx = fd, ecx = length)  → returns bytes written
+int sys_truncate(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    uint32_t length     = reg->ecx;
+    return v_truncate(current_pcb(), fd, length);
+}
+
 // WRITE(ebx = fd, ecx = buffer, edx = size)  → returns bytes written
 int sys_write(interrupt_frame* reg) {
     int fd              = static_cast<int>(reg->ebx);
@@ -411,6 +418,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
     register_syscall(uint32_t(SYSCALL::UNLINK),    sys_unlink);
     register_syscall(uint32_t(SYSCALL::MKDIR),   sys_mkdir);
+    register_syscall(uint32_t(SYSCALL::TRUNCATE),   sys_truncate);
     register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);
     register_syscall(uint32_t(SYSCALL::WAITPID),  sys_waitpid);

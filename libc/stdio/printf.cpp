@@ -51,7 +51,7 @@ void print_int_hex(uint32_t num, bool islower) {
     return;
 }
 
-int printf(const char* restrict format, ...) {
+int printf(const char* format, ...) {
     va_list args;
     va_start(args, format);
     const char* p = format;

@@ -732,6 +732,99 @@ void split_path(const char* full_path, char* path, char* name) {
     strcpy(name, full_path + last_slash + 1);
 }
 
+static int truncate(mounting_point* mp, uint32_t inode_id, uint32_t new_size) {
+    ext2_inode inode;
+    ext2_data* data = (ext2_data*)mp->data;
+    if (get_inode_by_id(data, inode_id, &inode) < 0) return -1;
+
+    uint32_t block_size = data->dev->block_size;
+    uint32_t old_blocks = (inode.i_size + block_size - 1) / block_size;
+    uint32_t new_blocks = (new_size + block_size - 1) / block_size;
+
+    // 只处理缩小，扩大的情况 write 时自动分配
+    if (new_size >= inode.i_size) {
+        inode.i_size = new_size;
+        set_inode_by_id(data, inode_id, &inode);
+        return 0;
+    }
+
+    // 释放多余的数据块
+    for (uint32_t i = new_blocks; i < old_blocks; i++) {
+        int phys = get_phys_block_no_in_inode(data, &inode, i);
+        if (phys > 0) {
+            block_free(data, phys);
+            insert_block_in_inode(data, &inode, 0, i, true);  // 清零指针
+            inode.i_blocks -= block_size / SECTOR_SIZE;
+        }
+    }
+
+    // 释放不再需要的间接块
+    uint32_t ptrs_per_block = block_size / 4;
+
+    // 一级间接：如果所有间接引用的块都被释放了
+    if (new_blocks <= 12 && inode.i_block[12] != 0) {
+        block_free(data, inode.i_block[12]);
+        inode.i_blocks -= block_size / SECTOR_SIZE;
+        inode.i_block[12] = 0;
+    }
+
+    // 二级间接
+    if (new_blocks <= 12 + ptrs_per_block && inode.i_block[13] != 0) {
+        // 释放所有一级间接子块
+        auto dind = get_cache_ptr(*data->cache_data, inode.i_block[13]);
+        for (uint32_t i = 0; i < ptrs_per_block; i++) {
+            uint32_t ind_block = ((uint32_t*)dind.get())[i];
+            if (ind_block != 0) {
+                block_free(data, ind_block);
+                inode.i_blocks -= block_size / SECTOR_SIZE;
+            }
+        }
+        block_free(data, inode.i_block[13]);
+        inode.i_blocks -= block_size / SECTOR_SIZE;
+        inode.i_block[13] = 0;
+    }
+
+    // 三级间接
+    if (new_blocks <= 12 + ptrs_per_block + ptrs_per_block * ptrs_per_block 
+        && inode.i_block[14] != 0) {
+        auto tind = get_cache_ptr(*data->cache_data, inode.i_block[14]);
+        for (uint32_t i = 0; i < ptrs_per_block; i++) {
+            uint32_t dind_block = ((uint32_t*)tind.get())[i];
+            if (dind_block == 0) continue;
+            auto dind = get_cache_ptr(*data->cache_data, dind_block);
+            for (uint32_t j = 0; j < ptrs_per_block; j++) {
+                uint32_t ind_block = ((uint32_t*)dind.get())[j];
+                if (ind_block != 0) {
+                    block_free(data, ind_block);
+                    inode.i_blocks -= block_size / SECTOR_SIZE;
+                }
+            }
+            block_free(data, dind_block);
+            inode.i_blocks -= block_size / SECTOR_SIZE;
+        }
+        block_free(data, inode.i_block[14]);
+        inode.i_blocks -= block_size / SECTOR_SIZE;
+        inode.i_block[14] = 0;
+    }
+
+    // 如果缩小到非块边界，清零最后一个块的尾部
+    // 防止读到旧数据
+    if (new_size > 0 && new_size % block_size != 0) {
+        uint32_t last_block = new_blocks - 1;
+        int phys = get_phys_block_no_in_inode(data, &inode, last_block);
+        if (phys > 0) {
+            auto ptr = get_cache_ptr(*data->cache_data, phys);
+            uint32_t tail_offset = new_size % block_size;
+            memset(ptr.get() + tail_offset, 0, block_size - tail_offset);
+            taint(*data->cache_data, phys);
+        }
+    }
+
+    inode.i_size = new_size;
+    set_inode_by_id(data, inode_id, &inode);
+    return 0;
+}
+
 constexpr uint32_t ROOT_INODE_NO = 2;
 
 static int create(ext2_data* data, const char* path, const char* name, int type) {
@@ -760,6 +853,11 @@ static int open(mounting_point* mp, const char* path, uint8_t mode) {
     if (name[0] == '\0') return -1;
     int inode_no = relative_lookup(data, ROOT_INODE_NO, path);
     if (inode_no > 0) {
+        if (mode & O_TRUNC) {
+            truncate(mp, inode_no, 0);
+            flush_all_block(*data->cache_data);
+            flush_metadata(data);
+        }
         return inode_no;
     }
     if (inode_no <= 0 && (mode & O_CREATE) == 0) return -1;
@@ -1093,6 +1191,7 @@ void init_ext2fs() {
     ext2_fs_operation.peek     = &peek;
     ext2_fs_operation.unlink   = &unlink;
     ext2_fs_operation.mkdir    = &mkdir;
+    ext2_fs_operation.truncate    = &truncate;
     ext2_fs_operation.rename   = nullptr;
     ext2_fs_operation.sock_opr = nullptr;
     register_fs_operation(FS_DRIVER::EXT2FS, &ext2_fs_operation); // 先让ext2挂载失败
