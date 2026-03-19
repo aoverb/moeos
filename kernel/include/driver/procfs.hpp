@@ -15,7 +15,8 @@ struct proc_operation {
 };
 
 void init_procfs();
-int register_in_procfs(mounting_point* mp, const char* proc_name, proc_operation* opr);
+int register_info_in_procfs(mounting_point* mp, const char* path, const char* info_name,
+    proc_operation* opr, bool is_dir);
 
 #ifdef __cplusplus
 }

@@ -14,18 +14,19 @@ free_block kheap_head;
 
 static int meminfo_read(char* buffer, uint32_t offset, uint32_t size) {
     char info[1024];
+    size_t signed_offset = (size_t)offset;
     memset(info, 0, sizeof(info));
-    snprintf(info, 1024, "kheap_addr_space_begin: %x\n"
+    snprintf(info + offset, 1024, "kheap_addr_space_begin: %x\n"
         "kheap_addr_space_end: %x\n"
         "heap_size: %xKB", kheap_addr_space_begin, kheap_addr_space_end, (heap_size + 1023) / 1024);
-    strncpy(buffer, info + offset, size < strlen(info) - offset ? size : strlen(info) - offset);
-    return size < strlen(info) - offset ? size : strlen(info) - offset;
+    strncpy(buffer, info + signed_offset, size < strlen(info) - signed_offset ? size : strlen(info) - signed_offset);
+    return size < strlen(info) - signed_offset ? size : strlen(info) - signed_offset;
 }
 
 void mm_reg_in_procfs(mounting_point* mp) {
     proc_operation* opr = (proc_operation*)kmalloc(sizeof(proc_operation));
     opr->read = &meminfo_read;
-    register_in_procfs(mp, "meminfo", opr);
+    register_info_in_procfs(mp, "/", "meminfo", opr, false);
 }
 
 uintptr_t kheap_alloc_pages(uint32_t size, uint32_t flag) {
