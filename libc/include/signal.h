@@ -25,6 +25,8 @@ extern "C" {
 using pid_t = int;
 typedef void (*signal_handler_t)(registers*, pid_t);
 
+int kill(pid_t pid);
+
 #ifdef __cplusplus
 }
 #endif

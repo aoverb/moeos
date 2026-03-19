@@ -9,6 +9,7 @@
 #include <kernel/timer.hpp>
 #include <driver/pit.h>
 #include <kernel/schedule.hpp>
+#include <kernel/ksignal.h>
 
 #include <poll.h>
 #include <string.h>
@@ -22,6 +23,24 @@ int sys_exit(interrupt_frame* reg) {
     int exit_code = static_cast<int>(reg->ebx);
     exit_process(cur_process_id, exit_code);
     return 0;
+}
+
+int sys_kill(interrupt_frame* reg) {
+    pid_t pid = static_cast<int>(reg->ebx);
+    if (!send_signal(pid, SIGKILL)) return false;
+    PCB* target = process_list[pid];
+    if (target->state == process_state::SLEEPING 
+     || target->state == process_state::WAITING) {
+
+        if (target->inwait_queue) {
+            remove_from_waiting_queue(*target->inwait_queue, pid);
+            target->inwait_queue = nullptr;
+        }
+
+        target->state = process_state::READY;
+        insert_into_scheduling_queue(pid, target->priority);
+    }
+    return true;
 }
 
 int sys_terminal_write(interrupt_frame* reg) {
@@ -396,6 +415,7 @@ int sys_tcsetpgrp(interrupt_frame* reg) {
 void syscall_init() {
     printf("syscall initializing...");
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
+    register_syscall(uint32_t(SYSCALL::KILL), sys_kill);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);

@@ -13,6 +13,7 @@ enum class SYSCALL {
     TERMINAL_GET_LINE = 3,
     TERMINAL_CLEAR = 4,
     TCSETPGRP = 13,
+    KILL = 24,
     CLOCK = 25,
     SBRK = 50,
     CONNECT = 75,

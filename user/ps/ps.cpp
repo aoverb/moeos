@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
 
         // Format time as MM:SS
         char timebuf[16];
-        snprintf(timebuf, sizeof(timebuf), "%d:%d", time_sec / 60, time_sec % 60);
+        snprintf(timebuf, sizeof(timebuf), "%d:%02d", time_sec / 60, time_sec % 60);
 
         // State: first character only (R/S/Z/W...)
         char st = (state && *state) ? state[0] : '?';

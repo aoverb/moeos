@@ -17,6 +17,7 @@ string/allocator.o \
 file/file.o \
 sys/wait.o \
 sys/ioctl.o \
+signal/signal.o \
 stdio/setcolor.o \
 stdio/getline.o \
 stdlib/malloc.o \

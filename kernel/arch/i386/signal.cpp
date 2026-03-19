@@ -20,9 +20,15 @@ void sigint_handler(registers*, pid_t pid) {
     return;
 }
 
+void sigkill_handler(registers*, pid_t pid) {
+    exit_process(pid, 3); // todo: 也许应该规范一下退出码的含义...
+    return;
+}
+
 void signal_init() {
     printf("signal initializing...");
     register_signal(uint32_t(SIGINT), sigint_handler);
+    register_signal(uint32_t(SIGKILL), sigkill_handler);
     printf("OK\n");
 }
 
