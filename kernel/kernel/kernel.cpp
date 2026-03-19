@@ -287,7 +287,7 @@ void start_telnetd_svc() {
     }
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
-    pid_t telnetd_pid = exec("shell", buffer, size, 1, 0, nullptr);
+    pid_t telnetd_pid = exec("telnetd", buffer, size, 1, 0, nullptr);
     if (telnetd_pid == 0) {
         printf("failed to start telnetd!\n");
     } else {
