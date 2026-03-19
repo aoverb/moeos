@@ -70,7 +70,7 @@ static int console_read(char* buffer, uint32_t offset, uint32_t size) {
     return n;
 }
 
-static int console_write(const char* buffer, uint32_t size) {
+static int console_write(const char* buffer, uint32_t /* offset */, uint32_t size) {
     terminal_write(buffer, size);
     if (has_next_setting_flag > 1) {
         terminal_apply_setting(next_setting);

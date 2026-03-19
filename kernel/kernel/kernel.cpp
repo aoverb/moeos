@@ -204,6 +204,7 @@ extern void init_nic_dev_file(mounting_point* mp);
 extern void init_ipv4addr_dev_file(mounting_point* mp);
 extern void mm_reg_in_procfs(mounting_point* mp);
 extern void set_proc_mp(mounting_point* mp);
+extern void init_fb_dev_file(mounting_point* mp);
 void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initializing...\n");
     init_vfs();
@@ -250,6 +251,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     init_console_dev(dev_ret);
     init_nic_dev_file(dev_ret);
     init_ipv4addr_dev_file(dev_ret);
+    init_fb_dev_file(dev_ret);
 
     mounting_point* pipe_ret = v_mount(FS_DRIVER::PIPEFS, "/pipe", nullptr);
     if (pipe_ret == nullptr) {

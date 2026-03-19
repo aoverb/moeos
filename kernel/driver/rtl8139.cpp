@@ -308,7 +308,7 @@ static int nic_mac_read(char* buffer, uint32_t, uint32_t size) {
     return len;
 }
 
-static int nic_mac_write(const char*, uint32_t) { return -1; } // 不支持写MAC
+static int nic_mac_write(const char*, uint32_t, uint32_t) { return -1; } // 不支持写MAC
 
 void init_nic_dev_file(mounting_point* mp) {
     static dev_operation nic_mac_opr;

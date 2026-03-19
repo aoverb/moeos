@@ -15,7 +15,7 @@ static int ipv4_addr_read(char* buffer, uint32_t, uint32_t size) {
     return size < strlen(output) ? size : strlen(output);
 }
 
-static int ipv4_addr_write(const char*, uint32_t) { return -1; } // 不支持改IP
+static int ipv4_addr_write(const char*, uint32_t, uint32_t) { return -1; } // 不支持改IP
 
 void init_ipv4addr_dev_file(mounting_point* mp) {
     static dev_operation ipv4_addr_opr;

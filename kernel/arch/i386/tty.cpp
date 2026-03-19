@@ -6,6 +6,7 @@
 #include <kernel/ksignal.h>
 #include <kernel/schedule.hpp>
 #include <kernel/timer.hpp>
+#include <driver/devfs.hpp>
 #include <string.h>
 #include <boot/multiboot.h>
 #include <ctype.h>
@@ -518,4 +519,19 @@ int terminal_read_char_for_peek() {
     }
     char c = rb_read();
     return c;
+}
+
+static int fb_write(const char* buffer, uint32_t offset, uint32_t size) {
+    uint32_t fb_size = fb_pitch * fb_height;
+    if (offset >= fb_size) return 0;
+    uint32_t cpy_size = (fb_size - offset < size) ? fb_size - offset : size;
+    memcpy((uint8_t*)fb_addr + offset, buffer, cpy_size);
+    return cpy_size;
+}
+
+void init_fb_dev_file(mounting_point* mp) {
+    static dev_operation fb_opr;
+    fb_opr.read = nullptr;
+    fb_opr.write = fb_write;
+    register_in_devfs(mp, "fb0", &fb_opr);
 }

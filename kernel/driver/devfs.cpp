@@ -21,7 +21,7 @@ struct dev_item {
 };
 
 static int return_minus_1(char* buffer, uint32_t offset, uint32_t size) { return -1; }
-static int return_minus_1_(const char* buffer, uint32_t size) { return -1; }
+static int return_minus_1_(const char* buffer, uint32_t, uint32_t size) { return -1; }
 
 static int mount(mounting_point* mp) {
     if (!mp) return -1;
@@ -65,7 +65,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
 static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
-    return item->entry[inode_id].opr->write(buffer, size);
+    return item->entry[inode_id].opr->write(buffer, offset, size);
 }
 
 static int peek(mounting_point* mp, uint32_t inode_id) {
