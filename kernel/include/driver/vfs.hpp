@@ -18,6 +18,7 @@ enum class FS_DRIVER {
     PIPEFS = 2,
     SOCKFS = 3,
     EXT2FS = 4,
+    PROCFS = 5,
 };
 
 struct dirent {

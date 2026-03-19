@@ -29,7 +29,8 @@ driver/pipefs.o \
 driver/rtl8139.o \
 driver/ata.o \
 driver/block.o \
-driver/ext2.o
+driver/ext2.o \
+driver/procfs.o \
 
 NET_OBJS=\
 net/arp.o \

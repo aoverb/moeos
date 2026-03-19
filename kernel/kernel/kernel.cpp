@@ -30,6 +30,7 @@
 #include <driver/rtl8139.hpp>
 #include <driver/block.hpp>
 #include <driver/ext2.hpp>
+#include <driver/procfs.hpp>
 
 void print_rumia() {
 #pragma GCC diagnostic push
@@ -201,7 +202,7 @@ void test_unordered_map() {
 extern void init_console_dev(mounting_point* mp);
 extern void init_nic_dev_file(mounting_point* mp);
 extern void init_ipv4addr_dev_file(mounting_point* mp);
-
+extern void mm_reg_in_procfs(mounting_point* mp);
 void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initializing...\n");
     init_vfs();
@@ -210,6 +211,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     init_pipefs();
     init_sockfs();
     init_ext2fs();
+    init_procfs();
 
     tarfs_metadata tarmeta;
     for (uint32_t i = 0; i < mod_count; i++) {
@@ -261,6 +263,14 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     } else {
         printf("/sock mounted!\n");
     }
+
+    mounting_point* proc_ret = v_mount(FS_DRIVER::PROCFS, "/proc", nullptr);
+    if (proc_ret == nullptr) {
+        panic("failed to mount procfs to /proc!");
+    } else {
+        printf("/proc mounted!\n");
+    }
+    mm_reg_in_procfs(proc_ret);
 
     printf("filesystem initialized!\n");
 }
