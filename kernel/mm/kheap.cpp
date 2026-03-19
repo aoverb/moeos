@@ -16,7 +16,7 @@ static int meminfo_read(char* buffer, uint32_t offset, uint32_t size, void* /* a
     char info[1024];
     size_t signed_offset = (size_t)offset;
     memset(info, 0, sizeof(info));
-    snprintf(info + offset, 1024, "kheap_addr_space_begin: %x\n"
+    snprintf(info, sizeof(info), "kheap_addr_space_begin: %x\n"
         "kheap_addr_space_end: %x\n"
         "heap_size: %xKB", kheap_addr_space_begin, kheap_addr_space_end, (heap_size + 1023) / 1024);
     strncpy(buffer, info + signed_offset, size < strlen(info) - signed_offset ? size : strlen(info) - signed_offset);

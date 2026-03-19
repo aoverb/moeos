@@ -51,7 +51,7 @@ static int proc_read(char* buffer, uint32_t offset, uint32_t size, void* arg) {
         strcpy(name, cur_pcb.name);
     }
     memset(info, 0, sizeof(info));
-    snprintf(info + offset, 1024, 
+    snprintf(info, sizeof(info), 
         "name: %s\n"
         "pid: %d\n"
         "parent pid: %d\n"
