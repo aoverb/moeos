@@ -31,6 +31,7 @@ struct proc_table_entry {
     uint32_t inode_id;
     bool is_dir;
     proc_table_entry* parent;
+    void* arg;
 
     proc_table_entry(bool is_dir, uint32_t inode_id, const char name[]) : is_dir(is_dir), inode_id(inode_id) {
         strncpy(this->name, name, 32);
@@ -55,6 +56,8 @@ struct proc_table_entry {
                 kfree(info.second);
             }
             data.dir.infos.~unordered_map();
+        } else {
+            kfree(data.file.opr);
         }
         table->entry.erase(inode_id);
     }
@@ -121,7 +124,7 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* bu
     proc_table_entry* entry = table->entry[inode_id];
     if (entry->is_dir) return -EISDIR;
     if (!entry->data.file.opr) return -EFAULT;
-    return entry->data.file.opr->read(buffer, offset, size);
+    return entry->data.file.opr->read(buffer, offset, size, entry->arg);
 }
 
 static int write(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, const char* buffer, uint32_t size) {
@@ -237,7 +240,7 @@ void init_procfs() {
 }
 
 int register_info_in_procfs(mounting_point* mp, const char* path, const char* info_name,
-    proc_operation* opr, bool is_dir) {
+    proc_operation* opr, bool is_dir, void* arg) {
     if (!mp->data) return -1;
     int dir_inode_id = opendir(mp, path);
     if (dir_inode_id < 0) return dir_inode_id;
@@ -253,6 +256,7 @@ int register_info_in_procfs(mounting_point* mp, const char* path, const char* in
     }
     table->entry[new_ent_id]->parent = dir_entry;
     table->entry[new_ent_id]->table = table;
+    table->entry[new_ent_id]->arg = arg;
     dir_entry->data.dir.infos[info_name] = table->entry[new_ent_id];
     table->cnt++;
     return new_ent_id;
@@ -263,6 +267,7 @@ void delete_from_procfs(mounting_point* mp, uint32_t inode_id) {
     proc_table* table = reinterpret_cast<proc_table*>(mp->data);
     const auto& entry_map = reinterpret_cast<proc_table*>(mp->data)->entry;
     if (entry_map.find(inode_id) == entry_map.end()) return;
-    table->entry[inode_id]->~proc_table_entry();
-    kfree(table->entry[inode_id]);
+    proc_table_entry* entry = table->entry[inode_id];
+    entry->~proc_table_entry();
+    kfree(entry);
 }

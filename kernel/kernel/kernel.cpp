@@ -203,6 +203,7 @@ extern void init_console_dev(mounting_point* mp);
 extern void init_nic_dev_file(mounting_point* mp);
 extern void init_ipv4addr_dev_file(mounting_point* mp);
 extern void mm_reg_in_procfs(mounting_point* mp);
+extern void set_proc_mp(mounting_point* mp);
 void fs_init(saved_module* saved, uint32_t mod_count) {
     printf("filesystem initializing...\n");
     init_vfs();
@@ -271,6 +272,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
         printf("/proc mounted!\n");
     }
     mm_reg_in_procfs(proc_ret);
+    set_proc_mp(proc_ret);
 
     printf("filesystem initialized!\n");
 }

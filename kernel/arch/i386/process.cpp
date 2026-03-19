@@ -5,13 +5,78 @@
 #include <kernel/spinlock.hpp>
 #include <kernel/tty.h>
 #include <driver/pit.h>
+#include <driver/procfs.hpp>
 #include <string.h>
 #include <stdio.h>
 #include <elf.h>
+#include <format.h>
+
+const char* process_states[] = {
+    "READY", "RUNNING", "SLEEPING", "ZOMBIE", "WAITING"
+};
 
 PCB* process_list[MAX_PROCESSES_NUM] = {};
 pid_t cur_process_id = 0;
 spinlock process_list_lock;
+static mounting_point* proc_mp = nullptr;
+
+void set_proc_mp(mounting_point* mp) { proc_mp = mp; }
+
+static int proc_read(char* buffer, uint32_t offset, uint32_t size, void* arg) {
+    char info[1024];
+    size_t signed_offset = (size_t)offset;
+    pid_t pid = (pid_t)arg;
+    uint32_t cur_tick = pit_get_ticks();
+
+    pid_t parent_pid;
+    pid_t file_opened;
+    uint16_t priority;
+    uint16_t quota;
+    uint32_t running_time;
+    char state[10];
+    char cwd[64];
+    char name[64];
+    {
+        SpinlockGuard guard(process_list_lock);
+        if (!process_list[pid]) return -1;
+        PCB& cur_pcb = *process_list[pid];
+
+        parent_pid = cur_pcb.parent_pid;
+        file_opened = cur_pcb.fd_num;
+        running_time = (cur_tick - cur_pcb.create_time) / 100;
+        priority = cur_pcb.priority;
+        quota = cur_pcb.quota;
+        strcpy(state, process_states[(uint32_t)cur_pcb.state]);
+        strcpy(cwd, cur_pcb.cwd);
+        strcpy(name, cur_pcb.name);
+    }
+    memset(info, 0, sizeof(info));
+    snprintf(info + offset, 1024, 
+        "name: %s\n"
+        "pid: %d\n"
+        "parent pid: %d\n"
+        "file opened: %d\n"
+        "current directory: %s\n"
+        "running time: %d(s)\n"
+        "priority: %d\n"
+        "quota: %d\n"
+        "state: %s\n", name, pid, parent_pid, file_opened, cwd, running_time, priority, quota, state);
+    strncpy(buffer, info + signed_offset, size < strlen(info) - signed_offset ? size : strlen(info) - signed_offset);
+    return size < strlen(info) - signed_offset ? size : strlen(info) - signed_offset;
+}
+
+uint32_t reg_in_procfs(pid_t pid) {
+    char dir_name[20];
+    snprintf(dir_name, 20, "%d", pid);
+    uint32_t folder_inode_id = register_info_in_procfs(proc_mp, "/", dir_name, nullptr, true, (void*)pid);
+
+    char proc_path[20];
+    snprintf(proc_path, 20, "/%d/", pid);
+    proc_operation* opr = (proc_operation*)kmalloc(sizeof(proc_operation));
+    opr->read = &proc_read;
+    register_info_in_procfs(proc_mp, proc_path, "status", opr, false, (void*)pid);
+    return folder_inode_id;
+}
 
 extern "C" int v_open(PCB* proc, const char* path, uint8_t mode);
 extern "C" int v_dup_to(PCB* src_proc, int fd_src, PCB* dst_proc, int fd_dst);
@@ -22,23 +87,12 @@ extern "C" void schedule_tail_restore();
 extern uintptr_t stack_bottom;
 void exit_process_wrapper();
 
-void print_process() {
-    uint32_t flags = spinlock_acquire(&process_list_lock);
-    uint32_t cur_tick = pit_get_ticks();
-    printf("id  priority  state  time(s)\n");
-    for (auto pid = 0; pid < MAX_PROCESSES_NUM; ++pid) {
-        if (process_list[pid] != nullptr) {
-            printf("%d   %d         %d         %d\n", pid, process_list[pid]->priority, process_list[pid]->state, (cur_tick - process_list[pid]->create_time) / 100);
-        }
-    }
-    spinlock_release(&process_list_lock, flags);
-}
-
 void free_pcb(PCB*& process) {
     // 调用者必须持有 process_list_lock
     for (int i = 0; i < MAX_FD_NUM; ++i) {
         v_close(process, i);
-    } 
+    }
+    delete_from_procfs(proc_mp, process->proc_node_id);
     
     kfree(reinterpret_cast<void*>(process->kernel_stack_bottom));
     kfree(reinterpret_cast<void*>(process));
@@ -88,6 +142,7 @@ PCB* init_pcb(pid_t newpid) {
     new_process = reinterpret_cast<PCB*>(kmalloc(sizeof(PCB)));
     memset(new_process, 0, sizeof(PCB));
     new_process->pid = newpid;
+    new_process->proc_node_id = reg_in_procfs(newpid);
     return new_process;
 }
 

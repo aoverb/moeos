@@ -12,7 +12,7 @@ using free_block = uint32_t*;
 
 free_block kheap_head;
 
-static int meminfo_read(char* buffer, uint32_t offset, uint32_t size) {
+static int meminfo_read(char* buffer, uint32_t offset, uint32_t size, void* /* arg */) {
     char info[1024];
     size_t signed_offset = (size_t)offset;
     memset(info, 0, sizeof(info));
@@ -26,7 +26,7 @@ static int meminfo_read(char* buffer, uint32_t offset, uint32_t size) {
 void mm_reg_in_procfs(mounting_point* mp) {
     proc_operation* opr = (proc_operation*)kmalloc(sizeof(proc_operation));
     opr->read = &meminfo_read;
-    register_info_in_procfs(mp, "/", "meminfo", opr, false);
+    register_info_in_procfs(mp, "/", "meminfo", opr, false, nullptr);
 }
 
 uintptr_t kheap_alloc_pages(uint32_t size, uint32_t flag) {

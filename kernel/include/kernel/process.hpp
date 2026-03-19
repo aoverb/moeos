@@ -71,6 +71,8 @@ typedef struct PCB {
     file_description* fd[MAX_FD_NUM];
     uint32_t fd_num;
 
+    uint32_t proc_node_id;
+
     char cwd[256];
 } PCB;
 
@@ -85,7 +87,6 @@ void remove_from_waiting_queue(process_queue& queue, pid_t pid);
 
 void process_init();
 
-void print_process();
 pid_t create_process(const char* name, void* entry, void* args);
 uint32_t exit_process(pid_t pid, int exit_code);
 pid_t exec(const char* name, void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
