@@ -1,5 +1,7 @@
 #include <driver/keyboard.h>
+#include <driver/devfs.hpp>
 #include <stdio.h>
+#include <string.h>
 #include <kernel/tty.h>
 #include <kernel/hal.h>
 #include <kernel/isr.h>
@@ -22,6 +24,51 @@ static bool is_shift_pressed = false;
 static bool is_ctrl_pressed = false;
 static bool e0_prefix = false;
 
+// ===== /dev/kbd 事件队列 =====
+
+struct key_event {
+    uint8_t scancode;
+    uint8_t pressed;   // 1 = pressed, 0 = released
+    uint8_t is_e0;     // 1 = 扩展键 (方向键等)
+    uint8_t _pad;
+};
+
+#define KBD_BUF_SIZE 128
+static key_event kbd_events[KBD_BUF_SIZE];
+static volatile uint32_t kbd_head = 0;
+static volatile uint32_t kbd_tail = 0;
+
+static void kbd_push_event(uint8_t scancode, uint8_t pressed, uint8_t is_e0) {
+    uint32_t next = (kbd_head + 1) % KBD_BUF_SIZE;
+    if (next == kbd_tail) return;  // 满了丢弃
+    kbd_events[kbd_head] = { scancode, pressed, is_e0, 0 };
+    kbd_head = next;
+}
+
+static int kbd_read(char* buffer, uint32_t /* offset */, uint32_t size) {
+    uint32_t bytes_read = 0;
+    while (bytes_read + sizeof(key_event) <= size && kbd_tail != kbd_head) {
+        memcpy(buffer + bytes_read, &kbd_events[kbd_tail], sizeof(key_event));
+        kbd_tail = (kbd_tail + 1) % KBD_BUF_SIZE;
+        bytes_read += sizeof(key_event);
+    }
+    return bytes_read;
+}
+
+static int kbd_peek() {
+    return (kbd_head != kbd_tail) ? 1 : 0;
+}
+
+void init_kbd_dev_file(mounting_point* mp) {
+    static dev_operation kbd_opr;
+    kbd_opr.read    = kbd_read;
+    kbd_opr.write   = nullptr;
+    kbd_opr.peek    = kbd_peek;
+    kbd_opr.set_poll = nullptr;
+    kbd_opr.ioctl   = nullptr;
+    register_in_devfs(mp, "kbd", &kbd_opr);
+}
+
 /* 发送 VT100 转义序列：\x1b [ <suffix> */
 static void send_escape_seq(const char* seq) {
     while (*seq) {
@@ -31,11 +78,15 @@ static void send_escape_seq(const char* seq) {
 
 /* 处理 0xE0 前缀后的第二个扫描码 */
 static void handle_e0_scancode(uint8_t scancode) {
-    if (scancode & KEY_RELEASED_MASK) {
-        return;
-    }
+    uint8_t pressed = !(scancode & KEY_RELEASED_MASK);
+    uint8_t code = scancode & 0x7F;
 
-    switch (scancode) {
+    // 推送到 /dev/kbd（press 和 release 都推）
+    kbd_push_event(code, pressed, 1);
+
+    if (!pressed) return;
+
+    switch (code) {
     case 0x48: send_escape_seq("\x1b[A");   break;  /* 上 */
     case 0x50: send_escape_seq("\x1b[B");   break;  /* 下 */
     case 0x4D: send_escape_seq("\x1b[C");   break;  /* 右 */
@@ -65,11 +116,15 @@ void keyboard_interrupt_handler(registers* /* regs */) {
         return;
     }
 
-    if (scancode & KEY_RELEASED_MASK) {
-        uint8_t released = scancode ^ KEY_RELEASED_MASK;
-        if (released == 0x2A || released == 0x36)
+    uint8_t pressed = !(scancode & KEY_RELEASED_MASK);
+    uint8_t code = scancode & 0x7F;
+
+    kbd_push_event(code, pressed, 0);
+
+    if (!pressed) {
+        if (code == 0x2A || code == 0x36)
             is_shift_pressed = false;
-        if (released == 0x1D)
+        if (code == 0x1D)
             is_ctrl_pressed = false;
         return;
     }
