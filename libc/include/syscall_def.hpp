@@ -37,6 +37,7 @@ enum class SYSCALL {
     UNLINK = 111,
     MKDIR = 112,
     TRUNCATE = 113,
+    LSEEK = 114,
     PIPE = 199,
     EXEC = 200,
     WAITPID = 201,

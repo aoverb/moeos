@@ -32,6 +32,7 @@ int close(int fd);
 int exec(void* code, uint32_t code_size, int argc, char** argv,
     fd_remap* remaps = nullptr, int remap_cnt = 0);
 int unlink(const char* path);
+int lseek(int fd, int32_t offset, int whence);
 
 typedef struct {
     char     name[256];

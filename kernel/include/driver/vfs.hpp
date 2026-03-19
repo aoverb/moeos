@@ -96,6 +96,7 @@ int v_unlink(const char* path);
 int v_mkdir(const char* path);
 int v_rename(const char* old_path, const char* new_path);
 int v_truncate(PCB* proc, int fd_pos, uint32_t length);
+int v_lseek(PCB* proc, int fd_pos, int32_t offset, int whence);
 
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos);

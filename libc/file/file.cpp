@@ -50,6 +50,10 @@ int closedir(int fd) {
     return syscall1((uint32_t)SYSCALL::CLOSEDIR, (uint32_t)fd);
 }
 
+int lseek(int fd, int32_t offset, int whence) {
+    return syscall3((uint32_t)SYSCALL::LSEEK, (uint32_t)fd, (uint32_t)offset, (uint32_t)whence);
+}
+
 int chdir(const char* path) {
     return syscall1((uint32_t)SYSCALL::CHDIR, (uint32_t)path);
 }

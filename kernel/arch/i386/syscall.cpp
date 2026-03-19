@@ -172,6 +172,14 @@ int sys_write(interrupt_frame* reg) {
     return v_write(current_pcb(), fd, buffer, size);
 }
 
+// LSEEK(ebx = fd, ecx = offset, edx = whence)  → returns bytes written
+int sys_lseek(interrupt_frame* reg) {
+    int fd              = static_cast<int>(reg->ebx);
+    int32_t offset      = static_cast<int32_t>(reg->ecx);
+    int whence          = static_cast<int>(reg->edx);
+    return v_lseek(current_pcb(), fd, offset, whence);
+}
+
 // CLOSE(ebx = fd)
 int sys_close(interrupt_frame* reg) {
     SpinlockGuard guard(process_list_lock);
@@ -443,6 +451,7 @@ void syscall_init() {
     register_syscall(uint32_t(SYSCALL::GETCWD),   sys_getcwd);
     register_syscall(uint32_t(SYSCALL::UNLINK),    sys_unlink);
     register_syscall(uint32_t(SYSCALL::MKDIR),   sys_mkdir);
+    register_syscall(uint32_t(SYSCALL::LSEEK),   sys_lseek);
     register_syscall(uint32_t(SYSCALL::TRUNCATE),   sys_truncate);
     register_syscall(uint32_t(SYSCALL::PIPE),  sys_pipe);
     register_syscall(uint32_t(SYSCALL::EXEC),     sys_exec);

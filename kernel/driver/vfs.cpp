@@ -262,6 +262,40 @@ int v_write(PCB* proc, int fd_pos, const char* buffer, uint32_t size) {
     return ret;
 }
 
+int v_lseek(PCB* proc, int fd_pos, int32_t offset, int whence) {
+    SpinlockGuard guard(vfs_lock);
+    if (fd_pos < 0 || fd_pos >= MAX_FD_NUM) return -1;
+
+    SpinlockGuard pguard(proc->plock);
+    file_description* fd = proc->fd[fd_pos];
+    if (!fd || !fd->mp) return -1;
+
+    int32_t new_offset;
+
+    switch (whence) {
+        case 0: // SEEK_SET
+            new_offset = offset;
+            break;
+        case 1: // SEEK_CUR
+            new_offset = fd->offset + offset;
+            break;
+        case 2: { // SEEK_END
+            file_stat st;
+            int ret = fd->mp->operations->stat(fd->mp,
+                get_mounting_relative_path(fd->mp, fd->path), &st);
+            if (ret != 0) return -1;
+            new_offset = st.size + offset;
+            break;
+        }
+        default:
+            return -1;
+    }
+
+    if (new_offset < 0) return -1;
+    fd->offset = (uint32_t)new_offset;
+    return fd->offset;
+}
+
 // 调用者必须已持有 vfs_lock
 int _v_close(PCB* proc, int fd_pos) {
     file_description* fd = proc->fd[fd_pos];
