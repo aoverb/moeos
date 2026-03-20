@@ -16,8 +16,6 @@
 extern uint32_t page_directory;
 spinlock tty_lock;
 
-
-
 static pid_t foreground_pid = 4;
 static uint32_t* fb_addr;
 static uint32_t fb_pitch;
@@ -162,6 +160,35 @@ void terminal_putpixel(int x, int y, uint32_t color) {
     fb_addr[offset] = color;
 }
 
+static uint32_t cursor_state[FONT_WIDTH][FONT_HEIGHT];
+
+void draw_cursor(uint32_t cursor_color) {
+    if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0){
+        for (int x = 0; x < FONT_WIDTH; ++x) {
+            for (int y = 0; y < FONT_HEIGHT; ++y) {
+                uint32_t offset = (y + terminal_row * FONT_HEIGHT) * (fb_pitch / 4) + (x + terminal_col * FONT_WIDTH);
+                cursor_state[x][y] = fb_addr[offset];
+            }
+        }
+        terminal_fill_rect(terminal_col * FONT_WIDTH, 
+                    terminal_row * FONT_HEIGHT, 
+                    FONT_WIDTH, 
+                    FONT_HEIGHT, 
+                    cursor_color);
+    }
+
+}
+
+void erase_cursor() {
+    if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0){
+        for(int x = 0; x < FONT_WIDTH; x++) {
+            for(int y = 0; y < FONT_HEIGHT; y++) {
+                terminal_putpixel(x + terminal_col * FONT_WIDTH, y + terminal_row * FONT_HEIGHT, cursor_state[x][y]);
+            }
+        }
+        memset(cursor_state, 0, sizeof(cursor_state));
+    }
+}
 
 void terminal_draw_char(int x, int y, const uint8_t* font_char, uint32_t fg, uint32_t bg) {
     // 控制台绘制字体的逻辑不应该依赖于字体的具体实现！需要重构。但是现在只是用来简单输出字符，刚刚好够用。
@@ -402,14 +429,10 @@ void terminal_write(const char* data, size_t size) {
             continue;
         }
 
-        if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0)
-            terminal_fill_rect(terminal_col * FONT_WIDTH, 
-                            terminal_row * FONT_HEIGHT, 
-                            FONT_WIDTH, 
-                            FONT_HEIGHT, 
-                            bg);
+        erase_cursor();
         if (data[i] == '\r') {
             terminal_col = 0;
+            draw_cursor(fg);
             continue;
         }
         if (data[i] == '\b') {
@@ -456,12 +479,7 @@ void terminal_write(const char* data, size_t size) {
         unsigned char c = (unsigned char)data[i];
         const uint8_t* glyph = font_8x16[c];
         terminal_draw_char(terminal_col++ * FONT_WIDTH, terminal_row * FONT_HEIGHT, glyph, fg, bg);
-        if (show_cursor && terminal_col < terminal_cols && terminal_col >= 0 && terminal_row < terminal_rows && terminal_row >= 0)
-            terminal_fill_rect(terminal_col * FONT_WIDTH, 
-                        terminal_row * FONT_HEIGHT, 
-                        FONT_WIDTH, 
-                        FONT_HEIGHT, 
-                        fg);
+        draw_cursor(fg);
     }
 }
 
