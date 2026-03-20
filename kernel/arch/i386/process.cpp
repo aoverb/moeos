@@ -7,7 +7,6 @@
 #include <driver/pit.h>
 #include <driver/procfs.hpp>
 #include <string.h>
-#include <stdio.h>
 #include <elf.h>
 #include <format.h>
 
@@ -167,6 +166,7 @@ void prepare_pcb_for_new_process(PCB*& new_process) {
     }
 }
 
+extern "C" int printf(const char* fmt, ...);
 void process_init() {
     printf("process initializing...");
     init_scheduler();

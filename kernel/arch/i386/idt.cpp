@@ -1,11 +1,11 @@
 #include "idt.h"
 #include <kernel/io.h>
-#include <stdio.h>
 #include <string.h>
 #include <kernel/process.hpp>
 
 idt_entry_struct idt_entries[256];
 extern "C" void system_call_handler();
+extern "C" int printf(const char* fmt, ...);
 
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t dpl, uint8_t gate_type = 0xE) {
     idt_entries[num].offset_low  = base & 0xFFFF;
@@ -26,11 +26,9 @@ void inner_interrupt_handler(registers* regs) {
         outb(0x20, 0x20);
         return;
     }
-    set_color(0xE0565C);
     printf("proc: %d, int:  %d\n", cur_process_id, regs->int_no);
     printf("An critical error has occurred: %d\n", regs->err_code);
     exit_process(cur_process_id, regs->int_no);
-    set_color(0xF4F0EB);
     return;
 }
 

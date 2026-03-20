@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <file.h>
+#include <stdarg.h>
+
 #define EOF (-1)
 
 #ifdef __cplusplus

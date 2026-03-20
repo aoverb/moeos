@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <kernel/mm.hpp>
 #include <string.h>
-#include <stdio.h>
 
 fs_operation proc_fs_operation;
 constexpr char TYPE_DIR = '5';

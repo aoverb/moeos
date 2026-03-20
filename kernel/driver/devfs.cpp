@@ -3,7 +3,6 @@
 
 #include <kernel/mm.hpp>
 #include <string.h>
-#include <stdio.h>
 
 fs_operation dev_fs_operation;
 

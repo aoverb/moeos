@@ -4,7 +4,6 @@
 #include <kernel/spinlock.hpp>
 #include <driver/rtl8139.hpp>
 #include <kernel/net/ethernet.hpp>
-#include <stdio.h>
 #include <string.h>
 
 #include <unordered_map>

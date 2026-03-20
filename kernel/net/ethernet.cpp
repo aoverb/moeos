@@ -3,7 +3,6 @@
 #include <driver/rtl8139.hpp>
 #include <kernel/mm.hpp>
 #include <string.h>
-#include <stdio.h>
 
 typedef struct {
     uint8_t target_mac[6];

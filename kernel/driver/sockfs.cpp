@@ -12,7 +12,6 @@
 #include <kernel/net/ip.hpp>
 
 #include <string.h>
-#include <stdio.h>
 #include <format.h>
 
 fs_operation sock_fs_operation;

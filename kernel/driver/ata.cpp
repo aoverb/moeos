@@ -2,7 +2,6 @@
 #include <kernel/mm.hpp>
 #include <driver/ata.hpp>
 #include <driver/block.hpp>
-#include <stdio.h>
 #include <string.h>
 
 constexpr uint16_t REG_DATA = 0x1F0;
@@ -101,6 +100,7 @@ static int block_write(block_device* dev, uint32_t block_no, const void* buffer)
         dev->block_size / dev->sector_size, buffer);
 }
 
+extern "C" int printf(const char* fmt, ...);
 void ata_init() {
     printf("ata initializing...");
     // 检测ATA设备，这里我们检测primary bus的master就够了

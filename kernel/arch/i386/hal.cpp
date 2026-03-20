@@ -2,8 +2,8 @@
 #include "idt.h"
 #include "pic.h"
 #include <kernel/hal.h>
-#include <stdio.h>
 
+extern "C" int printf(const char* fmt, ...);
 void hal_init() {
     printf("HAL initializing...");
     asm volatile ("cli");

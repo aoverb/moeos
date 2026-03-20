@@ -5,7 +5,6 @@
 
 #include <kernel/mm.hpp>
 #include <string.h>
-#include <stdio.h>
 #include <format.h>
 
 #include <pipe.h>

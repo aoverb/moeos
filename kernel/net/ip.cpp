@@ -3,7 +3,6 @@
 #include <kernel/net/net.hpp>
 #include <kernel/net/arp.hpp>
 #include <kernel/mm.hpp>
-#include <stdio.h>
 #include <string.h>
 
 void reassemble(ip_header* header) {

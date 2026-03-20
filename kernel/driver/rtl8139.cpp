@@ -10,7 +10,6 @@
 #include <kernel/process.hpp>
 #include <kernel/schedule.h>
 
-#include <stdio.h>
 #include <string.h>
 
 constexpr uint16_t REG_IMR = 0x3C;
@@ -219,6 +218,7 @@ void net_rx_thread_main(void*) {
     }
 }
 
+extern "C" int printf(const char* fmt, ...);
 void rtl8139_init() {
     if (search_for_rtl8139() == -1) return;
     printf("rtl8139 found! bus: %d, dev: %d, func: %d...", pci_bus, pci_dev, pci_func);

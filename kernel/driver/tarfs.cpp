@@ -3,8 +3,7 @@
 
 #include <kernel/mm.hpp>
 #include <string.h>
-#include <stdio.h>
-
+extern "C" int printf(const char* fmt, ...);
 fs_operation tar_fs_operation;
 
 constexpr uint32_t READ = 1;

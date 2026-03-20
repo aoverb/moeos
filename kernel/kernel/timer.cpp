@@ -4,7 +4,6 @@
 #include <kernel/schedule.h>
 #include <driver/pit.h>
 
-#include <stdio.h>
 #include <priority_queue>
 #include <unordered_map>
 #include <queue>

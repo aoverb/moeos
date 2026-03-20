@@ -1,6 +1,5 @@
 #include <driver/keyboard.h>
 #include <driver/devfs.hpp>
-#include <stdio.h>
 #include <string.h>
 #include <kernel/tty.h>
 #include <kernel/hal.h>
@@ -147,6 +146,7 @@ void keyboard_interrupt_handler(registers* /* regs */) {
     }
 }
 
+extern "C" int printf(const char* fmt, ...);
 void keyboard_init() {
     printf("Keyboard initializing...");
     register_interrupt_handler(33, keyboard_interrupt_handler);

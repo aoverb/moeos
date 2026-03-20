@@ -13,7 +13,6 @@
 
 #include <poll.h>
 #include <string.h>
-#include <stdio.h>
 
 constexpr uint32_t MAX_SYSCALL = 255;
 syscall_handler_t syscall_table[255] = { nullptr };
@@ -43,6 +42,11 @@ int sys_kill(interrupt_frame* reg) {
     return true;
 }
 
+int sys_yield(interrupt_frame* reg) {
+    yield();
+    return true;
+}
+
 int sys_terminal_write(interrupt_frame* reg) {
     terminal_write((const char*)reg->ebx , strlen((const char*)reg->ebx));
     return 0;
@@ -58,6 +62,7 @@ int sys_terminal_clear(interrupt_frame*) {
     return 0;
 }
 
+extern "C" bool getline(char* buf, uint32_t size);
 int sys_terminal_getline(interrupt_frame* reg) {
     return getline(reinterpret_cast<char*>(reg->ebx), reg->ecx);
 }
@@ -420,10 +425,12 @@ int sys_tcsetpgrp(interrupt_frame* reg) {
     return 0;
 }
 
+extern "C" int printf(const char* fmt, ...);
 void syscall_init() {
     printf("syscall initializing...");
     register_syscall(uint32_t(SYSCALL::EXIT), sys_exit);
     register_syscall(uint32_t(SYSCALL::KILL), sys_kill);
+    register_syscall(uint32_t(SYSCALL::YIELD), sys_yield);
     register_syscall(uint32_t(SYSCALL::TERMINAL_WRITE), sys_terminal_write);
     register_syscall(uint32_t(SYSCALL::TERMINAL_SET_TEXT_COLOR), sys_terminal_set_text_color);
     register_syscall(uint32_t(SYSCALL::TERMINAL_GET_LINE), sys_terminal_getline);

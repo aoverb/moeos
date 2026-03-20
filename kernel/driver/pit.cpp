@@ -3,8 +3,6 @@
 #include <kernel/isr.h>
 #include <kernel/schedule.hpp>
 
-#include <stdio.h>
-
 static volatile uint32_t ticks;
 
 void timer_handler(uint32_t current_tick);
@@ -17,6 +15,7 @@ void timer_interrupt_handler(registers* /* regs */) {
     return;
 }
 
+extern "C" int printf(const char* fmt, ...);
 void pit_init() {
     printf("pit initializing...");
     asm volatile ("cli");

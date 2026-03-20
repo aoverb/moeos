@@ -3,7 +3,6 @@
 #include <kernel/mm.hpp>
 #include <unordered_map>
 #include <kernel/spinlock.hpp>
-#include <stdio.h>
 #include <shared_ptr>
 
 fs_operation ext2_fs_operation;

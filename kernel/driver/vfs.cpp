@@ -4,7 +4,6 @@
 #include <kernel/spinlock.hpp>
 #include <string.h>
 #include <format.h>
-#include <stdio.h>
 
 static spinlock vfs_lock;
 

@@ -8,7 +8,6 @@
 #include <kernel/process.hpp>
 #include <kernel/timer.hpp>
 #include <format.h>
-#include <stdio.h>
 
 int icmp_init(socket& sock) {
     sock.ptcl = protocol::ICMP;

@@ -1,5 +1,4 @@
 #include <kernel/mm.hpp>
-#include <stdio.h>
 #include <kernel/panic.h>
 #include <driver/procfs.hpp>
 #include <format.h>

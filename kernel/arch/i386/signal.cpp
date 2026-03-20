@@ -1,5 +1,4 @@
 #include "idt.h"
-#include <stdio.h>
 #include <string.h>
 #include <kernel/ksignal.h>
 #include <kernel/schedule.hpp>
@@ -25,6 +24,7 @@ void sigkill_handler(registers*, pid_t pid) {
     return;
 }
 
+extern "C" int printf(const char* fmt, ...);
 void signal_init() {
     printf("signal initializing...");
     register_signal(uint32_t(SIGINT), sigint_handler);
