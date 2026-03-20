@@ -20,6 +20,8 @@ char* strchr(const char* s, int c);
 int atoi(const char* s);
 const char* strerror(int errnum);
 char* strstr(const char* haystack, const char* needle);
+char *strrchr(const char *s, int c);
+char *strdup(const char *s);
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,7 @@
 #include <string.h>
+#include <strings.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 size_t strlen(const char* str) {
 	size_t len = 0;
@@ -25,4 +28,40 @@ int atoi(const char* s) {
         s++;
     }
     return result * sign;
+}
+
+char *strrchr(const char *s, int c) {
+    const char *last = NULL;
+    while (*s) {
+        if (*s == (char)c) last = s;
+        s++;
+    }
+    if ((char)c == '\0') return (char *)s;
+    return (char *)last;
+}
+
+char *strdup(const char *s) {
+    size_t len = strlen(s) + 1;
+    char *d = (char*)malloc(len);
+    if (d) memcpy(d, s, len);
+    return d;
+}
+
+int strcasecmp(const char *s1, const char *s2) {
+    while (*s1 && *s2) {
+        int d = tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+        if (d) return d;
+        s1++; s2++;
+    }
+    return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+}
+
+int strncasecmp(const char *s1, const char *s2, unsigned int n) {
+    while (n-- && *s1 && *s2) {
+        int d = tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+        if (d) return d;
+        s1++; s2++;
+    }
+    return n == (unsigned int)-1 ? 0 :
+           tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
 }
