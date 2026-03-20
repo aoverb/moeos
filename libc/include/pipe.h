@@ -3,8 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <syscall_def.hpp>
-#include <fnctl.h>
+#include <fcntl.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,14 +18,7 @@ typedef struct fd_remap {
 int kpipe(int fds[2]);
 #endif
 
-static int pipe(int fds[2]) {
-#if defined(__is_libk)
-    kpipe(fds);
-    // 内核实现...
-#else
-    return syscall1((uint32_t)SYSCALL::PIPE, (uint32_t)fds);
-#endif
-}
+int pipe(int fds[2]);
 
 #ifdef __cplusplus
 }

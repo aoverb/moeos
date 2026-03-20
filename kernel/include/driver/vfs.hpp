@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <kernel/net/socket.hpp>
 #include <kernel/process.hpp>
-#include <fnctl.h>
+#include <fcntl.h>
 
 #ifdef __cplusplus
 extern "C" {
