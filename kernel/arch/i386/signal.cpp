@@ -9,9 +9,20 @@ constexpr uint32_t MAX_SIGNAL = 32;
 signal_handler_t signal_handler_table[MAX_SIGNAL] = { nullptr };
 
 extern "C" void do_signal(registers* regs);
+extern "C" int printf(const char* fmt, ...);
 
 void register_signal(uint8_t n, signal_handler_t handler) {
     signal_handler_table[n] = handler;
+}
+
+void sigsegv_handler(registers* regs, pid_t pid) {
+    printf("\nProgram received signal SIGSEGV (Segmentation Fault)\n");
+    uint32_t fault_addr;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+    printf("Page Fault at 0x%x, eip=0x%x, err=%d\n", // 现在只有PF能触发SIGSEGV，先这么写着了
+           fault_addr, regs->eip, regs->err_code);
+    exit_process(pid, 5);
+    return;
 }
 
 void sigint_handler(registers*, pid_t pid) {
@@ -24,11 +35,11 @@ void sigkill_handler(registers*, pid_t pid) {
     return;
 }
 
-extern "C" int printf(const char* fmt, ...);
 void signal_init() {
     printf("signal initializing...");
     register_signal(uint32_t(SIGINT), sigint_handler);
     register_signal(uint32_t(SIGKILL), sigkill_handler);
+    register_signal(uint32_t(SIGSEGV), sigsegv_handler);
     printf("OK\n");
 }
 

@@ -1,6 +1,7 @@
 #include "idt.h"
 #include <kernel/io.h>
 #include <string.h>
+#include <kernel/ksignal.h>
 #include <kernel/process.hpp>
 
 idt_entry_struct idt_entries[256];
@@ -26,9 +27,14 @@ void inner_interrupt_handler(registers* regs) {
         outb(0x20, 0x20);
         return;
     }
-    printf("proc: %d, int:  %d\n", cur_process_id, regs->int_no);
-    printf("An critical error has occurred: %d\n", regs->err_code);
-    exit_process(cur_process_id, regs->int_no);
+
+    if (regs->int_no == 14) { // PF
+        send_signal(cur_process_id, SIGSEGV);
+    } else {
+        printf("proc: %d, int:  %d\n", cur_process_id, regs->int_no);
+        printf("An critical error has occurred: %d\n", regs->err_code);
+        exit_process(cur_process_id, regs->int_no);
+    }
     return;
 }
 
