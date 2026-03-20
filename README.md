@@ -6,6 +6,10 @@ This project makes use of the following third-party software:
   Licensed under the [GNU General Public License v3.0 or later](https://www.gnu.org/licenses/gpl-3.0.html).  
   Copyright © Free Software Foundation, Inc.
 
+- **[doomgeneric](https://github.com/ozkl/doomgeneric)** — An easily portable version of DOOM, based on the original id Software source release.  
+  Licensed under the [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html).  
+  Original game © id Software. Port by ozkl.
+
 - **[QR-Code-generator](https://github.com/nayuki/QR-Code-generator)** — High-quality QR Code generator library by Project Nayuki.  
   Licensed under the [MIT License](https://opensource.org/licenses/MIT).  
   Copyright © Project Nayuki.
