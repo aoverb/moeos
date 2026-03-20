@@ -16,7 +16,7 @@ void register_signal(uint8_t n, signal_handler_t handler) {
 }
 
 void sigsegv_handler(registers* regs, pid_t pid) {
-    printf("\nProgram received signal SIGSEGV (Segmentation Fault)\n");
+    printf("\nProgram (pid=%d) received signal SIGSEGV (Segmentation Fault)\n", cur_process_id);
     uint32_t fault_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
     printf("Page Fault at 0x%x, eip=0x%x, err=%d\n", // 现在只有PF能触发SIGSEGV，先这么写着了
