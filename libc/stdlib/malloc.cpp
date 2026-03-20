@@ -15,8 +15,8 @@ void* sbrk(uintptr_t increment) {
 
 typedef uint32_t* block_t;
 
-block_t heap_head = NULL;
-uint32_t heap_size = 0;
+static block_t heap_head = NULL;
+static uint32_t heap_size = 0;
 
 inline block_t prev_block(block_t block) {
     if (*(block - 1) == HEAP_MAGIC) return NULL;
@@ -64,7 +64,7 @@ static void set_epilogue(uint32_t* base) {
     *(base + heap_size / 4 - 1) = HEAP_MAGIC;
 }
 
-void heap_expand(block_t last_block, uint32_t need_size) {
+static void heap_expand(block_t last_block, uint32_t need_size) {
     uint32_t alloc_bytes = (need_size + 8 + 4095) & ~4095;
     void* result = sbrk(alloc_bytes);
     if ((int)result == -1) return;
@@ -77,7 +77,7 @@ void heap_expand(block_t last_block, uint32_t need_size) {
     set_epilogue((uint32_t*)heap_head - 1);
 }
 
-void split_block(block_t block, uint32_t size) {
+static void split_block(block_t block, uint32_t size) {
     if (block_size(block) < size + 0x10) return;
     uint32_t new_size = block_size(block) - size - 8;
     set_block_size(block, size);
@@ -86,7 +86,7 @@ void split_block(block_t block, uint32_t size) {
     block_free_mark(new_block);
 }
 
-block_t coalesce(block_t block) {
+static block_t coalesce(block_t block) {
     block_t prev = prev_block(block);
     block_t next = next_block(block);
     int prev_free = prev && !is_block_alloc(prev);
@@ -175,4 +175,11 @@ void free(void* ptr) {
     block_t block = (block_t)ptr - 1;
     block_free_mark(block);
     coalesce(block);
+}
+
+void *calloc(size_t count, size_t size) {
+    size_t total = count * size;
+    void *p = malloc(total);
+    if (p) memset(p, 0, total);
+    return p;
 }

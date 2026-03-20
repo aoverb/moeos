@@ -15,6 +15,7 @@ enum class SYSCALL {
     TCSETPGRP = 13,
     KILL = 24,
     CLOCK = 25,
+    YIELD = 26,
     SBRK = 50,
     CONNECT = 75,
     LISTEN = 76,

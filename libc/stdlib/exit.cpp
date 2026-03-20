@@ -21,3 +21,17 @@ void exit(int status) {
     }
     _exit(status);
 }
+
+void abort() {
+    exit(1);
+}
+
+int system(const char *command) { // stub
+    (void)command;
+    return -1;
+}
+
+void yield() {
+    syscall0((uint32_t)SYSCALL::YIELD);
+    return;
+}
