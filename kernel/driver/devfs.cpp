@@ -58,26 +58,26 @@ static int close(mounting_point*, uint32_t, uint32_t) {
 static int read(mounting_point* mp, uint32_t inode_id, uint32_t offset, char* buffer, uint32_t size) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
-    return item->entry[inode_id].opr->read(buffer, offset, size);
+    return item->entry[inode_id].opr->read ? item->entry[inode_id].opr->read(buffer, offset, size) : -1;
 }
 
 static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const char* buffer, uint32_t size) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
-    return item->entry[inode_id].opr->write(buffer, offset, size);
+    return item->entry[inode_id].opr->write ? item->entry[inode_id].opr->write(buffer, offset, size) : -1;
 }
 
 static int peek(mounting_point* mp, uint32_t inode_id) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
     if (item->entry[inode_id].opr->peek == nullptr) return -1;
-    return item->entry[inode_id].opr->peek();
+    return item->entry[inode_id].opr->peek ? item->entry[inode_id].opr->peek() : -1;
 }
 static int set_poll(mounting_point* mp, uint32_t inode_id, process_queue* poll_queue) {
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
     if (item->entry[inode_id].opr->set_poll == nullptr) return -1;
-    return item->entry[inode_id].opr->set_poll(poll_queue);
+    return item->entry[inode_id].opr->set_poll ? item->entry[inode_id].opr->set_poll(poll_queue) : -1;
 }
 
 static int stat(mounting_point* mp, const char* path, file_stat* out) {
@@ -128,7 +128,7 @@ static int ioctl(mounting_point* mp, uint32_t inode_id, uint32_t request, void* 
     if (!mp->data || (reinterpret_cast<dev_item*>(mp->data)->devcnt <= inode_id)) return -1;
     dev_item* item = reinterpret_cast<dev_item*>(mp->data);
     if (item->entry[inode_id].opr->ioctl == nullptr) return -1;
-    return item->entry[inode_id].opr->ioctl(request, arg);
+    return item->entry[inode_id].opr->ioctl ? item->entry[inode_id].opr->ioctl(request, arg) : -1;
 }
 
 static int opendir(mounting_point*, const char*) {

@@ -488,7 +488,7 @@ int v_truncate(PCB* proc, int fd_pos, uint32_t length) {
         }
     }
 
-    int ret = mp->operations->truncate(mp, inode_id, length);
+    int ret = mp->operations->truncate ? mp->operations->truncate(mp, inode_id, length) : -1;
 
     return ret;
 }
