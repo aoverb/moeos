@@ -10,6 +10,7 @@ AS      := i686-elf-as
 CFLAGS  := -O2 -g -ffreestanding -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
 CFLAGS  += --sysroot=$(SYSROOT) -isystem $(SYSROOT)/usr/include
 CFLAGS  += -DDOOMGENERIC
+CFLAGS  += -DDOOMGENERIC_RESX=1024 -DDOOMGENERIC_RESY=768
 
 LDFLAGS := -ffreestanding -O2 -nostdlib
 LIBC    := $(SYSROOT)/usr/lib/libc.a
