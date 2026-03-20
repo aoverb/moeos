@@ -1056,6 +1056,10 @@ static int mkdir(mounting_point* mp, const char* path) {
     if (dir_inode_id <= 0) {
         return -1;
     }
+    int file_inode_id = relative_lookup(data, dir_inode_id, name);
+    if (file_inode_id > 0) { // 防重名
+        return -1;
+    }
     int new_inode_id = inode_alloc(data);
     if (new_inode_id < 0) return -1;
     ext2_inode inode;
