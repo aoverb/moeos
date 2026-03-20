@@ -1,5 +1,5 @@
 ################################################################
-# doomgeneric Makefile for lolios
+# doomgeneric Makefile for moeos
 ################################################################
 
 # ---- 从你的构建系统继承（按需修改路径）----
@@ -38,7 +38,7 @@ SRC_DOOM = \
 	sha1.c sounds.c statdump.c st_lib.c st_stuff.c s_sound.c tables.c \
 	v_video.c wi_stuff.c w_checksum.c w_file.c w_main.c w_wad.c \
 	w_file_stdc.c z_zone.c doomgeneric.c \
-	doomgeneric_lolios.c
+	doomgeneric_moeos.c
 
 OBJS = $(addprefix $(OBJDIR)/, $(SRC_DOOM:.c=.o))
 

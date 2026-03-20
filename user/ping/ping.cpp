@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     }
     connect(conn, ip_addr, 0);
     // 构造ICMP报文
-    const char* data_str = "1234567890loliOS$!@&#($&)OWOXCVBNMASDFGHJKLQWERTYUIOPBA";
+    const char* data_str = "1234567890moeOS$!@&#($&)OWOXCVBNMASDFGHJKLQWERTYUIOPBA";
 
     size_t payload_size = sizeof(icmp_echo_head) + sizeof(char) * (strlen(data_str) + 1);
     void* payload = malloc(payload_size);

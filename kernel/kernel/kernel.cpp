@@ -32,32 +32,25 @@
 #include <driver/ext2.hpp>
 #include <driver/procfs.hpp>
 extern "C" int printf(const char* fmt, ...);
-void print_rumia() {
+void print_logo() {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
-    printf("-------------------------------------------------------------------------------\n");
-    printf("|        :*@@@@@@@%@@*@@@@@@@@@%@@@@@@%*-  ..    #%  :                        |\n");
-    printf("|       :*%@@@@@@*@@%=@@@@@@@@@+@@@@@@@@:       .%*  :                        |\n");
-    printf("|      :*%#@@@@@%*@%=+@@@@@@@@@:%@@@@@@@%.  ..  *%. :.                        |\n");
-    printf("|     .+@*@@@@@@=##-#+@@@@@@%%#==##*@@@@@+*.   :@. :                          |\n");
-    printf("|    .-@#*@@@@@#:%+%@=@*@@@@#*+@*#@-#%@@@@+#.  *%  =       ......:            |\n");
-    printf("|   .:#+.#@@@@@=#++%@*#-%@@@*=+@%*#+=@@@@@+@%==+. :   ..:=+********=-..       |\n");
-    printf("|  .::.:=#@@@@@+#::--*+=+#@@+++--:.:#+@@@*##@@#-..  :=+%@@@@@@@@@@@@@@#+:.    |\n");
-    printf("|      -@+@*@@*-.+. -+%#@#*#*@+  :*+.:+%@-*+@@@:. .:*@@@@@@@@@@@@@@@@@@@@+:   |\n");
-    printf("|     :+@*#-%@=:#+  :-%@@@@%%@-  .==*.@**=%*%@@=- :%@*+@@@@@:*-@=::*%=-=@@*:  |\n");
-    printf("|     :#@@*=+%=#%=    #@@@@@@@-    -#=@@@%@%@@%#-:=@@+-@%=-*:*:*.@% *.=*@@@-. |\n");
-    printf("|     -@*@@@@-.+@%:==-@@@@@@@@#:==:%%*@@@@@=@@+%=.-@@+:*=-+-:* #.*=:#+= @@%=  |\n");
-    printf("|    .-++@%@@- *%%%%%@@@*###*%@@%#%%+%%@@@%.@@+-= .=@%**%**@#%*@%**@@**%@%=.  |\n");
-    printf("|    .---@+%@+ +@@@@@@@#=@@@%+@@@@%=++@@@%+ #@=-:  .-*@@@@@@@@@@@@@@@@@%+:.   |\n");
-    printf("|     :::*=-@#  =%@@@@@@+@@@@*@@@@@#-@@@-*.-#*:..   .=@#*#%@@@@@@@@%*+-..     |\n");
-    printf("|        .:--*.:  :-+*#%%#%@%@%#+=: -%+.-:*+-.     ..:.....::----:..:.        |\n");
-    printf("|          :.:.=:.+.   ++-*@*=*+.-...==+%#%%=.                                |\n");
-    printf("|                .-=+%.*@%=:*@@=-@#@@%%%=%=**-.                               |\n");
-    printf("|             .-*#@@@* .=+==*--  #@@@@@@+@+%@+-.                              |\n");
-    printf("|         .::=-@@@@@@=  =%=+#-   .=+*%@@+#-++--                               |\n");
-    printf("|         .-*+#*@@@#=   .- .:     ..:.:-... .                                 |\n");
-    printf("|          .-===++:..              :.                                         |\n");
-    printf("-------------------------------------------------------------------------------\n\n");
+printf("\x1b[40m-----------------------------------------------------------------------------------------\n");
+printf("           ','.                                                                          \n");
+printf(" ;(]     <ftttf[    'IY                                    -(|xn/(]         .;!i/1]]`    \n");
+printf(" ;|Qqr   fttttt]   {tUp                                 ^k@$B_il+k@@a!     }ttttqqppqLi  \n");
+printf(" ;/tmqqO>.(///{`l(tfXpd.                              `a$$B]a$$$$*>B@@&^  /rrrr|00Qmm-   \n");
+printf(" ;/ffCqwwm?^  ~////Xqqp.   i+//Lqr_'      _{nn/(_,   ,Z@@@X'M$$$$B,Q@@@ki?wppqY.    :    \n");
+printf(" ;/t/tXwwwwC/|/t//Uwwww  !|tt/tLwqqw?   ?uvvuut/|cC  /B@@@n:;)@@(<'f$@$$v.Oqqqqq)1{\"     \n");
+printf(" ;|ttttJw0//tttffCpqqww l/////fQqqqppf +vuuu{^'rmppp.t$@@o-r%@@@@$[]#@@@u  uQqppffttt}'  \n");
+printf(" ;/ttttt///tttff/Qqqqww ///ttfjOppqqqw\"rzzcccuQppppdrt$$8l1W@j//Q@M}<*@Bn     :1<}////_. \n");
+printf(" ;/tttff,(ftttt](wwwwwq qqqqqpwuftttt/'|mm0<`\"\"\"\"\"\"\"`'Q$'z$$B    *BBt.Bq`  {.    `[ttt), \n");
+printf(" I/tttff{ _t//?'fwwwqqd.!Oqqqqmnttttt' +0wwwji:lt_.    Q&$@8\"     q@@dd..,/t///|Jqqppp/  \n");
+printf(" ;/ttttt/  <t> +qqqqqqp  :xmwwmnffj]`   \"fqwqwftff-     :cBB@CYYJ@$@Ji   ;|//t//Jqqqw+   \n");
+printf("  .......   .   '''''..     ''`'..         '`;,..          ''icU?`'.        ..,+/_`'     \n");
+printf("-----------------------------------------------------------------------------------------\x1b[0m\n\n");
+printf("       \x1b[40m MoeOS kernel v0.1 | (c) 2026 A/B | MIT Licensed | github.com/aoverb/moeos \x1b[0m\n\n");
+
 #pragma GCC diagnostic pop
 }
 
@@ -329,7 +322,7 @@ extern "C" void kernel_main(multiboot_info_t* mbi) {
     pmm_migrate_to_high();
     vmm_cleanup_low_identity_mapping();
     mbi = NULL;
-    print_rumia();
+    print_logo();
 
     hal_init();
     keyboard_init();

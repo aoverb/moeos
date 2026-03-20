@@ -338,9 +338,9 @@ void print_rumia_text() {
     set_color(0xF4F0EB);
 }
 
-void print_lolios() {
+void print_moeos() {
     set_color(0xE8BF5A);
-    printf("LoliOS");
+    printf("MoeOS");
     set_color(0xF4F0EB);
 }
 
@@ -363,7 +363,7 @@ int main(int argc_main, char** argv_main) {
         set_color(0x39C5BB);
         printf("root@");
         set_color(0xF4F0EB);
-        print_lolios();
+        print_moeos();
         printf(":");
         print_cwd();
         printf("$ ");
@@ -379,7 +379,7 @@ int main(int argc_main, char** argv_main) {
 
         if (strcmp(cmd, "help") == 0) {
             printf("Hello user! This is ");
-            print_lolios();
+            print_moeos();
             printf("!\n");
             printf("The host here is ");
             print_rumia_text();

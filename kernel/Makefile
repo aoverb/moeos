@@ -66,7 +66,7 @@ CRTBEGIN_OBJ:=$(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
 CRTEND_OBJ:=$(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
 
 # 目标：最终的内核文件
-lolios.kernel: $(ARCHDIR)/crti.o $(ARCHDIR)/crtn.o $(KERNEL_OBJS) $(ARCHDIR)/linker.ld $(LIBK)
+moeos.kernel: $(ARCHDIR)/crti.o $(ARCHDIR)/crtn.o $(KERNEL_OBJS) $(ARCHDIR)/linker.ld $(LIBK)
 	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(LDFLAGS) \
 		$(ARCHDIR)/crti.o $(CRTBEGIN_OBJ) \
 		$(KERNEL_OBJS) \
@@ -90,7 +90,7 @@ install-headers:
 
 # 清理
 clean:
-	rm -f lolios.kernel
+	rm -f moeos.kernel
 	rm -f $(KERNEL_OBJS)
 	rm -f $(KERNEL_OBJS:.o=.d)
 
