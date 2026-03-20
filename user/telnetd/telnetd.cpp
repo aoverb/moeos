@@ -7,6 +7,7 @@
 #include <format.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <signal.h>
 
 constexpr char IAC  = (char)255;
 constexpr char DONT = (char)254;
@@ -113,6 +114,8 @@ void handle_conn(int in, int out) {
         if (outlen > 0) {
             write(out, output_buff, outlen);
         }
+    } else { // 连接关闭？
+        printf("session closed?");
     }
 }
 
@@ -141,13 +144,15 @@ void handle_session(int conn) {
         close(conn);
         return;
     }
+    close(shell_in[0]);
+    close(shell_out[1]);
     pollfd fds[2] = {
         { .fd = shell_out[0], .events = POLLIN, .revents = 0}, // 标准输入
-        { .fd = conn, .events = POLLIN, .revents = 0 }
+        { .fd = conn, .events = POLLIN | POLLHUP, .revents = 0 }
     };
 
     while(1) {
-        int ret = poll(fds, 2, -1);  // -1 = 无限等待
+        int ret = poll(fds, 2, 200);  // 等200毫秒就退，不然会被管道堵住，这是个WA
         if (ret < 0) { break; }
 
         // 控制台有输出了
@@ -159,10 +164,15 @@ void handle_session(int conn) {
         if (fds[1].revents & POLLIN) {
             handle_conn(conn, shell_in[1]);
         }
+
+        // 远端连接关闭
+        if (fds[1].revents & POLLHUP) {
+            break;
+        }
         fds[0].revents = 0;
         fds[1].revents = 0;
     }
-    waitpid(shell_pid);
+    kill(shell_pid);
     free(buffer);
     close(fd);
     close(conn);

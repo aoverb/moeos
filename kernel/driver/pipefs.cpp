@@ -143,9 +143,6 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
     uint32_t read_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == pipe->write_pos) { // 当前没有可读的字节
-            if (!pipe->write_open || read_cnt > 0) { // 但是只要有读了的字节就返回
-                return read_cnt;
-            }
             {
                 SpinlockGuard guard(process_list_lock);
                 PCB* proc;
@@ -154,6 +151,12 @@ static int read(mounting_point* mp, uint32_t inode_id, uint32_t /* offset */, ch
                     remove_from_waiting_queue(pipe->writer, proc->pid);
                     insert_into_scheduling_queue(proc->pid);
                 }
+            }
+            if (!pipe->write_open || read_cnt > 0) { // 但是只要有读了的字节就返回
+                return read_cnt;
+            }
+            {
+                SpinlockGuard guard(process_list_lock);
                 process_list[cur_process_id]->state = process_state::WAITING;
                 insert_into_waiting_queue(pipe->reader, process_list[cur_process_id]);
             }
@@ -183,9 +186,6 @@ static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const c
     uint32_t write_cnt = 0;
     for (int i = 0; i < size; ++i) {
         while (pipe->read_pos == (pipe->write_pos + 1) % PIPE_BUF_SIZE) { // 缓冲区已满
-            if (!pipe->read_open || write_cnt > 0) { // 有写入的字节就返回
-                return write_cnt;
-            }
             {
                 SpinlockGuard guard(process_list_lock);
                 PCB* proc;
@@ -194,6 +194,12 @@ static int write(mounting_point* mp, uint32_t inode_id, uint32_t offset, const c
                     remove_from_waiting_queue(pipe->reader, proc->pid);
                     insert_into_scheduling_queue(proc->pid);
                 }
+            }
+            if (!pipe->read_open || write_cnt > 0) { // 有写入的字节就返回
+                return write_cnt;
+            }
+            {
+                SpinlockGuard guard(process_list_lock);
                 process_list[cur_process_id]->state = process_state::WAITING;
                 insert_into_waiting_queue(pipe->writer, process_list[cur_process_id]);
             }

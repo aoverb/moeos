@@ -284,7 +284,7 @@ int accept(mounting_point* mp, uint32_t inode_id, sockaddr* peeraddr, size_t* si
             return -1;
         }
         new_sock.inode_id = new_sock_num;
-        new_sock.data.tcp.block->owner = &sock;
+        new_sock.data.tcp.block->owner = &new_sock;
         new_sock.ptcl = protocol::TCP;
         return new_sock_num;
     }
@@ -316,6 +316,8 @@ static int peek(mounting_point* mp, uint32_t inode_id) {
     socketfs_data* data = (socketfs_data*)mp->data;
     socket& sock = data->sock[inode_id];
     if (sock.ptcl == protocol::TCP) {
+        if (sock.data.tcp.block == nullptr) return -1;
+        if (!(sock.data.tcp.block == nullptr) && sock.data.tcp.block->state != tcb_state::ESTABLISHED) return -2;
         return sock.data.tcp.block->window_used_size;
     } else if (sock.ptcl == protocol::UDP) {
         return sock.data.udp.pack_head != nullptr;

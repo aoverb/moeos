@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 constexpr int16_t POLLIN = (1 << 0);
+constexpr int16_t POLLHUP = (1 << 1);
 constexpr int16_t INVFD = (1 << 7);
 constexpr uint16_t ERROR = (1 << 8);
 struct pollfd {

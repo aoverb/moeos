@@ -348,10 +348,13 @@ int sys_poll(interrupt_frame* reg) {
                 }
             } else {
                 int ret = v_peek(cur_pcb, fds[i].fd);
-                if (ret < 0 && (fds[i].events & ERROR)) {
+                if (ret == -1 && (fds[i].events & ERROR)) {
                     fds[i].revents |= ERROR;
                     has_event = true;
-                } else if (ret > 0 && (fds[i].events & POLLIN)) {
+                } else if (ret == -2 && (fds[i].events & POLLHUP)) {
+                    fds[i].revents |= POLLHUP;
+                    has_event = true;
+                }else if (ret > 0 && (fds[i].events & POLLIN)) {
                     fds[i].revents |= POLLIN;
                     has_event = true;
                     has_data = true;
@@ -385,13 +388,18 @@ int sys_poll(interrupt_frame* reg) {
                 }
             } else {
                 int ret = v_peek(cur_pcb, fds[i].fd);
-                if (ret < 0 && (fds[i].events & ERROR)) {
+                if (ret == -1 && (fds[i].events & ERROR)) {
                     fds[i].revents |= ERROR;
-                } else if (ret > 0 && (fds[i].events & POLLIN)) {
+                    has_event = true;
+                } else if (ret == -2 && (fds[i].events & POLLHUP)) {
+                    fds[i].revents |= POLLHUP;
+                    has_event = true;
+                }else if (ret > 0 && (fds[i].events & POLLIN)) {
                     fds[i].revents |= POLLIN;
+                    has_event = true;
                     has_data = true;
                 }
-                v_setpoll(cur_pcb, fds[i].fd, nullptr);
+                v_setpoll(cur_pcb, fds[i].fd, &poll_queue);
             }
         }
     }
