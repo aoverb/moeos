@@ -13,6 +13,8 @@ constexpr uint8_t MAX_ACCEPTED_QUEUE_NUM = 128;
 struct TCB; // 前向声明
 using TCBPtr = shared_ptr<TCB>;
 
+void delete_procfs_inode(TCB* tcb);
+
 struct TCB { // 传输控制块
     tcb_state state;
     char* window;
@@ -34,12 +36,14 @@ struct TCB { // 传输控制块
     socket* listener;
     spinlock lock;
 
+    uint32_t procfs_inode_id;
     // 析构时自动释放接收窗口
     ~TCB() {
         if (window) {
             kfree(window);
             window = nullptr;
         }
+        delete_procfs_inode(this);
     }
 };
 
@@ -51,6 +55,8 @@ int tcp_listen(socket& sock, size_t queue_length);
 TCBPtr tcp_accept(socket& sock, sockaddr* peeraddr, size_t* size);
 int tcp_ioctl(TCBPtr& tcb, uint32_t request, void* arg);
 int tcp_close(socket& sock);
+
+void set_tcb_mp(mounting_point* mp);
 
 #ifdef __cplusplus
 }

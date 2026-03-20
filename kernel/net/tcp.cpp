@@ -3,6 +3,7 @@
 #include <kernel/process.hpp>
 #include <kernel/timer.hpp>
 #include <kernel/schedule.h>
+#include <driver/procfs.hpp>
 #include <format.h>
 #include <unordered_map>
 
@@ -13,6 +14,68 @@ static std::unordered_map<conn_quadruple, TCBPtr, conn_hasher> map_quad_to_sock;
 
 constexpr uint32_t DEFAULT_WINDOW_SIZE = (1 << 16) - 1;
 constexpr uint32_t DEFAULT_WINDOW_SCALE = 1;
+
+static mounting_point* tcb_mp = nullptr;
+
+const char* tcb_states[11] = {
+    "CLOSED", "SYN_SENT", "ESTABLISHED", "LISTEN", "SYN_RCVD", "FIN_WAIT1", "FIN_WAIT2", "TIME_WAIT", "CLOSING", "CLOSE_WAIT", "LAST_ACK"
+};
+
+void set_tcb_mp(mounting_point* mp) {
+    tcb_mp = mp;
+    uint32_t net_folder_inode_id = register_info_in_procfs(tcb_mp, "/", "net", nullptr, true, nullptr);
+    uint32_t net_tcp_folder_inode_id = register_info_in_procfs(tcb_mp, "/net/", "tcp", nullptr, true, nullptr);
+}
+
+void delete_procfs_inode(TCB* tcb) {
+    delete_from_procfs(tcb_mp, tcb->procfs_inode_id);
+}
+
+static int tcb_read(char* buffer, uint32_t offset, uint32_t size, void* arg) {
+    char info[1024];
+    size_t signed_offset = (size_t)offset;
+    if (arg == nullptr) return -1;
+    TCB* tcb = (TCB*)arg;
+
+    char state[20];
+    uint32_t src_addr, dst_addr;
+    uint16_t src_port, dst_port;
+    {
+        SpinlockGuard guard(tcb->lock);
+        strcpy(state, tcb_states[(uint32_t)tcb->state]);
+        src_addr = tcb->src_addr;
+        dst_addr = tcb->dst_addr;
+        src_port = tcb->src_port;
+        dst_port = tcb->dst_port;
+    }
+    memset(info, 0, sizeof(info));
+    snprintf(info, sizeof(info),
+        "local: %d.%d.%d.%d:%d\n"
+        "remote: %d.%d.%d.%d:%d\n"
+        "state: %s\n",
+        src_addr & 0xFF, (src_addr >> 8) & 0xFF,
+        (src_addr >> 16) & 0xFF, (src_addr >> 24) & 0xFF,
+        src_port,
+        dst_addr & 0xFF, (dst_addr >> 8) & 0xFF,
+        (dst_addr >> 16) & 0xFF, (dst_addr >> 24) & 0xFF,
+        dst_port,
+        state);
+
+    uint32_t len = strlen(info);
+    if (signed_offset >= len) return 0;
+    uint32_t to_copy = size < len - signed_offset ? size : len - signed_offset;
+    strncpy(buffer, info + signed_offset, to_copy);
+    return to_copy;
+}
+
+uint32_t reg_in_procfs(shared_ptr<TCB>& tcb) {
+    char tcb_name[20];
+    snprintf(tcb_name, 20, "%x", (unsigned)tcb.get());
+    proc_operation* opr = (proc_operation*)kmalloc(sizeof(proc_operation));
+    opr->read = &tcb_read;
+    uint32_t tcb_inode_id = register_info_in_procfs(tcb_mp, "/net/tcp/", tcb_name, opr, false, tcb.get());
+    return tcb_inode_id;
+}
 
 int tcp_init(socket& sock, uint16_t local_port) {
     sock.ptcl = protocol::TCP;
@@ -36,8 +99,9 @@ int tcp_init(socket& sock, uint16_t local_port) {
 
     tcb->owner = &sock;
     tcb->listener = nullptr;
-
+    tcb->procfs_inode_id = reg_in_procfs(tcb);
     sock.data.tcp.block = tcb;
+    
     return 0;
 }
 
@@ -377,6 +441,7 @@ void tcp_handler(uint16_t ip_header_size, char* buffer, uint16_t size) {
 
         tcb->owner = nullptr;
         tcb->listener = listener;
+        tcb->procfs_inode_id = reg_in_procfs(tcb);
         {
             SpinlockGuard listener_guard(listener_tcb->lock);
             if (listener_tcb->accepted_queue.size() + listener_tcb->pending_count >=

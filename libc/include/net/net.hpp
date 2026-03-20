@@ -57,7 +57,9 @@ struct sockaddr_hasher {
 };
 
 enum class tcb_state {
-    CLOSED, SYN_SENT, ESTABLISHED, LISTEN, SYN_RCVD, FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSING, CLOSE_WAIT, LAST_ACK
+    CLOSED = 0, SYN_SENT = 1, ESTABLISHED = 2, LISTEN = 3,
+    SYN_RCVD = 4, FIN_WAIT1 = 5, FIN_WAIT2 = 6, TIME_WAIT = 7,
+    CLOSING = 8, CLOSE_WAIT = 9, LAST_ACK = 10
 };
 
 enum class tcp_flags : uint8_t {

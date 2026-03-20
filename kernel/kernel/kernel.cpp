@@ -15,6 +15,7 @@
 #include <kernel/ksignal.h>
 #include <kernel/panic.h>
 #include <kernel/net/net.hpp>
+#include <kernel/net/tcp.hpp>
 #include <kernel/timer.hpp>
 #include <syscall_def.hpp>
 
@@ -276,6 +277,7 @@ void fs_init(saved_module* saved, uint32_t mod_count) {
     }
     mm_reg_in_procfs(proc_ret);
     set_proc_mp(proc_ret);
+    set_tcb_mp(proc_ret);
 
     printf("filesystem initialized!\n");
 }
