@@ -5,7 +5,6 @@
 #include <string>
 // 引入上面定义的两个头文件
 #include <boot/multiboot.h>
-#include <stdio.h>
 #include <string.h>
 #include <kernel/tty.h>
 #include <kernel/hal.h>
@@ -31,7 +30,7 @@
 #include <driver/block.hpp>
 #include <driver/ext2.hpp>
 #include <driver/procfs.hpp>
-
+extern "C" int printf(const char* fmt, ...);
 void print_rumia() {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat"
@@ -291,7 +290,7 @@ void start_telnetd_svc() {
     }
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
-    pid_t telnetd_pid = exec("telnetd", buffer, size, 1, 0, nullptr);
+    pid_t telnetd_pid = exec("telnetd", buffer, size, 1, 0, nullptr, nullptr, 0);
     if (telnetd_pid == 0) {
         printf("failed to start telnetd!\n");
     } else {
@@ -309,7 +308,7 @@ void start_shell() {
     char* buffer = (char*)kmalloc(131072);
     int size = v_read(cur_pcb, fd, buffer, 131072);
     while(1) {
-        pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr);
+        pid_t shell_pid = exec("shell", buffer, size, 1, 0, nullptr, nullptr, 0);
         terminal_setforeground(shell_pid);
         if (shell_pid == 0) panic("Loading shell failed!");
         waitpid(shell_pid);

@@ -12,7 +12,7 @@ typedef int pid_t;
 constexpr pid_t MAX_PROCESSES_NUM = 65536;
 constexpr uint32_t KERNEL_STACK_SIZE = 4096;
 constexpr uint32_t MAX_FD_NUM = 128;
-constexpr uint32_t USER_STACK_PAGE_SIZE = 16;
+constexpr uint32_t USER_STACK_PAGE_SIZE = 64;
 struct mounting_point;
 
 constexpr const char* KERNEL_PROC_NAME_IDLE = "idle";
@@ -90,7 +90,7 @@ void process_init();
 pid_t create_process(const char* name, void* entry, void* args);
 uint32_t exit_process(pid_t pid, int exit_code);
 pid_t exec(const char* name, void* code, uint32_t code_size, uint8_t priority, int argc, char** argv,
-    fd_remap* remaps = nullptr, int remap_cnt = 0);
+    fd_remap* remaps, int remap_cnt);
 
 int waitpid(pid_t child);
 
