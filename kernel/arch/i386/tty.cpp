@@ -521,6 +521,25 @@ int terminal_read_char_for_peek() {
     return c;
 }
 
+struct fb_info {
+    uint32_t width;
+    uint32_t height;
+    uint32_t pitch;
+    uint32_t bpp;
+};
+
+static int fb_ioctl(uint32_t request, void *arg) {
+    if (request == 0) { // FB_GET_INFO
+        struct fb_info *info = (struct fb_info *)arg;
+        info->width  = fb_width;
+        info->height = fb_height;
+        info->pitch  = fb_pitch;
+        info->bpp    = fb_bpp;
+        return 0;
+    }
+    return -1;
+}
+
 static int fb_write(const char* buffer, uint32_t offset, uint32_t size) {
     uint32_t fb_size = fb_pitch * fb_height;
     if (offset >= fb_size) return 0;
@@ -533,5 +552,6 @@ void init_fb_dev_file(mounting_point* mp) {
     static dev_operation fb_opr;
     fb_opr.read = nullptr;
     fb_opr.write = fb_write;
+    fb_opr.ioctl = fb_ioctl;
     register_in_devfs(mp, "fb0", &fb_opr);
 }
