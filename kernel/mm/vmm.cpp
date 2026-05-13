@@ -122,7 +122,9 @@ void vmm_init() {
     pde_list[1023].frame = pd_addr >> 12;
     pde_list[1023].read_write = 1;
     pde_list[1023].present = 1;
-    continuous_addr_begin = 0xC0800000;
+    // 引导页表已经映射了 0xC0000000-0xC2000000 (32MB 物理内存到高半区)
+    // continuous 分配从这之后开始
+    continuous_addr_begin = 0xC2000000;
     flush_tlb();
 }
 

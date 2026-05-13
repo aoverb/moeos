@@ -33,16 +33,59 @@ stack_top:
 
 .section .data
 .align 4096
-# 创建足够的页表来映射至少 8MB（或更多）
-page_table_low:
+# 创建足够的页表来映射至少 32MB 物理内存
+# 这样可以容纳大内存下的 all_pages 数组（4GB内存时需要约12MB）
+page_table_0:   # 映射 0-4MB
     .set i, 0
     .rept 1024
         .long (i << 12) | 0x3
         .set i, i + 1
     .endr
 
-page_table_high:
+page_table_1:   # 映射 4MB-8MB
     .set i, 1024
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_2:   # 映射 8MB-12MB
+    .set i, 2048
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_3:   # 映射 12MB-16MB
+    .set i, 3072
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_4:   # 映射 16MB-20MB
+    .set i, 4096
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_5:   # 映射 20MB-24MB
+    .set i, 5120
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_6:   # 映射 24MB-28MB
+    .set i, 6144
+    .rept 1024
+        .long (i << 12) | 0x3
+        .set i, i + 1
+    .endr
+
+page_table_7:   # 映射 28MB-32MB
+    .set i, 7168
     .rept 1024
         .long (i << 12) | 0x3
         .set i, i + 1
@@ -50,20 +93,28 @@ page_table_high:
 
 .align 4096
 page_directory:
-    # 恒等映射：0-4MB
-    .long (page_table_low - 0xC0000000) + 0x3
-    
-    # 映射 4MB-8MB（如果需要）
-    .long (page_table_high - 0xC0000000) + 0x3
+    # 恒等映射（低1GB）：0-4MB, 4MB-8MB, ..., 28MB-32MB
+    .long (page_table_0 - 0xC0000000) + 0x3
+    .long (page_table_1 - 0xC0000000) + 0x3
+    .long (page_table_2 - 0xC0000000) + 0x3
+    .long (page_table_3 - 0xC0000000) + 0x3
+    .long (page_table_4 - 0xC0000000) + 0x3
+    .long (page_table_5 - 0xC0000000) + 0x3
+    .long (page_table_6 - 0xC0000000) + 0x3
+    .long (page_table_7 - 0xC0000000) + 0x3
     
     # 填充中间的空白
-    .fill 766, 4, 0
+    .fill 760, 4, 0
     
-    # 高半区映射：0xC0000000-0xC0400000 (0-4MB)
-    .long (page_table_low - 0xC0000000) + 0x3
-    
-    # 高半区映射：0xC0400000-0xC0800000 (4MB-8MB)
-    .long (page_table_high - 0xC0000000) + 0x3
+    # 高半区映射：0xC0000000-0xC0800000 → 0-32MB
+    .long (page_table_0 - 0xC0000000) + 0x3
+    .long (page_table_1 - 0xC0000000) + 0x3
+    .long (page_table_2 - 0xC0000000) + 0x3
+    .long (page_table_3 - 0xC0000000) + 0x3
+    .long (page_table_4 - 0xC0000000) + 0x3
+    .long (page_table_5 - 0xC0000000) + 0x3
+    .long (page_table_6 - 0xC0000000) + 0x3
+    .long (page_table_7 - 0xC0000000) + 0x3
     
     .fill 254, 4, 0
 

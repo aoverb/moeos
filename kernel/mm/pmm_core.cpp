@@ -31,14 +31,16 @@ void pmm_init(pm_list* pms) {
         free_area[i] = 0;
     }
 
-    uintptr_t all_end = 0;
+    uint32_t all_end = 0;
     for (uint8_t i = 0; i < pms->count; i++) {
         if (pms->entries[i].end > all_end) all_end = pms->entries[i].end;
     }
     
     all_pages = 0;
     uint8_t flag = 0;
-    uintptr_t all_size = all_end + 1;
+    // 处理 all_end == 0xFFFFFFFF 时的溢出问题
+    // 使用 64 位计算来避免 uint32_t 溢出
+    uint64_t all_size = (uint64_t)all_end + 1;
     for (uint8_t i = 0; i < pms->count; i++) {
         uint32_t cur_size = pms->entries[i].end - pms->entries[i].begin + 1;
         if (cur_size >= sizeof(page_frame) * (all_size / (1 << 12))) {
@@ -50,13 +52,13 @@ void pmm_init(pm_list* pms) {
         }
     }
 
-    page_limit = (all_size / (1 << 12));
+    page_limit = (uint32_t)(all_size / (1 << 12));
     
     if (!flag) {
         panic("insufficient memory!");
     }
     
-    for (uint32_t i = 0; i <= (all_size / (1 << 12)); ++i) {
+    for (uint32_t i = 0; i < page_limit; ++i) {
         all_pages[i].allocated = 1;
     }
 
