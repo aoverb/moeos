@@ -15,6 +15,12 @@
 
 ---
 
+<p align="center">
+  🌐 <a href="README.en.md"><strong>English</strong></a> | <strong>简体中文</strong>
+</p>
+
+---
+
 MoeOS 是一个从零开始[^1]构建的教学型操作系统（Hobby OS）项目，使用 C++ 实现，目标是深入理解操作系统的核心原理并将其逐一付诸实践。
 
 ### 已实现特性
